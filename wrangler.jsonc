@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "stock-market-toolkit",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "observability": { "enabled": true }
+
+  // Arriving on schedule:
+  //   wk 3  — "triggers": { "crons": ["30 22 * * *"] }  (nightly refresh after US close)
+  //   wk 3  — "d1_databases": [{ binding, database_name, database_id }]
+  //   wk 6  — secrets via `wrangler secret put` (never in this file)
+}

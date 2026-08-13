@@ -1,0 +1,23 @@
+{
+  "name": "stock-market-toolkit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Course toolkit for 'Intro to the Stock Market' — a community-school course in good financial decision-making. Education, not advice.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "types": "wrangler types",
+    "check": "wrangler types && tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "wrangler": "^4"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "workerd@1.20260811.1": true
+  }
+}
