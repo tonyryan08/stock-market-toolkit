@@ -1,8 +1,18 @@
-name: Deploy
+name: Deploy (parked)
+
+# PARKED — by decision, week 2.
+# Automation waits until committing-and-pushing is second nature and the
+# team WANTS the robot. Until then, releasing is manual: `npm run deploy`.
+#
+# To reactivate: complete Part D of docs/setup-guide.md (two secrets),
+# then replace the trigger below with:
+#
+#   on:
+#     push:
+#       branches: [main]
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
   deploy:

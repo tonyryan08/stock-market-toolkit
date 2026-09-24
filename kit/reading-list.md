@@ -6,7 +6,8 @@ Nothing here is required in week 1. Assigned chapters are announced in the week 
 
 ## The two books the course is built on
 
-- **Benjamin Graham, *The Intelligent Investor*** — chapters 8 (Mr. Market), 14 (stock selection for the defensive investor) and 20 (margin of safety), assigned across weeks 4–6. The rest is optional; those three chapters are the value half of this course.
+- **Benjamin Graham, *The Intelligent Investor*** — chapters 8 (Mr. Market), 14 (stock selection for the defensive investor) and 20 (margin of safety), assigned across weeks 4–6. The rest is optional; those three chapters are the value half of this course, and chapter 14 is where our screener's criteria actually come from.
+- **Benjamin Graham & David Dodd, *Security Analysis*** — the professional companion, and the older, heavier book (1934). Not assigned: nobody needs 700 pages of Depression-era prose to pass this course. But it is where the *reasoning* beneath the checklist lives — why book value matters, why earnings must be examined over a full cycle, what a margin of safety is actually protecting you from. Recommended for anyone who finishes week 5 wanting to argue with the criteria rather than just apply them.
 - **Robert Carver, *Leveraged Trading*** — the Starter System chapters, assigned across weeks 7–9. We use his rules on ordinary shares with no leverage; the system's discipline is the point, not the leverage.
 
 ## On luck, skill, and judging decisions (the week-1 theme)

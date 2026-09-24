@@ -67,14 +67,16 @@ Design invariants:
 
 ## Phase 2 — Graham value screener + explanations (weeks 4–6)
 
+*Methodology: Benjamin Graham throughout — the implementable criteria from* The Intelligent Investor *ch. 14, the analytical reasoning from Graham & Dodd's* Security Analysis. *No other stock-picking school is taught; alternatives are named in week 5's discussion only so students can recognise them.*
+
 ### Week 4 — "What is a company worth?" / fundamentals ingestion
-- **Lesson:** The three financial statements at a glance; EPS, book value, current ratio, debt; Graham's Mr. Market parable and margin of safety. *Reading: Intelligent Investor ch. 8.*
+- **Lesson:** The three financial statements at a glance; EPS, book value, current ratio, debt; Graham's Mr. Market parable and margin of safety. *Reading: Intelligent Investor ch. 8; Security Analysis supplies the reasoning underneath — tutor-side grounding, not assigned.*
 - **Feature shipped:** FMP fundamentals (income statement, balance sheet, key metrics) into D1 via the nightly job; computed ratios exposed at `GET /api/fundamentals/:ticker`.
 - **Cloudflare focus:** Richer D1 queries and joins; extending the cron safely; first tests (Vitest + Workers test pool). *SAoC: D1 chapter continued.*
 - **Exit check:** Ratios for the full universe match a hand-checked sample from published accounts.
 
 ### Week 5 — "The Graham checklist" / screener engine
-- **Lesson:** The seven defensive-investor criteria and *why each exists* (size, financial strength, earnings stability, dividend record, growth, moderate P/E, moderate P/B — incl. the P/E × P/B ≤ 22.5 combination). Live in class: run the screen, argue about the survivors. What a screen cannot tell you. *Reading: Intelligent Investor ch. 14.*
+- **Lesson:** The seven defensive-investor criteria and *why each exists* (size, financial strength, earnings stability, dividend record, growth, moderate P/E, moderate P/B — incl. the P/E × P/B ≤ 22.5 combination). Live in class: run the screen, argue about the survivors. What a screen cannot tell you. *Reading: Intelligent Investor ch. 14 — the source of the implemented criteria; Graham & Dodd's Security Analysis for why each one earns its place.*
 - **Feature shipped:** `GET /api/screen/graham` — per-criterion pass/fail, ranked output, simple results page.
 - **Cloudflare focus:** Query design and pagination; caching hot results (Cache API or KV). *SAoC: KV/caching chapter.*
 - **Exit check:** Screen over the full universe returns from cache in under ~2s.
@@ -173,7 +175,7 @@ Design invariants:
 
 ## Reading spine
 
-- **Students:** *The Intelligent Investor* chs. 8, 14, 20 across weeks 4–6; *Leveraged Trading* Starter System chapters across weeks 7–9 (unleveraged adaptation); optional wk-1 short on resulting/luck-vs-skill.
+- **Students:** *The Intelligent Investor* chs. 8, 14, 20 across weeks 4–6 (with *Security Analysis* offered as optional depth, never assigned); *Leveraged Trading* Starter System chapters across weeks 7–9 (unleveraged adaptation); optional wk-1 short on resulting/luck-vs-skill.
 - **You:** *SAoC* by topic as mapped above; Cloudflare docs for Cron Triggers, AI Gateway, Vectorize, and Access.
 
 ---
@@ -187,6 +189,7 @@ Design invariants:
 | 3 | Tutor retrieval | **SQLite full-text search (FTS5) in D1.** Spike-test FTS5 availability in wk 10; fallback is trivial. Vectorize + embeddings documented as the upgrade path, not built. |
 | 4 | Risk report delivery | **Rendered on the site only.** No Email Workers — keeps scope and permissions tight. |
 | 5 | Universe | **Open — by design.** Gated on the wk-2 data-coverage check. Working assumption: US large-cap subset plus a shortlist of recognisable Irish/UK names, each verified per provider before being promised in class. |
+| 6 | Deployment automation | **Parked (wk 2, by design).** Backup habit before automation: Desktop commit/push is the record; releases stay manual (`npm run deploy`) until the team *wants* the robot. Workflow file kept in the repo on manual trigger; reactivation = Part D secrets + restore the push trigger. |
 
 ---
 

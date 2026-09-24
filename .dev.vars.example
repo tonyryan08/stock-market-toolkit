@@ -1,0 +1,9 @@
+# Copy this file to `.dev.vars` (which is gitignored — check .gitignore, it's true)
+# and paste your real keys. Real keys must NEVER appear in any committed file.
+#
+# Get keys (both free):
+#   Alpha Vantage:            https://www.alphavantage.co/support/#api-key
+#   Financial Modeling Prep:  https://site.financialmodelingprep.com  (Dashboard -> API key)
+
+ALPHAVANTAGE_API_KEY = "paste-yours-here"
+FMP_API_KEY = "paste-yours-here"
