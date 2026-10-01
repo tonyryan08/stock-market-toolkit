@@ -1,6 +1,7 @@
 /**
  * The course landing page — the "twelve-week ledger".
- * Week 2: the lookup form arrives; week 2's row gets its stamp.
+ * Week 3: the nightly close ships; week 3's row gets its stamp, and the
+ * try-box now points at the cache — unlimited, unrationed, by design.
  */
 
 export const LANDING_PAGE = /* html */ `<!doctype html>
@@ -84,6 +85,7 @@ export const LANDING_PAGE = /* html */ `<!doctype html>
   .wk { font-family: "IBM Plex Mono", monospace; font-size: .85rem; color: var(--faint); padding-top: .1rem; }
   .row .lesson { font-weight: 600; font-size: .95rem; }
   .row .feature { font-size: .85rem; color: var(--faint); }
+  .row .feature a { color: var(--entry); }
   .row.pending { opacity: .62; }
   .row.shipped .wk, .row.shipped .lesson { color: var(--ink); }
   .stamp {
@@ -144,6 +146,7 @@ export const LANDING_PAGE = /* html */ `<!doctype html>
     color: var(--faint);
   }
   footer .notice { color: var(--stamp); font-weight: 600; }
+  footer a { color: var(--entry); }
   a:focus-visible { outline: 2px solid var(--entry); outline-offset: 2px; }
 </style>
 </head>
@@ -174,9 +177,10 @@ export const LANDING_PAGE = /* html */ `<!doctype html>
         <span><span class="lesson">Where prices come from</span><br><span class="feature">Live quote lookup &mdash; try it below</span></span>
         <span class="stamp">SHIPPED</span>
       </div>
-      <div class="row pending">
+      <div class="row shipped">
         <span class="wk">Wk 3</span>
-        <span><span class="lesson">The nightly close</span><br><span class="feature">Price history, refreshed every night</span></span>
+        <span><span class="lesson">The nightly close</span><br><span class="feature">Price history, refreshed every night &mdash; <a href="/prices/AAPL">see a chart</a> or <a href="/api/universe">the whole universe</a></span></span>
+        <span class="stamp">SHIPPED</span>
       </div>
     </div>
 
@@ -230,17 +234,21 @@ export const LANDING_PAGE = /* html */ `<!doctype html>
   </section>
 
   <div class="try">
-    <strong>New this week:</strong> look up a quote and see what raw market data actually looks like, before anyone dresses it up.
-    <form class="lookup" onsubmit="event.preventDefault();var t=this.t.value.trim().toUpperCase();if(t)location.href='/api/quote/'+encodeURIComponent(t)">
+    <strong>New this week:</strong> every night after the US close, the toolkit snapshots its whole universe into a cache.
+    Charts like <a href="/prices/AAPL">AAPL's five-year history</a> now load in milliseconds, from
+    <a href="/api/universe">a universe you can inspect</a> &mdash; no ration, no waiting.
+    <form class="lookup" onsubmit="event.preventDefault();var t=this.t.value.trim().toUpperCase();if(t)location.href='/prices/'+encodeURIComponent(t)">
       <input name="t" placeholder="AAPL" aria-label="Ticker symbol" autocapitalize="characters" autocomplete="off" spellcheck="false">
-      <button type="submit">Look up</button>
+      <button type="submit">Chart it</button>
     </form>
-    <p class="fineprint">Free-tier data: delayed by design, and rationed to roughly 25 lookups a day for the whole class &mdash; the scarcity is part of the lesson. Week 1's <code><a href="/api/hello">/api/hello</a></code> still lives.</p>
+    <p class="fineprint">Cached nightly, adjusted for splits &amp; dividends. Week 2's rationed <em>live</em> lookup
+      (<code>/api/quote/AAPL</code>) still exists &mdash; the difference between the two is the lesson.
+      Week 1's <code><a href="/api/hello">/api/hello</a></code> lives on.</p>
   </div>
 
   <footer>
     <p class="notice">Education, not advice. Nothing here is a recommendation to buy or sell anything.</p>
-    <p>&copy; 2026 Tony Ryan &middot; Source code: GitHub link to follow once the repo is public</p>
+    <p>&copy; 2026 Tony Ryan &middot; <a href="https://github.com/tonyryan08/stock-market-toolkit">Source code on GitHub</a></p>
   </footer>
 </main>
 </body>

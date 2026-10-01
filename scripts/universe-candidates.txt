@@ -1,0 +1,60 @@
+# Universe candidates — household names first, Cork-recognisable employers marked.
+# VC-10 taught us the free plan is a WHITELIST that can't be deduced, only
+# discovered: `npm run verify-universe` probes each symbol below and writes
+# the evidence. Greens become the universe; blocked names are recorded, not
+# guessed about. Edit freely; one symbol per line; # for comments.
+
+# Confirmed green by the verification record (30 Sep – 1 Oct 2026)
+AAPL      # Apple — Cork's biggest private employer
+PFE       # Pfizer — Ringaskiddy
+JNJ       # Johnson & Johnson — Ringaskiddy
+# Confirmed BLOCKED 1 Oct 2026 (VC-10 control — kept to prove the sweep works)
+DVN       # Devon Energy — the US-domiciled counterexample
+
+# Cork / Ireland-adjacent US employers
+LLY       # Eli Lilly — Kinsale
+MSFT      # Microsoft — Dublin
+INTC      # Intel — Leixlip
+GOOGL     # Google — Dublin
+META      # Meta — Dublin
+AMZN      # Amazon
+AMD       # AMD
+QCOM      # Qualcomm — Cork
+BSX       # Boston Scientific — Cork
+SYK       # Stryker — Cork
+ABT       # Abbott — Ireland sites
+MRK       # Merck / MSD — Ireland sites
+GILD      # Gilead — Cork
+
+# Household names students will recognise
+KO        # Coca-Cola
+PEP       # PepsiCo
+MCD       # McDonald's
+SBUX      # Starbucks
+NKE       # Nike
+DIS       # Disney
+NFLX      # Netflix
+TSLA      # Tesla
+NVDA      # Nvidia
+V         # Visa
+MA        # Mastercard
+JPM       # JPMorgan
+BAC       # Bank of America
+WMT       # Walmart
+COST      # Costco
+HD        # Home Depot
+PG        # Procter & Gamble
+CL        # Colgate
+UNH       # UnitedHealth
+ABBV      # AbbVie
+XOM       # Exxon
+CVX       # Chevron
+CAT       # Caterpillar
+BA        # Boeing
+GE        # GE
+IBM       # IBM
+ORCL      # Oracle
+CSCO      # Cisco
+ADBE      # Adobe
+CRM       # Salesforce
+DAL       # Delta — the airline contrast for Ryanair's demo slot

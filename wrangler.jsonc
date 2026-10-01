@@ -3,10 +3,22 @@
   "name": "stock-market-toolkit",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-01",
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
 
-  // Arriving on schedule:
-  //   wk 3  — "triggers": { "crons": ["30 22 * * *"] }  (nightly refresh after US close)
-  //   wk 3  — "d1_databases": [{ binding, database_name, database_id }]
-  //   wk 6  — secrets via `wrangler secret put` (never in this file)
+  // Week 3: the nightly close. 22:30 UTC = after the US close settles,
+  // 23:30 Irish time (summer). One run per night is the whole design.
+  "triggers": { "crons": ["30 22 * * *"] },
+
+  // Week 3: the D1 cache. After `npx wrangler d1 create stock-market-db`,
+  // paste the database_id it prints over the placeholder below.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "stock-market-db",
+      "database_id": "c513da6e-1072-49e5-bc87-47be9c669111", // REPLACE: from `wrangler d1 create`
+      "migrations_dir": "migrations"
+    }
+  ]
+
+  // Wk 6 — Claude API key via `wrangler secret put` (never in this file)
 }
