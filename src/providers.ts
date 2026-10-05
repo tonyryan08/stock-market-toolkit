@@ -2,15 +2,6 @@
  * Week 2: the two data providers. Week 3 adds the FMP adjusted-history
  * fetcher that feeds the nightly cron, and the error classifier built
  * from the verification record's captured message shapes (M-1…M-6).
- *
- * Provider terms as verified 30 Sep 2026 (docs/data-provider-checks.md):
- *   Alpha Vantage free — 25 req/day, 5/min; limits arrive as HTTP 200 + prose;
- *     daily-adjusted history is PREMIUM (M-4), so AV is quote-demo only — it
- *     is not in the cron at all (decision #7).
- *   FMP free — ~250 req/day on /stable; dividend-adjusted EOD history ≈5y
- *     for whitelisted US symbols; non-whitelisted symbols answer HTTP 402
- *     (M-5) or "Premium Query Parameter…" prose (M-6) — permanent per
- *     symbol, never retried (VC-10: the whitelist is discovered, not deduced).
  */
 
 export type PriceQuote = {
@@ -41,7 +32,7 @@ export type CompanyProfile = {
 export type ProviderResult<T> = { data: T | null; warning: string | null };
 
 export type DailyBar = {
-  date: string; // YYYY-MM-DD
+  date: string;
   adjOpen: number | null;
   adjHigh: number | null;
   adjLow: number | null;
@@ -49,15 +40,13 @@ export type DailyBar = {
   volume: number | null;
 };
 
-/** Outcome classification for the nightly job — mirrors the M-shape map. */
 export type HistoryResult =
   | { kind: "ok"; bars: DailyBar[] }
-  | { kind: "blocked"; detail: string } // M-5 / M-6: permanent for this symbol — do not retry
-  | { kind: "rate_limited"; detail: string } // back off, resume next night
-  | { kind: "auth_failed"; detail: string } // key problem — abort the whole run
-  | { kind: "error"; detail: string }; // transient — retry next night
+  | { kind: "blocked"; detail: string }
+  | { kind: "rate_limited"; detail: string }
+  | { kind: "auth_failed"; detail: string }
+  | { kind: "error"; detail: string };
 
-/** Parse a number defensively — providers send numbers as strings, or not at all. */
 const num = (v: unknown): number | null => {
   const n = typeof v === "string" ? parseFloat(v) : typeof v === "number" ? v : NaN;
   return Number.isFinite(n) ? n : null;
@@ -82,13 +71,8 @@ export async function fetchAlphaVantageQuote(
     return { data: null, warning: `Alpha Vantage unreachable: ${(err as Error).message}` };
   }
 
-  // The famous gotcha: rate limits and key problems come back as HTTP 200
-  // with a chatty field. Treat prose as a warning, not data.
   const notice = json["Note"] ?? json["Information"] ?? json["Error Message"];
   if (typeof notice === "string") {
-    // Security (found by the week-2 verification run, shape M-1b): AV
-    // sometimes echoes the API key inside its own notices. Scrub before
-    // this text goes anywhere near a public response.
     const scrubbed = notice.replaceAll(apiKey, "[key hidden]");
     return { data: null, warning: `Alpha Vantage notice: ${scrubbed.slice(0, 180)}` };
   }
@@ -175,13 +159,6 @@ export async function fetchFmpProfile(
   };
 }
 
-/**
- * Week 3: FMP dividend-adjusted daily history — the price spine (decision #7).
- * VC-09 evidence: ~5 years of {date, adjOpen, adjHigh, adjLow, adjClose, volume}.
- * `from` narrows the window for the nightly incremental; on a first fetch the
- * full ~5y arrives in one call. Upserts are idempotent, so an over-wide reply
- * costs payload, never correctness.
- */
 export async function fetchFmpDailyAdjusted(
   symbol: string,
   apiKey: string,
@@ -219,7 +196,6 @@ export async function fetchFmpDailyAdjusted(
     return { kind: "error", detail: "unparseable JSON" };
   }
 
-  // Shape M-6 arrives as HTTP 200 with a prose complaint.
   if (json && typeof json === "object" && !Array.isArray(json)) {
     const text = JSON.stringify(json).slice(0, 200);
     if (/premium query parameter|special endpoint|upgrade your plan/i.test(text)) {
@@ -228,7 +204,6 @@ export async function fetchFmpDailyAdjusted(
     if (/limit/i.test(text)) {
       return { kind: "rate_limited", detail: text };
     }
-    // Some wrappers nest the array — accept the common spellings.
     const nested = (json as Record<string, unknown>)["historical"];
     if (Array.isArray(nested)) json = nested;
     else return { kind: "error", detail: `unexpected shape: ${text}` };
@@ -254,4 +229,137 @@ export async function fetchFmpDailyAdjusted(
   }
 
   return { kind: "ok", bars };
+}
+
+// ---------------------------------------------------------------------------
+// Week 4: fundamentals — three more /stable endpoints through one classifier.
+// VC-07 fixed income-statement at 5 annual periods on the free plan; the
+// balance-sheet and dividends endpoints get their own VC-12 check (shipment
+// notes) and, in code, the same M-shape handling either way.
+// ---------------------------------------------------------------------------
+
+export type FmpRowsResult =
+  | { kind: "ok"; rows: Record<string, unknown>[] }
+  | { kind: "blocked"; detail: string }
+  | { kind: "rate_limited"; detail: string }
+  | { kind: "auth_failed"; detail: string }
+  | { kind: "error"; detail: string };
+
+async function fetchFmpRows(
+  path: string,
+  symbol: string,
+  apiKey: string,
+): Promise<FmpRowsResult> {
+  const url = `https://financialmodelingprep.com/stable/${path}?symbol=${encodeURIComponent(symbol)}&apikey=${apiKey}`;
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch (err) {
+    return { kind: "error", detail: `unreachable: ${(err as Error).message}` };
+  }
+  if (res.status === 401 || res.status === 403) return { kind: "auth_failed", detail: `HTTP ${res.status}` };
+  if (res.status === 402) return { kind: "blocked", detail: "HTTP 402 (M-5)" };
+  if (res.status === 429) return { kind: "rate_limited", detail: "HTTP 429" };
+  if (!res.ok) return { kind: "error", detail: `HTTP ${res.status}` };
+
+  let json: unknown;
+  try {
+    json = await res.json();
+  } catch {
+    return { kind: "error", detail: "unparseable JSON" };
+  }
+  if (json && typeof json === "object" && !Array.isArray(json)) {
+    const text = JSON.stringify(json).slice(0, 200);
+    if (/premium query parameter|special endpoint|upgrade your plan/i.test(text))
+      return { kind: "blocked", detail: `M-6: ${text}` };
+    if (/limit/i.test(text)) return { kind: "rate_limited", detail: text };
+    return { kind: "error", detail: `unexpected shape: ${text}` };
+  }
+  if (!Array.isArray(json)) return { kind: "error", detail: "expected an array" };
+  return { kind: "ok", rows: json as Record<string, unknown>[] };
+}
+
+/** Providers rename fields across versions; take the first usable candidate. */
+const pick = (row: Record<string, unknown>, ...keys: string[]): number | null => {
+  for (const k of keys) {
+    const v = row[k];
+    const n = typeof v === "string" ? parseFloat(v) : typeof v === "number" ? v : NaN;
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+};
+const pickStr = (row: Record<string, unknown>, ...keys: string[]): string | null => {
+  for (const k of keys) {
+    const v = row[k];
+    if (typeof v === "string" && v.length > 0) return v;
+  }
+  return null;
+};
+
+export type IncomeYear = {
+  fiscalYear: string;
+  periodEnd: string | null;
+  revenue: number | null;
+  netIncome: number | null;
+  epsDiluted: number | null;
+  sharesDiluted: number | null;
+};
+
+export async function fetchFmpIncomeAnnual(symbol: string, apiKey: string) {
+  const r = await fetchFmpRows("income-statement", symbol, apiKey);
+  if (r.kind !== "ok") return r;
+  const years: IncomeYear[] = r.rows.map((row) => {
+    const periodEnd = pickStr(row, "date", "fillingDate");
+    return {
+      fiscalYear: pickStr(row, "fiscalYear", "calendarYear") ?? (periodEnd ? periodEnd.slice(0, 4) : "unknown"),
+      periodEnd,
+      revenue: pick(row, "revenue"),
+      netIncome: pick(row, "netIncome"),
+      epsDiluted: pick(row, "epsDiluted", "epsdiluted", "eps"),
+      sharesDiluted: pick(row, "weightedAverageShsOutDil", "weightedAverageShsOut"),
+    };
+  });
+  return { kind: "ok" as const, years };
+}
+
+export type BalanceYear = {
+  fiscalYear: string;
+  currentAssets: number | null;
+  currentLiabilities: number | null;
+  totalAssets: number | null;
+  totalLiabilities: number | null;
+  longTermDebt: number | null;
+  equity: number | null;
+};
+
+export async function fetchFmpBalanceAnnual(symbol: string, apiKey: string) {
+  const r = await fetchFmpRows("balance-sheet-statement", symbol, apiKey);
+  if (r.kind !== "ok") return r;
+  const years: BalanceYear[] = r.rows.map((row) => {
+    const periodEnd = pickStr(row, "date", "fillingDate");
+    return {
+      fiscalYear: pickStr(row, "fiscalYear", "calendarYear") ?? (periodEnd ? periodEnd.slice(0, 4) : "unknown"),
+      currentAssets: pick(row, "totalCurrentAssets"),
+      currentLiabilities: pick(row, "totalCurrentLiabilities"),
+      totalAssets: pick(row, "totalAssets"),
+      totalLiabilities: pick(row, "totalLiabilities"),
+      longTermDebt: pick(row, "longTermDebt"),
+      equity: pick(row, "totalStockholdersEquity", "totalEquity", "stockholdersEquity"),
+    };
+  });
+  return { kind: "ok" as const, years };
+}
+
+export type DividendRow = { exDate: string; amount: number | null };
+
+export async function fetchFmpDividends(symbol: string, apiKey: string) {
+  const r = await fetchFmpRows("dividends", symbol, apiKey);
+  if (r.kind !== "ok") return r;
+  const rows: DividendRow[] = [];
+  for (const row of r.rows) {
+    const exDate = pickStr(row, "date", "exDividendDate", "recordDate");
+    if (!exDate) continue;
+    rows.push({ exDate: exDate.slice(0, 10), amount: pick(row, "adjDividend", "dividend", "amount") });
+  }
+  return { kind: "ok" as const, rows };
 }

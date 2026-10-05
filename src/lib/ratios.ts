@@ -1,0 +1,136 @@
+/**
+ * Week 4: the ratio engine — pure functions, no I/O, unit-tested.
+ *
+ * These numbers end up on the class screen and, in week 5, inside the
+ * Graham screener. The course's credibility rides on them, so they are
+ * the first code in the project with their own test suite: `npm test`.
+ *
+ * Conventions: null in → null out, never NaN, never a throw. Years are
+ * passed NEWEST FIRST (as FMP serves them).
+ */
+
+export type FundamentalsYear = {
+  fiscalYear: string;
+  periodEnd: string | null;
+  revenue: number | null;
+  netIncome: number | null;
+  epsDiluted: number | null;
+  currentAssets: number | null;
+  currentLiabilities: number | null;
+  totalAssets: number | null;
+  totalLiabilities: number | null;
+  longTermDebt: number | null;
+  equity: number | null;
+  sharesDiluted: number | null;
+};
+
+export type Ratios = {
+  asOfYear: string | null;
+  /** Current assets ÷ current liabilities. Graham's defensive bar: ≥ 2. */
+  currentRatio: number | null;
+  /** Current assets − current liabilities. */
+  workingCapital: number | null;
+  /** Long-term debt ÷ working capital. Graham's defensive bar: ≤ 1. */
+  ltDebtToWorkingCapital: number | null;
+  /** Equity ÷ diluted shares. */
+  bookValuePerShare: number | null;
+  /** Price ÷ latest diluted EPS. Null when EPS ≤ 0 — a loss has no meaningful P/E. */
+  pe: number | null;
+  /** Price ÷ book value per share. */
+  pb: number | null;
+  /** The famous combined test: Graham's bar is ≤ 22.5 (15 × 1.5). */
+  peTimesPb: number | null;
+  /** How many fiscal years of EPS we actually hold (free plan: 5; Graham asked for 10). */
+  epsYearsAvailable: number;
+  /** Years with EPS > 0. Stability = every available year positive. */
+  epsPositiveYears: number;
+  /**
+   * Growth across the window: average of the two newest EPS vs average of
+   * the two oldest (Graham's smoothing habit, shrunk to a 5-year window).
+   * Null when the early average isn't positive.
+   */
+  epsGrowthPct: number | null;
+};
+
+const ok = (v: number | null | undefined): v is number =>
+  typeof v === "number" && Number.isFinite(v);
+
+const round = (v: number, dp = 2) => Math.round(v * 10 ** dp) / 10 ** dp;
+
+export function computeRatios(
+  years: FundamentalsYear[],
+  lastClose: number | null,
+): Ratios {
+  const latest = years[0] ?? null;
+
+  const currentRatio =
+    latest && ok(latest.currentAssets) && ok(latest.currentLiabilities) && latest.currentLiabilities > 0
+      ? round(latest.currentAssets / latest.currentLiabilities)
+      : null;
+
+  const workingCapital =
+    latest && ok(latest.currentAssets) && ok(latest.currentLiabilities)
+      ? round(latest.currentAssets - latest.currentLiabilities, 0)
+      : null;
+
+  const ltDebtToWorkingCapital =
+    latest && ok(latest.longTermDebt) && ok(workingCapital) && workingCapital! > 0
+      ? round(latest.longTermDebt / workingCapital!)
+      : null;
+
+  const bookValuePerShare =
+    latest && ok(latest.equity) && ok(latest.sharesDiluted) && latest.sharesDiluted > 0
+      ? round(latest.equity / latest.sharesDiluted)
+      : null;
+
+  const latestEps = latest && ok(latest.epsDiluted) ? latest.epsDiluted : null;
+
+  const pe =
+    ok(lastClose) && ok(latestEps) && latestEps > 0 ? round(lastClose / latestEps, 1) : null;
+
+  const pb =
+    ok(lastClose) && ok(bookValuePerShare) && bookValuePerShare! > 0
+      ? round(lastClose / bookValuePerShare!, 1)
+      : null;
+
+  const peTimesPb = ok(pe) && ok(pb) ? round(pe! * pb!, 1) : null;
+
+  const epsSeries = years.map((y) => y.epsDiluted).filter(ok);
+  const epsPositiveYears = epsSeries.filter((e) => e > 0).length;
+
+  let epsGrowthPct: number | null = null;
+  if (epsSeries.length >= 4) {
+    // newest first: head = recent pair, tail = oldest pair
+    const recent = (epsSeries[0] + epsSeries[1]) / 2;
+    const early = (epsSeries[epsSeries.length - 1] + epsSeries[epsSeries.length - 2]) / 2;
+    if (early > 0) epsGrowthPct = round(((recent - early) / early) * 100, 1);
+  }
+
+  return {
+    asOfYear: latest?.fiscalYear ?? null,
+    currentRatio,
+    workingCapital,
+    ltDebtToWorkingCapital,
+    bookValuePerShare,
+    pe,
+    pb,
+    peTimesPb,
+    epsYearsAvailable: epsSeries.length,
+    epsPositiveYears,
+    epsGrowthPct,
+  };
+}
+
+/** Distinct calendar years, within the data window, that paid any dividend. */
+export function dividendYears(exDates: { ex_date: string; amount: number | null }[]): {
+  yearsPaid: number;
+  perYear: Record<string, number>;
+} {
+  const perYear: Record<string, number> = {};
+  for (const d of exDates) {
+    if (!ok(d.amount) || d.amount <= 0) continue;
+    const y = d.ex_date.slice(0, 4);
+    perYear[y] = round((perYear[y] ?? 0) + d.amount, 4);
+  }
+  return { yearsPaid: Object.keys(perYear).length, perYear };
+}

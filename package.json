@@ -1,22 +1,23 @@
 {
   "name": "stock-market-toolkit",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
-  "description": "Course toolkit for 'Intro to the Stock Market' — a community-school course in good financial decision-making. Education, not advice.",
   "scripts": {
     "dev": "wrangler dev",
     "dev:cron": "wrangler dev --test-scheduled",
     "deploy": "wrangler deploy",
     "types": "wrangler types",
     "check": "wrangler types && tsc --noEmit",
-    "verify-universe": "node scripts/verify-universe.mjs"
+    "verify-universe": "node scripts/verify-universe.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "hono": "^4.13.4"
   },
   "devDependencies": {
     "typescript": "^5",
-    "wrangler": "^4"
+    "wrangler": "^4",
+    "vitest": "^3"
   },
   "engines": {
     "node": ">=20"

@@ -1,7 +1,6 @@
 /**
  * The course landing page — the "twelve-week ledger".
- * Week 3: the nightly close ships; week 3's row gets its stamp, and the
- * try-box now points at the cache — unlimited, unrationed, by design.
+ * Week 4: the books open; week 4's row gets its stamp.
  */
 
 export const LANDING_PAGE = /* html */ `<!doctype html>
@@ -136,6 +135,7 @@ export const LANDING_PAGE = /* html */ `<!doctype html>
     color: var(--paper);
     cursor: pointer;
   }
+  .lookup button.alt { background: transparent; color: var(--entry); }
   .lookup button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
   .fineprint { font-size: .8rem; color: var(--faint); }
   footer {
@@ -174,7 +174,7 @@ export const LANDING_PAGE = /* html */ `<!doctype html>
       </div>
       <div class="row shipped">
         <span class="wk">Wk 2</span>
-        <span><span class="lesson">Where prices come from</span><br><span class="feature">Live quote lookup &mdash; try it below</span></span>
+        <span><span class="lesson">Where prices come from</span><br><span class="feature">Live quote lookup &mdash; rationed by design</span></span>
         <span class="stamp">SHIPPED</span>
       </div>
       <div class="row shipped">
@@ -186,9 +186,10 @@ export const LANDING_PAGE = /* html */ `<!doctype html>
 
     <div class="phase">
       <p class="phase-name">Phase 2 &middot; Value, the Graham way</p>
-      <div class="row pending">
+      <div class="row shipped">
         <span class="wk">Wk 4</span>
-        <span><span class="lesson">What is a company worth?</span><br><span class="feature">Company fundamentals &amp; ratios</span></span>
+        <span><span class="lesson">What is a company worth?</span><br><span class="feature">The books, opened &mdash; <a href="/fundamentals/AAPL">five years of accounts &amp; Graham's ratios</a></span></span>
+        <span class="stamp">SHIPPED</span>
       </div>
       <div class="row pending">
         <span class="wk">Wk 5</span>
@@ -234,15 +235,16 @@ export const LANDING_PAGE = /* html */ `<!doctype html>
   </section>
 
   <div class="try">
-    <strong>New this week:</strong> every night after the US close, the toolkit snapshots its whole universe into a cache.
-    Charts like <a href="/prices/AAPL">AAPL's five-year history</a> now load in milliseconds, from
-    <a href="/api/universe">a universe you can inspect</a> &mdash; no ration, no waiting.
-    <form class="lookup" onsubmit="event.preventDefault();var t=this.t.value.trim().toUpperCase();if(t)location.href='/prices/'+encodeURIComponent(t)">
+    <strong>New this week:</strong> every company's books, opened. Five years of real accounts
+    &mdash; revenue, earnings, equity, dividends &mdash; with Graham's ratios computed and explained
+    in plain words. Try <a href="/fundamentals/AAPL">Apple's books</a>, then a value candidate like
+    <a href="/fundamentals/PFE">Pfizer's</a>.
+    <form class="lookup" onsubmit="event.preventDefault();var t=this.t.value.trim().toUpperCase();if(t)location.href='/'+(this.books.checked?'fundamentals':'prices')+'/'+encodeURIComponent(t)">
       <input name="t" placeholder="AAPL" aria-label="Ticker symbol" autocapitalize="characters" autocomplete="off" spellcheck="false">
-      <button type="submit">Chart it</button>
+      <label style="display:flex;align-items:center;gap:.3rem;font-size:.8rem;color:var(--faint)"><input type="checkbox" name="books" checked> books</label>
+      <button type="submit">Open</button>
     </form>
-    <p class="fineprint">Cached nightly, adjusted for splits &amp; dividends. Week 2's rationed <em>live</em> lookup
-      (<code>/api/quote/AAPL</code>) still exists &mdash; the difference between the two is the lesson.
+    <p class="fineprint">Untick for the price chart instead. All of it from the nightly cache &mdash; no ration, no waiting.
       Week 1's <code><a href="/api/hello">/api/hello</a></code> lives on.</p>
   </div>
 

@@ -1,18 +1,16 @@
 /**
  * Intro to the Stock Market — course toolkit
- * Week 3: the nightly close. D1 cache, cron-fed; cache-first routes;
- * a chart page students can hammer without spending anyone's ration.
+ * Week 4: open the books. Fundamentals from the cache, ratios with
+ * plain-word glosses, and a books page beside every chart page.
  *
- * Design invariant 4, now real: student-facing data routes (/api/prices,
- * /api/universe, /prices/:ticker) touch only D1 — never a live provider.
- * /api/quote stays live on purpose: it is lesson 2's demo of what the
- * rationed world feels like, run by the tutor.
+ * Invariant 4 holds: student-facing data routes touch only D1.
  */
 
 import { Hono } from "hono";
 import { LANDING_PAGE } from "./landing";
 import { fetchAlphaVantageQuote, fetchFmpProfile } from "./providers";
 import { runNightly } from "./jobs/nightly";
+import { computeRatios, dividendYears, type FundamentalsYear, type Ratios } from "./lib/ratios";
 
 type Env = {
   ALPHAVANTAGE_API_KEY: string;
@@ -48,7 +46,7 @@ app.get("/api/hello", (c) =>
 const TICKER = /^[A-Z0-9][A-Z0-9.\-]{0,11}$/;
 
 // ---------------------------------------------------------------------------
-// Week 2 (unchanged in spirit): the LIVE quote route — tutor's demo, rationed.
+// Week 2: the LIVE quote route — tutor's demo, rationed.
 // ---------------------------------------------------------------------------
 app.get("/api/quote/:ticker", async (c) => {
   const ticker = c.req.param("ticker").trim().toUpperCase();
@@ -77,7 +75,6 @@ app.get("/api/quote/:ticker", async (c) => {
     );
   }
 
-  // Two providers in parallel; either may fail without sinking the other.
   const [av, fmp] = await Promise.all([
     fetchAlphaVantageQuote(ticker, avKey),
     fetchFmpProfile(ticker, fmpKey),
@@ -96,8 +93,8 @@ app.get("/api/quote/:ticker", async (c) => {
     {
       ticker,
       asOf: new Date().toISOString(),
-      price: av.data, // Alpha Vantage
-      company: fmp.data, // Financial Modeling Prep
+      price: av.data,
+      company: fmp.data,
       meta: {
         delayed: true,
         sources: {
@@ -114,15 +111,14 @@ app.get("/api/quote/:ticker", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// Week 3: cache-first routes. D1 only. No ration, no provider, no waiting.
+// Week 3: cache-first routes. D1 only.
 // ---------------------------------------------------------------------------
 
-/** The universe, with per-symbol freshness — "what's in the tin". */
 app.get("/api/universe", async (c) => {
   const t0 = Date.now();
   const rows = (
     await c.env.DB.prepare(
-      `SELECT t.symbol, t.name, t.sector, t.status,
+      `SELECT t.symbol, t.name, t.sector, t.status, t.fundamentals_status,
               COUNT(p.date) AS days_of_history,
               MAX(p.date)   AS latest_close
        FROM tickers t
@@ -133,8 +129,8 @@ app.get("/api/universe", async (c) => {
   ).results;
 
   const lastRun = await c.env.DB.prepare(
-    "SELECT run_at, detail FROM fetch_log WHERE outcome = 'run_summary' ORDER BY id DESC LIMIT 1",
-  ).first<{ run_at: string; detail: string }>();
+    "SELECT run_at FROM fetch_log WHERE outcome = 'run_summary' ORDER BY id DESC LIMIT 1",
+  ).first<{ run_at: string }>();
 
   return c.json({
     universe: rows,
@@ -148,7 +144,6 @@ app.get("/api/universe", async (c) => {
   });
 });
 
-/** Daily adjusted history from the cache. ?days=N (default 365, max 1900). */
 app.get("/api/prices/:ticker", async (c) => {
   const ticker = c.req.param("ticker").trim().toUpperCase();
   if (!TICKER.test(ticker)) {
@@ -172,7 +167,7 @@ app.get("/api/prices/:ticker", async (c) => {
         adj_close: number;
         volume: number | null;
       }>()
-  ).results.reverse(); // serve ascending — charts read left to right
+  ).results.reverse();
 
   if (rows.length === 0) {
     const t = await c.env.DB.prepare("SELECT status, notes FROM tickers WHERE symbol = ?1")
@@ -214,7 +209,123 @@ app.get("/api/prices/:ticker", async (c) => {
   });
 });
 
-/** The human-facing chart page — lesson 3's centrepiece. */
+// ---------------------------------------------------------------------------
+// Week 4: fundamentals from the cache.
+// ---------------------------------------------------------------------------
+
+async function loadFundamentals(env: Env, ticker: string) {
+  const years = (
+    await env.DB.prepare(
+      `SELECT fiscal_year, period_end, revenue, net_income, eps_diluted,
+              current_assets, current_liabilities, total_assets, total_liabilities,
+              long_term_debt, shareholders_equity, shares_diluted
+       FROM fundamentals_annual WHERE symbol = ?1
+       ORDER BY fiscal_year DESC LIMIT 10`,
+    ).bind(ticker).all<{
+      fiscal_year: string; period_end: string | null; revenue: number | null;
+      net_income: number | null; eps_diluted: number | null;
+      current_assets: number | null; current_liabilities: number | null;
+      total_assets: number | null; total_liabilities: number | null;
+      long_term_debt: number | null; shareholders_equity: number | null;
+      shares_diluted: number | null;
+    }>()
+  ).results;
+
+  const divs = (
+    await env.DB.prepare(
+      "SELECT ex_date, amount FROM dividends WHERE symbol = ?1 ORDER BY ex_date DESC LIMIT 80",
+    ).bind(ticker).all<{ ex_date: string; amount: number | null }>()
+  ).results;
+
+  const close = await env.DB.prepare(
+    "SELECT date, adj_close FROM daily_prices WHERE symbol = ?1 ORDER BY date DESC LIMIT 1",
+  ).bind(ticker).first<{ date: string; adj_close: number }>();
+
+  const meta = await env.DB.prepare(
+    "SELECT name, status, fundamentals_as_of, fundamentals_status FROM tickers WHERE symbol = ?1",
+  ).bind(ticker).first<{
+    name: string | null; status: string;
+    fundamentals_as_of: string | null; fundamentals_status: string | null;
+  }>();
+
+  const fy: FundamentalsYear[] = years.map((y) => ({
+    fiscalYear: y.fiscal_year,
+    periodEnd: y.period_end,
+    revenue: y.revenue,
+    netIncome: y.net_income,
+    epsDiluted: y.eps_diluted,
+    currentAssets: y.current_assets,
+    currentLiabilities: y.current_liabilities,
+    totalAssets: y.total_assets,
+    totalLiabilities: y.total_liabilities,
+    longTermDebt: y.long_term_debt,
+    equity: y.shareholders_equity,
+    sharesDiluted: y.shares_diluted,
+  }));
+
+  return {
+    years: fy,
+    dividends: dividendYears(divs),
+    close: close ?? null,
+    ratios: computeRatios(fy, close?.adj_close ?? null),
+    ticker_meta: meta ?? null,
+  };
+}
+
+app.get("/api/fundamentals/:ticker", async (c) => {
+  const ticker = c.req.param("ticker").trim().toUpperCase();
+  if (!TICKER.test(ticker)) {
+    return c.json({ error: "That doesn't look like a ticker symbol." }, 400);
+  }
+  const t0 = Date.now();
+  const f = await loadFundamentals(c.env, ticker);
+
+  if (f.years.length === 0) {
+    const m = f.ticker_meta;
+    return c.json(
+      {
+        ticker,
+        error: m
+          ? m.status === "blocked"
+            ? `"${ticker}" is outside the free data plan — no accounts are cached.`
+            : `"${ticker}" has no cached accounts yet — the nightly refresh covers a few companies per night and reaches the whole universe within about three nights of first deploy.`
+          : `"${ticker}" is not in the course universe (see /api/universe).`,
+      },
+      404,
+    );
+  }
+
+  return c.json({
+    ticker,
+    name: f.ticker_meta?.name ?? null,
+    last_close: f.close,
+    years: f.years,
+    dividends: f.dividends,
+    ratios: f.ratios,
+    meta: {
+      source: "d1-cache",
+      years_available: f.years.length,
+      note_on_depth: "Free data serves 5 fiscal years; Graham asked for 10. The week-5 criteria adapt openly (decision log #8).",
+      fundamentals_as_of: f.ticker_meta?.fundamentals_as_of ?? null,
+      fundamentals_status: f.ticker_meta?.fundamentals_status ?? null,
+      served_in_ms: Date.now() - t0,
+      note: "Education, not advice.",
+    },
+  });
+});
+
+/** The human-facing books page — week 4's centrepiece. */
+app.get("/fundamentals/:ticker", async (c) => {
+  const ticker = c.req.param("ticker").trim().toUpperCase();
+  if (!TICKER.test(ticker)) return c.text("Not a ticker symbol.", 400);
+  const f = await loadFundamentals(c.env, ticker);
+  return c.html(
+    fundamentalsPage(ticker, f.ticker_meta?.name ?? null, f.ticker_meta?.status ?? null,
+      f.years, f.ratios, f.dividends, f.close),
+  );
+});
+
+/** The chart page — week 3's centrepiece. */
 app.get("/prices/:ticker", async (c) => {
   const ticker = c.req.param("ticker").trim().toUpperCase();
   if (!TICKER.test(ticker)) return c.text("Not a ticker symbol.", 400);
@@ -238,13 +349,179 @@ app.get("/prices/:ticker", async (c) => {
 
 app.notFound((c) =>
   c.json(
-    { error: "Not found", hint: "Try /, /api/hello, /api/universe, /api/prices/AAPL, or /prices/AAPL" },
+    { error: "Not found", hint: "Try /, /api/universe, /prices/AAPL, or /fundamentals/AAPL" },
     404,
   ),
 );
 
 // ---------------------------------------------------------------------------
-// The chart page. One series, site palette, no dependencies.
+// Shared page chrome (ledger identity)
+// ---------------------------------------------------------------------------
+const PAGE_CSS = `
+  :root { --paper:#EEF2E9; --ink:#182620; --rule:#B7C6D4; --entry:#3E6B54; --stamp:#B4382E; --faint:#6B7A72; }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--paper); color: var(--ink); font-family: "IBM Plex Sans", system-ui, sans-serif; line-height: 1.55; padding: 2.5rem 1.25rem 4rem; }
+  main { max-width: 46rem; margin: 0 auto; position: relative; }
+  .eyebrow { font-family:"IBM Plex Mono",monospace; font-size:.75rem; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); }
+  h1 { font-family:"Libre Caslon Text",serif; font-weight:700; font-size:clamp(1.6rem,5vw,2.4rem); line-height:1.1; margin:.4rem 0 .2rem; }
+  .back { font-size:.85rem; margin-bottom:1rem; }
+  .back a, a { color: var(--entry); }
+  footer { margin-top:2.5rem; padding-top:1rem; border-top:2px solid var(--ink); font-size:.8rem; color:var(--faint); }
+  footer .notice { color:var(--stamp); font-weight:600; }
+  a:focus-visible { outline:2px solid var(--entry); outline-offset:2px; }
+`;
+const FONTS_HTML = `<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Text:wght@400;700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">`;
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+// ---------------------------------------------------------------------------
+// Week 4 page
+// ---------------------------------------------------------------------------
+function fundamentalsPage(
+  ticker: string,
+  name: string | null,
+  status: string | null,
+  years: FundamentalsYear[],
+  r: Ratios,
+  divs: { yearsPaid: number; perYear: Record<string, number> },
+  close: { date: string; adj_close: number } | null,
+): string {
+  const T = esc(ticker);
+  const fmtB = (v: number | null) => {
+    if (v === null || !Number.isFinite(v)) return "—";
+    const a = Math.abs(v);
+    if (a >= 1e9) return (v / 1e9).toFixed(1) + "bn";
+    if (a >= 1e6) return (v / 1e6).toFixed(0) + "m";
+    return String(Math.round(v));
+  };
+  const fmt = (v: number | null, suffix = "") =>
+    v === null || !Number.isFinite(v) ? "—" : `${v}${suffix}`;
+
+  let body: string;
+  if (years.length === 0) {
+    const reason =
+      status === "blocked"
+        ? "This symbol is outside the free data plan, so no accounts are cached for it."
+        : status
+          ? "No cached accounts yet — the nightly refresh opens a few companies' books per night and covers the whole universe within about three nights."
+          : `Not in the course universe — see <a href="/api/universe">/api/universe</a>.`;
+    body = `<p class="empty">${reason}</p>`;
+  } else {
+    const verdict = (okTest: boolean | null, label: string) =>
+      okTest === null
+        ? `<span class="chip na">no data</span>`
+        : okTest
+          ? `<span class="chip pass">${label}</span>`
+          : `<span class="chip fail">${label}</span>`;
+
+    const cards = [
+      {
+        k: "Current ratio", v: fmt(r.currentRatio),
+        gloss: "Can it pay this year's bills? Current assets ÷ current liabilities.",
+        chip: verdict(r.currentRatio === null ? null : r.currentRatio >= 2, "Graham bar: ≥ 2"),
+      },
+      {
+        k: "P/E", v: fmt(r.pe),
+        gloss: "Years of today's earnings you pay for the share.",
+        chip: verdict(r.pe === null ? null : r.pe <= 15, "Graham bar: ≤ 15"),
+      },
+      {
+        k: "P/B", v: fmt(r.pb),
+        gloss: "Price against the book value behind each share.",
+        chip: verdict(r.pb === null ? null : r.pb <= 1.5, "Graham bar: ≤ 1.5"),
+      },
+      {
+        k: "P/E × P/B", v: fmt(r.peTimesPb),
+        gloss: "Graham's combined affordability test.",
+        chip: verdict(r.peTimesPb === null ? null : r.peTimesPb <= 22.5, "Graham bar: ≤ 22.5"),
+      },
+    ];
+    const cardHtml = cards
+      .map(
+        (cd) => `<div class="card"><p class="k">${cd.k}</p><p class="v">${cd.v}</p>${cd.chip}<p class="gloss">${cd.gloss}</p></div>`,
+      )
+      .join("");
+
+    const rowsAsc = [...years].reverse(); // oldest → newest across the table
+    const th = rowsAsc.map((y) => `<th>${esc(y.fiscalYear)}</th>`).join("");
+    const line = (label: string, get: (y: FundamentalsYear) => number | null, money = true) =>
+      `<tr><td class="lbl">${label}</td>${rowsAsc
+        .map((y) => `<td>${money ? fmtB(get(y)) : fmt(get(y))}</td>`)
+        .join("")}</tr>`;
+    const divRow = `<tr><td class="lbl">Dividends/share</td>${rowsAsc
+      .map((y) => {
+        const v = divs.perYear[y.fiscalYear];
+        return `<td>${v !== undefined ? v.toFixed(2) : "—"}</td>`;
+      })
+      .join("")}</tr>`;
+
+    body = `
+  <p class="figures">${close ? `Last close <span class="mono">${close.adj_close >= 100 ? close.adj_close.toFixed(0) : close.adj_close.toFixed(2)}</span> (${close.date})` : "No cached price yet"} · accounts to FY ${esc(r.asOfYear ?? "—")}</p>
+  <div class="cards">${cardHtml}</div>
+
+  <h2>Five years, four lines</h2>
+  <p class="sub">The whole income statement and balance sheet, reduced to what a defensive investor reads first. Figures in company reporting currency.</p>
+  <table>
+    <thead><tr><td></td>${th}</tr></thead>
+    <tbody>
+      ${line("Revenue", (y) => y.revenue)}
+      ${line("Net income", (y) => y.netIncome)}
+      ${line("EPS (diluted)", (y) => y.epsDiluted, false)}
+      ${line("Equity (book)", (y) => y.equity)}
+      ${divRow}
+    </tbody>
+  </table>
+  <p class="smallprint">Earnings positive in ${r.epsPositiveYears} of ${r.epsYearsAvailable} available years · EPS growth across the window: ${fmt(r.epsGrowthPct, "%")} · dividends paid in ${divs.yearsPaid} calendar years of the record.
+  Free data serves 5 fiscal years; Graham asked for 10 — week 5's checklist adapts openly.</p>
+  <p class="ranges"><a href="/prices/${T}">price history</a> · <a href="/api/fundamentals/${T}">raw JSON</a> · <a href="/api/universe">universe</a></p>`;
+  }
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${T} — the books</title>
+${FONTS_HTML}
+<style>
+${PAGE_CSS}
+  .figures { font-size:.95rem; color:var(--faint); margin:.4rem 0 1rem; }
+  .mono { font-family:"IBM Plex Mono",monospace; color:var(--ink); font-weight:500; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(10.2rem,1fr)); gap:.6rem; margin-bottom:1.6rem; }
+  .card { background:rgba(255,255,255,.55); border:1px solid var(--rule); border-radius:6px; padding: .7rem .8rem; }
+  .card .k { font-family:"IBM Plex Mono",monospace; font-size:.7rem; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .card .v { font-family:"Libre Caslon Text",serif; font-size:1.7rem; font-weight:700; margin:.1rem 0 .25rem; }
+  .chip { font-family:"IBM Plex Mono",monospace; font-size:.62rem; letter-spacing:.06em; border:1.2px solid; border-radius:3px; padding:.08rem .35rem; }
+  .chip.pass { color:var(--entry); border-color:var(--entry); }
+  .chip.fail { color:var(--stamp); border-color:var(--stamp); }
+  .chip.na   { color:var(--faint); border-color:var(--rule); }
+  .card .gloss { font-size:.74rem; color:var(--faint); margin-top:.35rem; line-height:1.35; }
+  h2 { font-family:"Libre Caslon Text",serif; font-size:1.25rem; margin:.2rem 0 .2rem; }
+  .sub { font-size:.82rem; color:var(--faint); margin-bottom:.6rem; }
+  table { border-collapse:collapse; width:100%; font-family:"IBM Plex Mono",monospace; font-size:.82rem; background:rgba(255,255,255,.45); border:1px solid var(--rule); border-radius:6px; }
+  th, td { padding:.4rem .55rem; text-align:right; border-bottom:1px solid var(--rule); font-weight:400; }
+  th { color:var(--faint); }
+  td.lbl { text-align:left; font-family:"IBM Plex Sans",sans-serif; color:var(--ink); }
+  .smallprint { font-size:.78rem; color:var(--faint); margin-top:.7rem; line-height:1.5; }
+  .ranges { font-size:.8rem; color:var(--faint); margin-top:.8rem; }
+  .empty { margin:1.2rem 0; }
+</style>
+</head>
+<body>
+<main>
+  <p class="back"><a href="/">&larr; the twelve-week ledger</a></p>
+  <p class="eyebrow">The books &middot; from the course cache &middot; 5 fiscal years</p>
+  <h1>${name ? esc(name) : T} <span style="color:var(--faint);font-size:.6em">(${T})</span></h1>
+  ${body}
+  <footer><p class="notice">Education, not advice. Graham bars are teaching thresholds from The Intelligent Investor ch. 14 — not a recommendation to buy or sell anything.</p></footer>
+</main>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Week 3 chart page (unchanged except shared chrome)
 // ---------------------------------------------------------------------------
 function chartPage(
   ticker: string,
@@ -254,7 +531,6 @@ function chartPage(
   days: number,
   queryMs: number,
 ): string {
-  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const T = esc(ticker);
 
   let body: string;
@@ -267,7 +543,6 @@ function chartPage(
           : `Not in the course universe. The universe is the verified list at <a href="/api/universe">/api/universe</a>.`;
     body = `<p class="empty">${reason}</p>`;
   } else {
-    // Geometry
     const W = 720, H = 260, PAD_L = 14, PAD_R = 64, PAD_T = 18, PAD_B = 30;
     const closes = rows.map((r) => r.adj_close);
     const min = Math.min(...closes), max = Math.max(...closes);
@@ -280,7 +555,6 @@ function chartPage(
     const fmt = (v: number) => (v >= 100 ? v.toFixed(0) : v.toFixed(2));
     const pct = (((last.adj_close - first.adj_close) / first.adj_close) * 100).toFixed(1);
 
-    // Last-10 table (accessibility + "read the numbers" habit)
     const tail = rows.slice(-10).reverse();
     const tableRows = tail
       .map((r) => `<tr><td>${r.date}</td><td>${fmt(r.adj_close)}</td></tr>`)
@@ -305,7 +579,7 @@ function chartPage(
   <p class="caption">${first.date} → ${last.date} · adjusted for splits &amp; dividends · served from the nightly cache in ${queryMs}&nbsp;ms</p>
   <p class="ranges">Range:
     <a href="/prices/${T}?days=90">3m</a> · <a href="/prices/${T}?days=365">1y</a> ·
-    <a href="/prices/${T}?days=1900">max</a> · <a href="/api/prices/${T}?days=${days}">raw JSON</a></p>
+    <a href="/prices/${T}?days=1900">max</a> · <a href="/fundamentals/${T}">the books</a> · <a href="/api/prices/${T}?days=${days}">raw JSON</a></p>
   <details><summary>Last 10 closes (the numbers behind the line)</summary>
     <table><thead><tr><th>Date</th><th>Adj. close</th></tr></thead><tbody>${tableRows}</tbody></table>
   </details>
@@ -343,16 +617,9 @@ function chartPage(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${T} — price history</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Text:wght@400;700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+${FONTS_HTML}
 <style>
-  :root { --paper:#EEF2E9; --ink:#182620; --rule:#B7C6D4; --entry:#3E6B54; --stamp:#B4382E; --faint:#6B7A72; }
-  * { box-sizing: border-box; margin: 0; }
-  body { background: var(--paper); color: var(--ink); font-family: "IBM Plex Sans", system-ui, sans-serif; line-height: 1.55; padding: 2.5rem 1.25rem 4rem; }
-  main { max-width: 46rem; margin: 0 auto; position: relative; }
-  .eyebrow { font-family:"IBM Plex Mono",monospace; font-size:.75rem; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); }
-  h1 { font-family:"Libre Caslon Text",serif; font-weight:700; font-size:clamp(1.6rem,5vw,2.4rem); line-height:1.1; margin:.4rem 0 .2rem; }
+${PAGE_CSS}
   .figures { margin:.6rem 0 .4rem; }
   .big { font-family:"IBM Plex Mono",monospace; font-size:1.6rem; font-weight:500; }
   .chg { color:var(--faint); font-size:.9rem; margin-left:.4rem; }
@@ -366,18 +633,12 @@ function chartPage(
   .xhair { stroke:var(--faint); stroke-width:1; stroke-dasharray:3 3; }
   .tip { position:absolute; background:var(--ink); color:var(--paper); font-family:"IBM Plex Mono",monospace; font-size:.75rem; padding:.2rem .5rem; border-radius:4px; pointer-events:none; margin-top:-1.6rem; }
   .caption, .ranges { font-size:.8rem; color:var(--faint); margin-top:.5rem; }
-  .ranges a, .back a { color:var(--entry); }
   details { margin-top:1rem; font-size:.85rem; }
   summary { cursor:pointer; color:var(--entry); }
   table { border-collapse:collapse; margin-top:.5rem; font-family:"IBM Plex Mono",monospace; font-size:.8rem; }
   td,th { border-bottom:1px solid var(--rule); padding:.25rem .8rem .25rem 0; text-align:left; font-weight:400; }
   th { color:var(--faint); }
   .empty { margin:1.2rem 0; }
-  .empty a { color:var(--entry); }
-  footer { margin-top:2.5rem; padding-top:1rem; border-top:2px solid var(--ink); font-size:.8rem; color:var(--faint); }
-  footer .notice { color:var(--stamp); font-weight:600; }
-  .back { font-size:.85rem; margin-bottom:1rem; }
-  a:focus-visible { outline:2px solid var(--entry); outline-offset:2px; }
 </style>
 </head>
 <body>

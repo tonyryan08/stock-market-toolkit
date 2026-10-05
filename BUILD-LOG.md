@@ -13,12 +13,26 @@ Entry format: **Designed** (decisions and their reasoning) · **Built** (what sh
 **Built (Claude, sandboxed).** Repo scaffold: `src/index.ts` (landing page + `GET /api/hello` + JSON 404), `wrangler.jsonc` with placeholder comments for week 3's cron and D1, TypeScript via wrangler-generated runtime types, deploy-on-merge GitHub Actions workflow, MIT license. Course documents: lesson plan 1, decision-journal template (kit p.1), seeded reading list. One real course correction, logged because that's the point: the scaffold first pinned `@cloudflare/workers-types` alongside wrangler and hit a peer-dependency conflict on install; switched to the current practice of `wrangler types` generating `worker-configuration.d.ts` (gitignored, regenerated in CI by `npm run check`).
 
 **Verified — machine (in the build sandbox).**
+
 - `npm install` clean, 0 vulnerabilities; `wrangler types` + `tsc --noEmit` pass.
 - `wrangler dev` boots; `GET /` → 200 HTML; `GET /api/hello` → 200 JSON with the week-1 payload; unknown route → 404 JSON.
 
 **Verified — hand (gates "done"; tick before class).**
+
 - [ ] `npm run dev` works on my own machine; site renders correctly on a phone-width screen.
 - [ ] Deployed to my Cloudflare account (`npx wrangler login && npm run deploy`); live URL opens on my phone over mobile data.
 - [ ] GitHub repo public; `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` secrets set; a trivial push to `main` produces a green Actions run and a visible change on the live site.
 - [ ] Landing-page GitHub placeholder replaced with the real repo URL.
 - [ ] Journal template prints cleanly; one stack printed for lesson 1.
+
+
+
+Deviation (wk 3, closed): production backfill breached D1's 100k/day metered-write
+allowance — each insert counts the table plus every index, and idx_prices_symbol_date
+duplicated the PK (≈3 writes/row × 38,874 ≈ 116k). Fix: migration 0002 drops the
+redundant index (~2 writes/row); Sunday full refresh replaced by rolling realign
+(4 symbols/night, last_full_fetch-tracked); insert budget + write-failure abort added
+to the cron. Verified in sandbox: index gone, realign set selects stalest-first,
+auth abort after one call, summary records the realign list. Alphabetical tail of
+night-one backfill (≈TSLA–XOM) self-heals on the next run. Cost: €0 then, €0 now —
+the free tier remains the design, and the limit notification is now teaching material.
