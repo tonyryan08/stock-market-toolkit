@@ -34,11 +34,16 @@ export type Ratios = {
   ltDebtToWorkingCapital: number | null;
   /** Equity ÷ diluted shares. */
   bookValuePerShare: number | null;
-  /** Price ÷ latest diluted EPS. Null when EPS ≤ 0 — a loss has no meaningful P/E. */
+  /** Price ÷ latest diluted EPS — informational. Null when EPS ≤ 0. */
   pe: number | null;
-  /** Price ÷ book value per share. */
+  /** Average diluted EPS of the newest three fiscal years (Graham's basis). */
+  epsAvg3: number | null;
+  /** Price ÷ epsAvg3 — THE Graham P/E (ch. 14: "average earnings of the past
+   *  three years"). The screen uses this; so does the books page chip. */
+  pe3: number | null;
+  /** Price ÷ book value per share. Null when book value ≤ 0 or unreported. */
   pb: number | null;
-  /** The famous combined test: Graham's bar is ≤ 22.5 (15 × 1.5). */
+  /** Graham's combined test on the 3-year P/E: bar ≤ 22.5 (15 × 1.5). */
   peTimesPb: number | null;
   /** How many fiscal years of EPS we actually hold (free plan: 5; Graham asked for 10). */
   epsYearsAvailable: number;
@@ -88,12 +93,19 @@ export function computeRatios(
   const pe =
     ok(lastClose) && ok(latestEps) && latestEps > 0 ? round(lastClose / latestEps, 1) : null;
 
+  const recent3 = years.slice(0, 3).map((y) => y.epsDiluted);
+  const epsAvg3 =
+    recent3.length === 3 && recent3.every(ok)
+      ? round((recent3 as number[]).reduce((a, b) => a + b, 0) / 3)
+      : null;
+  const pe3 = ok(lastClose) && ok(epsAvg3) && epsAvg3 > 0 ? round(lastClose / epsAvg3, 1) : null;
+
   const pb =
     ok(lastClose) && ok(bookValuePerShare) && bookValuePerShare! > 0
       ? round(lastClose / bookValuePerShare!, 1)
       : null;
 
-  const peTimesPb = ok(pe) && ok(pb) ? round(pe! * pb!, 1) : null;
+  const peTimesPb = ok(pe3) && ok(pb) ? round(pe3! * pb!, 1) : null;
 
   const epsSeries = years.map((y) => y.epsDiluted).filter(ok);
   const epsPositiveYears = epsSeries.filter((e) => e > 0).length;
@@ -113,6 +125,8 @@ export function computeRatios(
     ltDebtToWorkingCapital,
     bookValuePerShare,
     pe,
+    epsAvg3,
+    pe3,
     pb,
     peTimesPb,
     epsYearsAvailable: epsSeries.length,

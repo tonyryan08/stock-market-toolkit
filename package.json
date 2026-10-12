@@ -1,7 +1,8 @@
 {
   "name": "stock-market-toolkit",
-  "version": "0.4.0",
+  "version": "0.5.1",
   "private": true,
+  "description": "Course toolkit for 'Intro to the Stock Market' \u2014 a community-school course in good financial decision-making. Education, not advice.",
   "scripts": {
     "dev": "wrangler dev",
     "dev:cron": "wrangler dev --test-scheduled",
@@ -21,9 +22,5 @@
   },
   "engines": {
     "node": ">=20"
-  },
-  "allowScripts": {
-    "esbuild@0.28.1": true,
-    "workerd@1.20260811.1": true
   }
 }

@@ -1,7 +1,8 @@
 /**
  * Intro to the Stock Market — course toolkit
- * Week 4: open the books. Fundamentals from the cache, ratios with
- * plain-word glosses, and a books page beside every chart page.
+ * Week 5: the Graham screen. Seven tests from The Intelligent Investor
+ * ch. 14, run over the cached books; a checklist card printed from the
+ * same rules. (Week 4 books pages and week 3 charts unchanged.)
  *
  * Invariant 4 holds: student-facing data routes touch only D1.
  */
@@ -11,6 +12,7 @@ import { LANDING_PAGE } from "./landing";
 import { fetchAlphaVantageQuote, fetchFmpProfile } from "./providers";
 import { runNightly } from "./jobs/nightly";
 import { computeRatios, dividendYears, type FundamentalsYear, type Ratios } from "./lib/ratios";
+import { CRITERIA, T as GT, requiredGrowthPct, rankScreen, screenCompany, type ScreenResult } from "./lib/graham";
 
 type Env = {
   ALPHAVANTAGE_API_KEY: string;
@@ -347,9 +349,242 @@ app.get("/prices/:ticker", async (c) => {
   return c.html(chartPage(ticker, name?.name ?? null, name?.status ?? null, rows, days, Date.now() - t0));
 });
 
+// ---------------------------------------------------------------------------
+// Week 5: the Graham screen — one pass over the cache, three queries total.
+// ---------------------------------------------------------------------------
+
+async function loadScreen(env: Env) {
+  const [tick, fund, divs, closes] = await env.DB.batch([
+    env.DB.prepare("SELECT symbol, name, sector FROM tickers WHERE status = 'active' ORDER BY symbol"),
+    env.DB.prepare(
+      `SELECT symbol, fiscal_year, period_end, revenue, net_income, eps_diluted,
+              current_assets, current_liabilities, total_assets, total_liabilities,
+              long_term_debt, shareholders_equity, shares_diluted
+       FROM fundamentals_annual ORDER BY symbol, fiscal_year DESC`,
+    ),
+    env.DB.prepare("SELECT symbol, ex_date, amount FROM dividends"),
+    env.DB.prepare(
+      `SELECT p.symbol, p.date, p.adj_close FROM daily_prices p
+       JOIN (SELECT symbol, MAX(date) AS d FROM daily_prices GROUP BY symbol) m
+         ON p.symbol = m.symbol AND p.date = m.d`,
+    ),
+  ]);
+
+  type FRow = {
+    symbol: string; fiscal_year: string; period_end: string | null; revenue: number | null;
+    net_income: number | null; eps_diluted: number | null; current_assets: number | null;
+    current_liabilities: number | null; total_assets: number | null; total_liabilities: number | null;
+    long_term_debt: number | null; shareholders_equity: number | null; shares_diluted: number | null;
+  };
+  const yearsBy = new Map<string, FundamentalsYear[]>();
+  for (const y of fund.results as FRow[]) {
+    const list = yearsBy.get(y.symbol) ?? [];
+    list.push({
+      fiscalYear: y.fiscal_year, periodEnd: y.period_end, revenue: y.revenue, netIncome: y.net_income,
+      epsDiluted: y.eps_diluted, currentAssets: y.current_assets, currentLiabilities: y.current_liabilities,
+      totalAssets: y.total_assets, totalLiabilities: y.total_liabilities, longTermDebt: y.long_term_debt,
+      equity: y.shareholders_equity, sharesDiluted: y.shares_diluted,
+    });
+    yearsBy.set(y.symbol, list);
+  }
+  const divsBy = new Map<string, { ex_date: string; amount: number | null }[]>();
+  for (const d of divs.results as { symbol: string; ex_date: string; amount: number | null }[]) {
+    const list = divsBy.get(d.symbol) ?? [];
+    list.push(d);
+    divsBy.set(d.symbol, list);
+  }
+  const closeBy = new Map<string, { date: string; adj_close: number }>();
+  for (const p of closes.results as { symbol: string; date: string; adj_close: number }[]) closeBy.set(p.symbol, p);
+
+  const currentYear = new Date().getUTCFullYear();
+  const rows = (tick.results as { symbol: string; name: string | null; sector: string | null }[])
+    .filter((t) => (yearsBy.get(t.symbol)?.length ?? 0) > 0)
+    .map((t) =>
+      screenCompany({
+        symbol: t.symbol, name: t.name, sector: t.sector,
+        years: yearsBy.get(t.symbol) ?? [],
+        dividendsPerYear: dividendYears(divsBy.get(t.symbol) ?? []).perYear,
+        lastClose: closeBy.get(t.symbol)?.adj_close ?? null,
+        currentYear,
+      }),
+    );
+
+  const priceDates = [...closeBy.values()].map((p) => p.date).sort();
+  return {
+    rows: rankScreen(rows),
+    universe: tick.results.length,
+    withBooks: rows.length,
+    asOfClose: priceDates.length ? priceDates[priceDates.length - 1] : null,
+  };
+}
+
+app.get("/api/screen/graham", async (c) => {
+  const t0 = Date.now();
+  const s = await loadScreen(c.env);
+  const count = (v: string) => s.rows.filter((r) => r.verdict === v).length;
+  return c.json({
+    criteria: CRITERIA,
+    thresholds: GT,
+    required_growth_pct: requiredGrowthPct,
+    summary: {
+      universe: s.universe, screened: s.withBooks,
+      survivors: count("survivor"), near_misses: count("near_miss"),
+      insufficient_data: count("insufficient"), fails: count("fails"),
+    },
+    results: s.rows,
+    meta: {
+      source: "d1-cache",
+      as_of_close: s.asOfClose,
+      method: "The Intelligent Investor ch. 14 (defensive investor), adapted openly where free data is shorter than Graham's windows — see /card. Financial companies skip test 2 (Graham applied only the price tests to them) and are scored out of 6.",
+      served_in_ms: Date.now() - t0,
+      note: "Education, not advice. A screen is a starting list for reading, never a buy list.",
+    },
+  });
+});
+
+app.get("/screen", async (c) => {
+  const t0 = Date.now();
+  const s = await loadScreen(c.env);
+  return c.html(screenPage(s.rows, s.universe, s.withBooks, s.asOfClose, Date.now() - t0));
+});
+
+app.get("/card", (c) => c.html(cardPage()));
+
+// ---------------------------------------------------------------------------
+// Week 5 pages
+// ---------------------------------------------------------------------------
+function screenPage(
+  rows: ScreenResult[], universe: number, screened: number, asOf: string | null, ms: number,
+): string {
+  const n = (v: string) => rows.filter((r) => r.verdict === v).length;
+  const mark = (o: string) => (o === "pass" ? "✓" : o === "fail" ? "✗" : o === "skip" ? "–" : "?");
+  const verdictLabel: Record<string, string> = {
+    survivor: "SURVIVOR", near_miss: "NEAR MISS", insufficient: "INCOMPLETE", fails: "",
+  };
+  const head = CRITERIA.map(
+    (c) => `<th scope="col"><a href="/card#c${c.n}" title="${esc(c.title)}">${c.n}</a><span class="hs">${esc(c.short)}</span></th>`,
+  ).join("");
+  const body = rows.map((r) => {
+    const cells = CRITERIA.map((c) => {
+      const x = r.results.find((y) => y.id === c.id)!;
+      return `<td class="m ${x.outcome}" title="${esc(c.short)}: ${esc(x.detail)}"><span aria-hidden="true">${mark(x.outcome)}</span><span class="sr">${x.outcome}: ${esc(x.detail)}</span></td>`;
+    }).join("");
+    const v = verdictLabel[r.verdict];
+    return `<tr class="${r.verdict}">
+      <th scope="row"><a href="/fundamentals/${esc(r.symbol)}">${esc(r.symbol)}</a><span class="nm">${esc(r.name ?? "")}</span></th>
+      ${cells}
+      <td class="p">${r.passes}/${r.applicable}</td>
+      <td class="v">${v ? `<span class="tag ${r.verdict}">${v}</span>` : ""}</td>
+    </tr>`;
+  }).join("");
+
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Graham screen</title>
+${FONTS_HTML}
+<style>
+${PAGE_CSS}
+  main { max-width: 52rem; }
+  .lede { color:var(--faint); font-size:.95rem; margin:.3rem 0 1.2rem; }
+  .tally { display:flex; flex-wrap:wrap; gap:.6rem; margin-bottom:1.2rem; }
+  .tally div { background:rgba(255,255,255,.55); border:1px solid var(--rule); border-radius:6px; padding:.5rem .8rem; min-width:7rem; }
+  .tally b { font-family:"Libre Caslon Text",serif; font-size:1.6rem; display:block; line-height:1.1; }
+  .tally span { font-family:"IBM Plex Mono",monospace; font-size:.68rem; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .tally .sv b { color:var(--entry); }
+  .wrap { overflow-x:auto; border:1px solid var(--rule); border-radius:6px; background:rgba(255,255,255,.45); }
+  table { border-collapse:collapse; width:100%; font-size:.85rem; }
+  th, td { padding:.4rem .45rem; border-bottom:1px solid var(--rule); text-align:center; }
+  thead th { font-family:"IBM Plex Mono",monospace; font-weight:500; font-size:.75rem; color:var(--faint); vertical-align:bottom; }
+  thead th a { color:var(--ink); text-decoration:none; font-weight:600; display:block; }
+  .hs { display:block; font-size:.6rem; letter-spacing:.04em; }
+  tbody th { text-align:left; font-weight:600; white-space:nowrap; font-family:"IBM Plex Mono",monospace; }
+  .nm { display:block; font-family:"IBM Plex Sans",sans-serif; font-weight:400; font-size:.72rem; color:var(--faint); max-width:11rem; overflow:hidden; text-overflow:ellipsis; }
+  td.m { font-family:"IBM Plex Mono",monospace; font-size:1rem; width:2.4rem; }
+  td.pass { color:var(--entry); } td.fail { color:var(--stamp); } td.na, td.skip { color:var(--faint); }
+  td.p { font-family:"IBM Plex Mono",monospace; white-space:nowrap; }
+  tr.survivor { background:rgba(62,107,84,.10); }
+  tbody th, thead th:first-child { position:sticky; left:0; background:#F6F8F4; z-index:1; }
+  tr.survivor th { background:#E3EBE5; }
+  .tag { font-family:"IBM Plex Mono",monospace; font-size:.62rem; letter-spacing:.1em; border:1.4px solid; border-radius:3px; padding:.1rem .35rem; white-space:nowrap; }
+  .tag.survivor { color:var(--entry); border-color:var(--entry); }
+  .tag.near_miss { color:var(--ink); border-color:var(--faint); }
+  .tag.insufficient { color:var(--faint); border-color:var(--rule); }
+  .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+  .key, .caption { font-size:.8rem; color:var(--faint); margin-top:.7rem; line-height:1.5; }
+  .argue { margin-top:1.4rem; border-left:3px solid var(--stamp); padding:.2rem 0 .2rem .9rem; font-size:.92rem; }
+</style></head>
+<body><main>
+  <p class="back"><a href="/">&larr; the twelve-week ledger</a></p>
+  <p class="eyebrow">Phase 2 · The Intelligent Investor, ch. 14 · defensive investor</p>
+  <h1>The Graham screen</h1>
+  <p class="lede">Graham's seven tests (1972 revision), run tonight over ${screened} companies' books. A screen doesn't pick shares — it decides which ones are worth reading.</p>
+  <div class="tally">
+    <div class="sv"><b>${n("survivor")}</b><span>survivors · all tests passed</span></div>
+    <div><b>${n("near_miss")}</b><span>near misses · one fail</span></div>
+    <div><b>${n("fails")}</b><span>fail two or more</span></div>
+    <div><b>${n("insufficient")}</b><span>incomplete data</span></div>
+  </div>
+  <div class="wrap"><table>
+    <thead><tr><th scope="col" style="text-align:left">Company</th>${head}<th scope="col">Score</th><th scope="col"></th></tr></thead>
+    <tbody>${body || `<tr><td colspan="10">No company has cached accounts yet — the nightly refresh fills the books over three nights.</td></tr>`}</tbody>
+  </table></div>
+  <p class="key">✓ pass · ✗ fail · – not applied (financial companies skip test 2 — Graham's rule; their score is out of 6) · ? data missing. Hover or tap a mark for the numbers. Column numbers link to the <a href="/card">checklist card</a>, which prints from the same rules this screen runs. Universe ${universe}; ${screened} with books.</p>
+  <p class="caption">Prices to ${esc(asOf ?? "—")} · accounts to the latest fiscal year held · served from the nightly cache in ${ms}&nbsp;ms · <a href="/api/screen/graham">raw JSON</a></p>
+  <p class="argue"><strong>Tonight's argument:</strong> pick one company that failed and one that passed. Is the screen right about both? Graham wrote these tests to <em>reject</em> — what kind of company can't pass them, and does that make it a bad investment or just not a defensive one?</p>
+  <footer><p class="notice">Education, not advice. A survivor is a company worth reading about — not a recommendation to buy anything.</p></footer>
+</main></body></html>`;
+}
+
+function cardPage(): string {
+  const rows = CRITERIA.map((c) => `
+    <li id="c${c.n}">
+      <span class="num">${c.n}</span>
+      <div><p class="t">${esc(c.title)}${c.adapted ? ` <span class="ad">adapted</span>` : ""}</p>
+      <p class="rule">${esc(c.ours)}</p>
+      <p class="why">${esc(c.why)}</p>
+      ${c.adapted ? `<p class="orig">Graham's original: ${esc(c.graham)}</p>` : ""}</div>
+    </li>`).join("");
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graham checklist card</title>
+${FONTS_HTML}
+<style>
+${PAGE_CSS}
+  main { max-width: 40rem; }
+  .card { background:#fff; border:1.5px solid var(--ink); border-radius:8px; padding:1.4rem 1.5rem 1.1rem; margin-top:1rem; }
+  .card h1 { font-size:1.7rem; margin:0; }
+  .sub { font-size:.82rem; color:var(--faint); margin:.25rem 0 1rem; }
+  ol { list-style:none; padding:0; margin:0; }
+  li { display:grid; grid-template-columns:2rem 1fr; gap:.6rem; padding:.6rem 0; border-top:1px solid var(--rule); }
+  .num { font-family:"Libre Caslon Text",serif; font-weight:700; font-size:1.4rem; color:var(--entry); line-height:1.1; }
+  .t { font-weight:600; }
+  .ad { font-family:"IBM Plex Mono",monospace; font-size:.6rem; letter-spacing:.08em; text-transform:uppercase; color:var(--stamp); border:1px solid var(--stamp); border-radius:3px; padding:0 .3rem; vertical-align:middle; }
+  .rule { font-family:"IBM Plex Mono",monospace; font-size:.8rem; margin-top:.15rem; }
+  .why { font-size:.82rem; color:var(--faint); font-style:italic; }
+  .orig { font-size:.74rem; color:var(--faint); margin-top:.15rem; }
+  .foot { font-size:.72rem; color:var(--faint); border-top:2px solid var(--ink); margin-top:.6rem; padding-top:.6rem; line-height:1.5; }
+  .print { margin-top:1rem; font-size:.85rem; }
+  @media print {
+    body { background:#fff; padding:0; } .back, .print, footer { display:none; }
+    .card { border-width:1px; } a { color:inherit; text-decoration:none; }
+  }
+</style></head>
+<body><main>
+  <p class="back"><a href="/screen">&larr; the Graham screen</a></p>
+  <div class="card">
+    <h1>The Graham Checklist</h1>
+    <p class="sub">The defensive investor's seven tests · Benjamin Graham, <em>The Intelligent Investor</em>, ch. 14 (course copy p. 347)</p>
+    <ol>${rows}</ol>
+    <p class="foot">All seven must pass. A company that passes is worth <em>reading about</em> — the screen narrows the list; it never makes the decision. Rules marked <strong>adapted</strong> follow Graham's intent where free data is shorter than his windows. Printed from the same rules the course toolkit runs (src/lib/graham.ts), so the card and the screen cannot disagree. Education, not advice.</p>
+  </div>
+  <p class="print">Print this page for the takeaway kit (your browser's Print → Save as PDF works too).</p>
+  <footer><p class="notice">Education, not advice.</p></footer>
+</main></body></html>`;
+}
+
 app.notFound((c) =>
   c.json(
-    { error: "Not found", hint: "Try /, /api/universe, /prices/AAPL, or /fundamentals/AAPL" },
+    { error: "Not found", hint: "Try /, /screen, /card, /api/universe, /prices/AAPL, or /fundamentals/AAPL" },
     404,
   ),
 );
@@ -422,18 +657,22 @@ function fundamentalsPage(
         chip: verdict(r.currentRatio === null ? null : r.currentRatio >= 2, "Graham bar: ≥ 2"),
       },
       {
-        k: "P/E", v: fmt(r.pe),
-        gloss: "Years of today's earnings you pay for the share.",
-        chip: verdict(r.pe === null ? null : r.pe <= 15, "Graham bar: ≤ 15"),
+        k: "P/E (3-yr avg)", v: fmt(r.pe3),
+        gloss: `Years of average recent earnings you pay for the share — Graham's basis. On the latest year alone: ${fmt(r.pe)}.`,
+        chip: verdict(r.pe3 === null ? null : r.pe3 <= 15, "Graham bar: ≤ 15"),
       },
       {
-        k: "P/B", v: fmt(r.pb),
-        gloss: "Price against the book value behind each share.",
-        chip: verdict(r.pb === null ? null : r.pb <= 1.5, "Graham bar: ≤ 1.5"),
+        k: "P/B", v: r.bookValuePerShare !== null && r.bookValuePerShare <= 0 ? "neg. book" : fmt(r.pb),
+        gloss: r.bookValuePerShare !== null && r.bookValuePerShare <= 0
+          ? "Book value is negative — buybacks or losses have used up the equity. No multiple of assets supports the price."
+          : "Price against the book value behind each share.",
+        chip: r.bookValuePerShare !== null && r.bookValuePerShare <= 0
+          ? verdict(false, "Graham bar: ≤ 1.5")
+          : verdict(r.pb === null ? null : r.pb <= 1.5, "Graham bar: ≤ 1.5"),
       },
       {
         k: "P/E × P/B", v: fmt(r.peTimesPb),
-        gloss: "Graham's combined affordability test.",
+        gloss: "Graham's combined affordability test, on the 3-year P/E.",
         chip: verdict(r.peTimesPb === null ? null : r.peTimesPb <= 22.5, "Graham bar: ≤ 22.5"),
       },
     ];
@@ -474,7 +713,7 @@ function fundamentalsPage(
   </table>
   <p class="smallprint">Earnings positive in ${r.epsPositiveYears} of ${r.epsYearsAvailable} available years · EPS growth across the window: ${fmt(r.epsGrowthPct, "%")} · dividends paid in ${divs.yearsPaid} calendar years of the record.
   Free data serves 5 fiscal years; Graham asked for 10 — week 5's checklist adapts openly.</p>
-  <p class="ranges"><a href="/prices/${T}">price history</a> · <a href="/api/fundamentals/${T}">raw JSON</a> · <a href="/api/universe">universe</a></p>`;
+  <p class="ranges"><a href="/prices/${T}">price history</a> · <a href="/api/fundamentals/${T}">raw JSON</a> · <a href="/screen">the Graham screen</a></p>`;
   }
 
   return `<!doctype html>

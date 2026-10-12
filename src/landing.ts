@@ -191,9 +191,10 @@ export const LANDING_PAGE = /* html */ `<!doctype html>
         <span><span class="lesson">What is a company worth?</span><br><span class="feature">The books, opened &mdash; <a href="/fundamentals/AAPL">five years of accounts &amp; Graham's ratios</a></span></span>
         <span class="stamp">SHIPPED</span>
       </div>
-      <div class="row pending">
+      <div class="row shipped">
         <span class="wk">Wk 5</span>
-        <span><span class="lesson">The Graham checklist</span><br><span class="feature">The value screener</span></span>
+        <span><span class="lesson">The Graham checklist</span><br><span class="feature">The value screener &mdash; <a href="/screen">seven tests, run tonight</a> &amp; <a href="/card">the checklist card</a></span></span>
+        <span class="stamp">SHIPPED</span>
       </div>
       <div class="row pending">
         <span class="wk">Wk 6</span>
@@ -235,10 +236,9 @@ export const LANDING_PAGE = /* html */ `<!doctype html>
   </section>
 
   <div class="try">
-    <strong>New this week:</strong> every company's books, opened. Five years of real accounts
-    &mdash; revenue, earnings, equity, dividends &mdash; with Graham's ratios computed and explained
-    in plain words. Try <a href="/fundamentals/AAPL">Apple's books</a>, then a value candidate like
-    <a href="/fundamentals/PFE">Pfizer's</a>.
+    <strong>New this week:</strong> Graham's seven tests for the defensive investor, run over every
+    company's books after each nightly close. <a href="/screen">See which companies survive</a> &mdash; then argue
+    with a 1949 checklist. The <a href="/card">checklist card</a> prints from the very same rules.
     <form class="lookup" onsubmit="event.preventDefault();var t=this.t.value.trim().toUpperCase();if(t)location.href='/'+(this.books.checked?'fundamentals':'prices')+'/'+encodeURIComponent(t)">
       <input name="t" placeholder="AAPL" aria-label="Ticker symbol" autocapitalize="characters" autocomplete="off" spellcheck="false">
       <label style="display:flex;align-items:center;gap:.3rem;font-size:.8rem;color:var(--faint)"><input type="checkbox" name="books" checked> books</label>

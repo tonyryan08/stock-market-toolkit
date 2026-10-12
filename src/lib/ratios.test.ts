@@ -28,19 +28,36 @@ const year = (over: Partial<FundamentalsYear>): FundamentalsYear => ({
 describe("computeRatios — hand-checked arithmetic", () => {
   it("computes the defensive-investor numbers for a clean case", () => {
     // Hand check: CA 200 / CL 80 = 2.5 · WC = 120 · LTD 60/120 = 0.5
-    // BVPS = 500/100 = 5 · price 60: P/E = 60/4 = 15 · P/B = 60/5 = 12 →
-    // wait — P/B uses BVPS: 60/5 = 12. peTimesPb = 15 × 12 = 180.
-    const r = computeRatios(
-      [year({ epsDiluted: 4, currentAssets: 200, currentLiabilities: 80, longTermDebt: 60, equity: 500, sharesDiluted: 100 })],
-      60,
-    );
+    // BVPS = 500/100 = 5 · price 60 · EPS 4, 4, 4 → avg3 = 4
+    // P/E (latest) = 60/4 = 15 · P/E (3-yr) = 60/4 = 15 · P/B = 60/5 = 12 · product = 15 × 12 = 180
+    const latest = year({ epsDiluted: 4, currentAssets: 200, currentLiabilities: 80, longTermDebt: 60, equity: 500, sharesDiluted: 100 });
+    const r = computeRatios([latest, year({ fiscalYear: "2024", epsDiluted: 4 }), year({ fiscalYear: "2023", epsDiluted: 4 })], 60);
     expect(r.currentRatio).toBe(2.5);
     expect(r.workingCapital).toBe(120);
     expect(r.ltDebtToWorkingCapital).toBe(0.5);
     expect(r.bookValuePerShare).toBe(5);
     expect(r.pe).toBe(15);
+    expect(r.epsAvg3).toBe(4);
+    expect(r.pe3).toBe(15);
     expect(r.pb).toBe(12);
     expect(r.peTimesPb).toBe(180);
+  });
+
+  it("the Graham P/E is the 3-year average, and it can disagree with the latest-year P/E", () => {
+    // EPS 10, 12, 12.5 → avg3 11.5; price 160 → latest P/E 16.0 (over the bar), 3-yr P/E 13.9 (under it)
+    const r = computeRatios(
+      [year({ epsDiluted: 10 }), year({ fiscalYear: "2024", epsDiluted: 12 }), year({ fiscalYear: "2023", epsDiluted: 12.5 })],
+      160,
+    );
+    expect(r.pe).toBe(16);
+    expect(r.epsAvg3).toBe(11.5);
+    expect(r.pe3).toBe(13.9);
+  });
+
+  it("negative equity gives a negative book value per share and no P/B", () => {
+    const r = computeRatios([year({ equity: -100, sharesDiluted: 50 })], 180);
+    expect(r.bookValuePerShare).toBe(-2);
+    expect(r.pb).toBeNull();
   });
 
   it("a loss year has no meaningful P/E (Boeing's week-5 lesson)", () => {
