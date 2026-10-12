@@ -27,15 +27,15 @@ The Graham screen: the seven defensive-investor tests from *The Intelligent Inve
 
 ## The rules as built (decision log #11)
 
-| # | Test | Graham (ch. 14) | We apply | Adapted? |
-|---|---|---|---|---|
-| 1 | Size | Sales ≥ $100m (1971) | Revenue ≥ $800m (×~8 for US inflation) | yes |
-| 2 | Strength | CR ≥ 2; LT debt ≤ net current assets | Same for industrials. **Skipped** for Financial Services (Graham applied only the price tests to financials, p. 361); not counted; they score out of 6 | no |
-| 3 | Stability | Earnings in each of 10 yrs | Positive EPS in all 5 years held | yes (#8) |
-| 4 | Dividends | 20 yrs unbroken | 10 consecutive calendar years (record holds ~15) | yes |
-| 5 | Growth | +⅓ EPS over 10 yrs, 3-yr averages | ≥ +9.0% between 2-yr averages — Graham's +⅓ pro-rated to our window (a stricter midpoint reading would be 13%; 9% chosen) | yes |
-| 6 | P/E | ≤ 15× avg EPS of last 3 yrs | Same | no |
-| 7 | P/B | ≤ 1.5, or P/E × P/B ≤ 22.5 | Same (using the 3-yr P/E). Negative book value = fail | no |
+| #   | Test      | Graham (ch. 14)                      | We apply                                                                                                                                               | Adapted? |
+| --- | --------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| 1   | Size      | Sales ≥ $100m (1971)                 | Revenue ≥ $800m (×~8 for US inflation)                                                                                                                 | yes      |
+| 2   | Strength  | CR ≥ 2; LT debt ≤ net current assets | Same for industrials. **Skipped** for Financial Services (Graham applied only the price tests to financials, p. 361); not counted; they score out of 6 | no       |
+| 3   | Stability | Earnings in each of 10 yrs           | Positive EPS in all 5 years held                                                                                                                       | yes (#8) |
+| 4   | Dividends | 20 yrs unbroken                      | 10 consecutive calendar years (record holds ~15)                                                                                                       | yes      |
+| 5   | Growth    | +⅓ EPS over 10 yrs, 3-yr averages    | ≥ +9.0% between 2-yr averages — Graham's +⅓ pro-rated to our window (a stricter midpoint reading would be 13%; 9% chosen)                              | yes      |
+| 6   | P/E       | ≤ 15× avg EPS of last 3 yrs          | Same                                                                                                                                                   | no       |
+| 7   | P/B       | ≤ 1.5, or P/E × P/B ≤ 22.5           | Same (using the 3-yr P/E). Negative book value = fail                                                                                                  | no       |
 
 **Verdicts:** survivor = every applicable test passed (7/7, or 6/6 for financials) · near miss = exactly one fail · fails = two or more · incomplete data = a figure is missing on a test that could still change the answer. **Expect very few survivors** in a mega-cap universe. That's by design, and lesson 5 is built around it; Graham himself got 5 of 30 in 1970.
 
