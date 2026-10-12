@@ -198,11 +198,14 @@ export async function fetchFmpDailyAdjusted(
 
   if (json && typeof json === "object" && !Array.isArray(json)) {
     const text = JSON.stringify(json).slice(0, 200);
-    if (/premium query parameter|special endpoint|upgrade your plan/i.test(text)) {
-      return { kind: "blocked", detail: `M-6: ${text}` };
-    }
+    // Order matters (review, 12 Oct 2026): a limit message can contain upsell
+    // wording too, so test for "limit" FIRST, and only the specific paywall
+    // phrases mean "blocked".
     if (/limit/i.test(text)) {
       return { kind: "rate_limited", detail: text };
+    }
+    if (/premium query parameter|special endpoint/i.test(text)) {
+      return { kind: "blocked", detail: `M-6: ${text}` };
     }
     const nested = (json as Record<string, unknown>)["historical"];
     if (Array.isArray(nested)) json = nested;
@@ -270,9 +273,9 @@ async function fetchFmpRows(
   }
   if (json && typeof json === "object" && !Array.isArray(json)) {
     const text = JSON.stringify(json).slice(0, 200);
-    if (/premium query parameter|special endpoint|upgrade your plan/i.test(text))
+    if (/limit/i.test(text)) return { kind: "rate_limited", detail: text };   // "limit" first — see fetchFmpDailyAdjusted
+    if (/premium query parameter|special endpoint/i.test(text))
       return { kind: "blocked", detail: `M-6: ${text}` };
-    if (/limit/i.test(text)) return { kind: "rate_limited", detail: text };
     return { kind: "error", detail: `unexpected shape: ${text}` };
   }
   if (!Array.isArray(json)) return { kind: "error", detail: "expected an array" };

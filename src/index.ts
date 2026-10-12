@@ -10,7 +10,7 @@
 import { Hono } from "hono";
 import { LANDING_PAGE } from "./landing";
 import { fetchAlphaVantageQuote, fetchFmpProfile } from "./providers";
-import { runNightly } from "./jobs/nightly";
+import { runNightly, type Phase } from "./jobs/nightly";
 import { computeRatios, dividendYears, type FundamentalsYear, type Ratios } from "./lib/ratios";
 import { CRITERIA, T as GT, requiredGrowthPct, rankScreen, screenCompany, type ScreenResult } from "./lib/graham";
 
@@ -894,7 +894,14 @@ ${PAGE_CSS}
 
 export default {
   fetch: app.fetch,
+  // Two cron invocations, each with its own 50-fetch budget (Workers Free):
+  //   30 22 * * *  → prices        50 22 * * *  → accounts
+  // Any other cron string (local doorbell without a match) runs both.
   scheduled: async (controller, env, ctx) => {
-    ctx.waitUntil(runNightly(env));
+    const phase: Phase =
+      controller.cron === "30 22 * * *" ? "prices"
+      : controller.cron === "50 22 * * *" ? "fundamentals"
+      : "all";
+    ctx.waitUntil(runNightly(env, phase));
   },
 } satisfies ExportedHandler<Env>;

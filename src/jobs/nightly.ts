@@ -22,6 +22,20 @@
  * Budget arithmetic (31-symbol universe, ~2 metered writes per insert):
  *   normal night ≈ 31 incrementals (~60 inserts) + 4 realigns (~5,016
  *   inserts) ≈ ~10k metered writes — a tenth of the allowance.
+ *
+ * v3 — the second speeding ticket (12 Oct 2026). Workers Free allows
+ * 50 external fetch() calls per invocation. One run was making 31 (prices)
+ * + 36 (accounts) = 67: fetch 51 failed every night at the same company,
+ * and the failure was mis-recorded as "blocked". Now:
+ *   - TWO cron invocations: prices at 22:30 UTC, accounts at 22:50 UTC —
+ *     each with its own 50-fetch budget
+ *   - the job COUNTS its own fetches and stops cleanly at
+ *     MAX_FETCHES_PER_INVOCATION, logging that it did, so the platform
+ *     cap is never hit silently
+ *   - a transient error can never mark a company "blocked"; only a
+ *     genuine paywall response can. partial/error are retried next night
+ *   - the price phase walks the universe stalest-first, so a stopped run
+ *     resumes where it left off
  */
 
 import { fetchFmpDailyAdjusted, type DailyBar } from "../providers";
@@ -40,14 +54,20 @@ const MAX_INSERTS_PER_RUN = 30000;
 const REALIGN_PER_NIGHT = 4;
 /** Consecutive D1 write failures treated as the daily write limit. */
 const MAX_WRITE_FAILURES = 3;
+/** Workers Free: 50 external fetches per invocation. Stop well short. */
+const MAX_FETCHES_PER_INVOCATION = 45;
 const DELAY_MS = 250;
 const CHUNK = 40;
 
+export type Phase = "prices" | "fundamentals" | "all";
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function runNightly(env: Env): Promise<void> {
+export async function runNightly(env: Env, phase: Phase = "all"): Promise<void> {
   const runAt = new Date().toISOString();
   const started = Date.now();
+  /** One fetch budget for the whole invocation, whichever phases run in it. */
+  const budget = { fetches: 0, max: MAX_FETCHES_PER_INVOCATION, calls: 0, maxCalls: MAX_CALLS_PER_RUN };
 
   const log = async (symbol: string | null, outcome: string, rows: number, detail: string) => {
     try {
@@ -64,10 +84,21 @@ export async function runNightly(env: Env): Promise<void> {
     return;
   }
 
+  if (phase === "fundamentals") {
+    await runFundamentals(env, runAt, budget);
+    await log(null, "run_summary", 0, JSON.stringify({ phase, fetches: budget.fetches, ms: Date.now() - started }));
+    return;
+  }
+
+  // Stalest prices first, so a run stopped by any budget resumes where it left off.
   const tickers = (
     await env.DB.prepare(
-      "SELECT symbol, last_full_fetch FROM tickers WHERE status = 'active' ORDER BY symbol",
-    ).all<{ symbol: string; last_full_fetch: string | null }>()
+      `SELECT t.symbol, t.last_full_fetch, MAX(p.date) AS last_date
+       FROM tickers t LEFT JOIN daily_prices p ON p.symbol = t.symbol
+       WHERE t.status = 'active'
+       GROUP BY t.symbol
+       ORDER BY last_date IS NOT NULL, last_date, t.symbol`,
+    ).all<{ symbol: string; last_full_fetch: string | null; last_date: string | null }>()
   ).results;
 
   if (tickers.length === 0) {
@@ -83,15 +114,18 @@ export async function runNightly(env: Env): Promise<void> {
       .map((t) => t.symbol),
   );
 
-  let calls = 0;
   let inserted = 0;
   let writeFailures = 0;
   const counts: Record<string, number> = {};
   const bump = (k: string) => (counts[k] = (counts[k] ?? 0) + 1);
 
-  for (const { symbol } of tickers) {
-    if (calls >= MAX_CALLS_PER_RUN) {
-      await log(null, "rate_limited", 0, `Call budget ${MAX_CALLS_PER_RUN} reached — remainder resumes tomorrow.`);
+  for (const { symbol, last_date } of tickers) {
+    if (budget.fetches >= budget.max) {
+      await log(null, "fetch_budget", 0, `Fetch budget ${budget.max} per invocation reached — remainder resumes tomorrow (stalest first).`);
+      break;
+    }
+    if (budget.calls >= budget.maxCalls) {
+      await log(null, "rate_limited", 0, `Call budget ${budget.maxCalls} reached — remainder resumes tomorrow.`);
       break;
     }
     if (inserted >= MAX_INSERTS_PER_RUN) {
@@ -104,18 +138,15 @@ export async function runNightly(env: Env): Promise<void> {
     // undefined), so interrupted backfills heal themselves.
     let fromDate: string | undefined;
     let mode = "full";
-    if (!realignSet.has(symbol)) {
-      const last = await env.DB.prepare("SELECT MAX(date) AS d FROM daily_prices WHERE symbol = ?1")
-        .bind(symbol).first<{ d: string | null }>();
-      if (last?.d) {
-        const back = new Date(last.d);
-        back.setUTCDate(back.getUTCDate() - 7);
-        fromDate = back.toISOString().slice(0, 10);
-        mode = `incremental from ${fromDate}`;
-      }
+    if (!realignSet.has(symbol) && last_date) {
+      const back = new Date(last_date);
+      back.setUTCDate(back.getUTCDate() - 7);
+      fromDate = back.toISOString().slice(0, 10);
+      mode = `incremental from ${fromDate}`;
     }
 
-    calls++;
+    budget.calls++;
+    budget.fetches++;
     const result = await fetchFmpDailyAdjusted(symbol, env.FMP_API_KEY, fromDate);
 
     if (result.kind === "ok") {
@@ -162,22 +193,26 @@ export async function runNightly(env: Env): Promise<void> {
 
   // Week 4: the fundamentals phase — skipped when the price phase hit an
   // auth failure, a provider limit, or the write wall (same cause, same cure).
+  // "all" (local testing only): run the accounts phase in the same invocation,
+  // unless the price phase hit a wall. In production the two phases are
+  // separate cron invocations, each with its own fetch budget.
   const phaseBlocked =
     (counts.auth_failed ?? 0) > 0 ||
     (counts.rate_limited ?? 0) > 0 ||
     writeFailures >= MAX_WRITE_FAILURES;
-  const budget = { calls, maxCalls: MAX_CALLS_PER_RUN };
-  if (!phaseBlocked) {
-    await runFundamentals(env, runAt, budget);
-    calls = budget.calls;
+  let fundamentals = "separate invocation";
+  if (phase === "all") {
+    fundamentals = phaseBlocked ? "skipped" : "ran";
+    if (!phaseBlocked) await runFundamentals(env, runAt, budget);
   }
 
   await log(null, "run_summary", inserted, JSON.stringify({
+    phase,
     tickers: tickers.length,
-    calls,
+    fetches: budget.fetches,
     inserts: inserted,
     realigned: [...realignSet],
-    fundamentals: phaseBlocked ? "skipped" : "ran",
+    fundamentals,
     outcomes: counts,
     ms: Date.now() - started,
   }));
@@ -207,7 +242,9 @@ async function upsertBars(db: D1Database, symbol: string, bars: DailyBar[]): Pro
 // ---------------------------------------------------------------------------
 // Week 4: the fundamentals phase. Accounts change quarterly, not nightly,
 // so each run refreshes only the stalest few symbols (missing first), three
-// provider calls each, inside the same call budget as the price phase.
+// provider calls each. From v3 it runs in its OWN cron invocation (22:50 UTC)
+// with its own 50-fetch budget: 12 symbols × 3 = 36 fetches. partial/error
+// results are retried the next night; only a genuine paywall is "blocked".
 // Initial fill of a 31-name universe completes in ~3 nights.
 // ---------------------------------------------------------------------------
 
@@ -230,7 +267,7 @@ type EnvF = {
 export async function runFundamentals(
   env: EnvF,
   runAt: string,
-  budget: { calls: number; maxCalls: number },
+  budget: { fetches: number; max: number; calls: number; maxCalls: number },
 ): Promise<void> {
   const log = async (symbol: string | null, outcome: string, rows: number, detail: string) => {
     try {
@@ -244,19 +281,26 @@ export async function runFundamentals(
     await env.DB.prepare(
       `SELECT symbol FROM tickers
        WHERE status = 'active'
-         AND (fundamentals_as_of IS NULL OR fundamentals_as_of < datetime('now', ?1))
+         AND (fundamentals_as_of IS NULL
+              OR fundamentals_status IN ('partial', 'error')
+              OR fundamentals_as_of < datetime('now', ?1))
        ORDER BY fundamentals_as_of IS NOT NULL, fundamentals_as_of, symbol
        LIMIT ?2`,
     ).bind(`-${FUND_STALE_DAYS} days`, FUND_PER_NIGHT).all<{ symbol: string }>()
   ).results;
 
   for (const { symbol } of due) {
+    if (budget.fetches + 3 > budget.max) {
+      await log(null, "fetch_budget", 0, `Fetch budget ${budget.max} per invocation would be exceeded — resumes tomorrow.`);
+      return;
+    }
     if (budget.calls + 3 > budget.maxCalls) {
       await log(null, "rate_limited", 0, "Call budget would be exceeded by fundamentals — resumes tomorrow.");
       return;
     }
 
     budget.calls += 3;
+    budget.fetches += 3;
     const [inc, bal, div] = [
       await fetchFmpIncomeAnnual(symbol, env.FMP_API_KEY),
       await fetchFmpBalanceAnnual(symbol, env.FMP_API_KEY),
@@ -313,9 +357,9 @@ export async function runFundamentals(
         return; // likely the daily write allowance — stop the phase
       }
     } else {
-      parts.push(`income ${inc.kind}`);
+      parts.push(`income ${inc.kind}: ${inc.detail.slice(0, 80)}`);
     }
-    if (bal.kind !== "ok") parts.push(`balance ${bal.kind}`);
+    if (bal.kind !== "ok") parts.push(`balance ${bal.kind}${"detail" in bal ? ": " + bal.detail.slice(0, 60) : ""}`);
 
     if (div.kind === "ok" && div.rows.length > 0) {
       const dstmt = env.DB.prepare(
@@ -331,13 +375,16 @@ export async function runFundamentals(
         parts.push(`dividends ${Math.min(div.rows.length, 60)}`);
       } catch { parts.push("dividends write_error"); }
     } else if (div.kind !== "ok") {
-      parts.push(`dividends ${div.kind}`);
+      parts.push(`dividends ${div.kind}${"detail" in div ? ": " + div.detail.slice(0, 60) : ""}`);
     }
 
+    // Only a genuine paywall response on the income statement is "blocked".
+    // Anything transient (network, 5xx, cap) is "error" and retried tomorrow.
     const status =
       inc.kind === "ok" && bal.kind === "ok" && div.kind === "ok" ? "ok"
       : inc.kind === "ok" ? "partial"
-      : "blocked";
+      : inc.kind === "blocked" ? "blocked"
+      : "error";
     await env.DB.prepare(
       "UPDATE tickers SET fundamentals_as_of = ?2, fundamentals_status = ?3 WHERE symbol = ?1",
     ).bind(symbol, runAt, status).run();
