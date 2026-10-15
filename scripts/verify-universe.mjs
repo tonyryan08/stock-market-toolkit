@@ -9,14 +9,19 @@
  * evidence — a raw-materials certificate for the universe.
  *
  * Run:   npm run verify-universe          (reads FMP_API_KEY from .dev.vars)
- * Cost:  2 FMP calls per candidate, +1 profile call per green.
- *        ~48 candidates ≈ 130 calls — fits the 250/day budget; run it on a
- *        day the nightly cron hasn't already spent the ration, or before
- *        the universe is seeded (then the cron has nothing to spend).
+ *        npm run verify-universe -- --all  (re-probe everything, not just new names)
+ *        npm run verify-universe -- --max-calls 120   (default 150: the sweep stops
+ *        there and resumes tomorrow, so the nightly robot keeps its ~135 of the 250)
+ * Cost:  2 FMP calls per NEW candidate, +1 profile call per new green.
+ *        Since v0.5.3 the sweep RESUMES: candidates already recorded in
+ *        universe-verified.json are skipped, so adding 40 names to the list
+ *        costs ~80 calls, not ~250. If the daily limit stops it mid-run, run
+ *        it again tomorrow and it carries on from where it stopped. The
+ *        nightly cron spends ~67 calls of the 250; leave it that headroom.
  *
  * Outputs (commit all three):
- *   scripts/universe-verified.json  — full evidence, per candidate
- *   scripts/seed-universe.sql       — INSERTs for the greens (tickers table)
+ *   scripts/universe-verified.json  — full evidence, per candidate, merged
+ *   scripts/seed-universe.sql       — upserts for ALL greens (tickers table)
  *   console                         — a human-readable verdict table
  */
 
@@ -47,6 +52,7 @@ function loadKey() {
 // --- classification: the M-shape map, script edition ----------------------
 async function probe(url) {
   let res;
+  callsMade++;
   try {
     res = await fetch(url);
   } catch (err) {
@@ -64,9 +70,12 @@ async function probe(url) {
   }
   if (json && typeof json === "object" && !Array.isArray(json)) {
     const text = JSON.stringify(json).slice(0, 160);
-    if (/premium query parameter|special endpoint|upgrade your plan/i.test(text))
-      return { kind: "blocked", detail: "M-6 prose" };
+    // Order matters (same bug as providers.ts, fixed 12 Oct 2026): FMP's
+    // limit message ALSO says "upgrade your plan", so test for "limit" first,
+    // and only the specific paywall phrases mean a genuine block.
     if (/limit/i.test(text)) return { kind: "rate", detail: text };
+    if (/premium query parameter|special endpoint/i.test(text))
+      return { kind: "blocked", detail: `M-6: ${text}` };
     return { kind: "error", detail: `unexpected shape: ${text}` };
   }
   if (!Array.isArray(json) || json.length === 0) return { kind: "empty", detail: "empty array" };
@@ -74,18 +83,44 @@ async function probe(url) {
 }
 
 const key = loadKey();
+const reprobeAll = process.argv.includes("--all");
+const mcIdx = process.argv.indexOf("--max-calls");
+const MAX_CALLS = mcIdx > -1 ? Math.max(10, parseInt(process.argv[mcIdx + 1], 10) || 150) : 150;
+let callsMade = 0;
 const candidatesFile = join(HERE, "universe-candidates.txt");
-const candidates = readFileSync(candidatesFile, "utf8")
+const evidenceFile = join(HERE, "universe-verified.json");
+const listed = readFileSync(candidatesFile, "utf8")
   .split(/\r?\n/)
   .map((l) => l.replace(/#.*$/, "").trim())
   .filter(Boolean);
+const candidates = [...new Set(listed)]; // a symbol listed twice is probed once
 
-console.log(`Universe verifier — ${candidates.length} candidates, ~${candidates.length * 2} calls + profiles.\n`);
+// --- resume: keep every verdict already on record unless --all ------------
+let previous = [];
+try {
+  previous = JSON.parse(readFileSync(evidenceFile, "utf8")).results ?? [];
+} catch {}
+const recorded = new Map(previous.map((r) => [r.symbol, r]));
+const toProbe = reprobeAll
+  ? candidates
+  : candidates.filter((sym) => !recorded.has(sym) || recorded.get(sym).verdict === "?");
+const skipped = candidates.length - toProbe.length;
+
+console.log(
+  `Universe verifier — ${candidates.length} listed, ${skipped} already on record (skipped), ` +
+    `${toProbe.length} to probe: ~${toProbe.length * 2} calls + profiles.` +
+    (skipped && !reprobeAll ? "  (--all re-probes everything)" : "") + "\n",
+);
 
 const results = [];
 let aborted = false;
 
-for (const symbol of candidates) {
+for (const symbol of toProbe) {
+  if (callsMade + 2 > MAX_CALLS) {
+    console.log(`\nStopping at ${callsMade} calls (--max-calls ${MAX_CALLS}) to leave the nightly robot its ration. Run again tomorrow; it resumes here.`);
+    aborted = true;
+    break;
+  }
   const row = { symbol, statements: null, statement_years: 0, history: null, history_from: null, history_days: 0, verdict: "?" };
 
   // 1) income statement (the Graham screener's raw material)
@@ -120,11 +155,21 @@ for (const symbol of candidates) {
   );
 }
 
-// 3) profiles for the greens (names + sectors for the tickers table)
-const greens = results.filter((r) => r.verdict === "GREEN");
+// 3) profiles (names + sectors for the tickers table) — for this run's
+//    greens, plus any green on record still missing a name because an
+//    earlier run stopped before this step.
+const newGreens = results.filter((r) => r.verdict === "GREEN");
+const needProfile = [
+  ...newGreens,
+  ...[...recorded.values()].filter((r) => r.verdict === "GREEN" && !r.name && !newGreens.some((g) => g.symbol === r.symbol)),
+];
 if (!aborted) {
-  console.log(`\nFetching profiles for ${greens.length} greens…`);
-  for (const g of greens) {
+  console.log(`\nFetching profiles for ${needProfile.length} greens…`);
+  for (const g of needProfile) {
+    if (callsMade >= MAX_CALLS) {
+      console.log(`Call ceiling reached — remaining names/sectors are fetched on the next run.`);
+      break;
+    }
     const pr = await probe(
       `https://financialmodelingprep.com/stable/profile?symbol=${g.symbol}&apikey=${key}`,
     );
@@ -136,21 +181,33 @@ if (!aborted) {
   }
 }
 
-// --- outputs ---------------------------------------------------------------
+// --- outputs: merge this run into the record ------------------------------
+const runAt = new Date().toISOString();
+for (const r of results) {
+  if (r.verdict === "?") continue; // stopped before this one was finished — stays probe-able
+  recorded.set(r.symbol, { ...r, verified_at: runAt });
+}
+// Keep the record in candidate-file order, then anything no longer listed.
+const merged = [
+  ...candidates.filter((sym) => recorded.has(sym)).map((sym) => recorded.get(sym)),
+  ...[...recorded.values()].filter((r) => !candidates.includes(r.symbol)),
+];
+const greens = merged.filter((r) => r.verdict === "GREEN");
 const evidence = {
-  verified_at: new Date().toISOString(),
+  verified_at: runAt,
   candidates: candidates.length,
+  probed_this_run: results.length,
   greens: greens.map((g) => g.symbol),
   aborted_early: aborted,
-  results,
-  note: "Raw-materials certificate for the course universe. Free-plan coverage is a whitelist (VC-10); this file is the discovery evidence. Education, not advice.",
+  results: merged,
+  note: "Raw-materials certificate for the course universe. Free-plan coverage is a whitelist (VC-10); this file is the discovery evidence, merged across runs (each result carries its own verified_at). Education, not advice.",
 };
-writeFileSync(join(HERE, "universe-verified.json"), JSON.stringify(evidence, null, 2));
+writeFileSync(evidenceFile, JSON.stringify(evidence, null, 2));
 
 const sqlEsc = (s) => String(s).replace(/'/g, "''");
 const seed =
   `-- seed-universe.sql — generated by verify-universe.mjs on ${evidence.verified_at}\n` +
-  `-- Greens only: ${greens.length} of ${candidates.length} candidates. Blocked names live in universe-verified.json.\n` +
+  `-- Greens only: ${greens.length} of ${merged.length} on record. Blocked names live in universe-verified.json.\n` +
   `-- Apply:  npx wrangler d1 execute stock-market-db --local  --file=scripts/seed-universe.sql\n` +
   `--         npx wrangler d1 execute stock-market-db --remote --file=scripts/seed-universe.sql\n` +
   greens
@@ -162,6 +219,9 @@ const seed =
   "\n";
 writeFileSync(join(HERE, "seed-universe.sql"), seed);
 
-console.log(`\n${aborted ? "PARTIAL RUN (stopped early — see above). " : ""}Verdict: ${greens.length} green / ${results.length} probed.`);
+console.log(
+  `\n${aborted ? "PARTIAL RUN (stopped early — run again tomorrow; it resumes). " : ""}` +
+    `This run: ${newGreens.length} green / ${results.length} probed, ${callsMade} calls.  On record: ${greens.length} green / ${merged.length}.`,
+);
 console.log("Wrote scripts/universe-verified.json (evidence) and scripts/seed-universe.sql (the universe).");
 console.log("Next: apply the seed to D1 (commands are in the seed file header), commit all three files.");

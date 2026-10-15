@@ -25,8 +25,6 @@ Entry format: **Designed** (decisions and their reasoning) · **Built** (what sh
 - [ ] Landing-page GitHub placeholder replaced with the real repo URL.
 - [ ] Journal template prints cleanly; one stack printed for lesson 1.
 
-
-
 Deviation (wk 3, closed): production backfill breached D1's 100k/day metered-write
 allowance — each insert counts the table plus every index, and idx_prices_symbol_date
 duplicated the PK (≈3 writes/row × 38,874 ≈ 116k). Fix: migration 0002 drops the
@@ -36,3 +34,18 @@ to the cron. Verified in sandbox: index gone, realign set selects stalest-first,
 auth abort after one call, summary records the realign list. Alphabetical tail of
 night-one backfill (≈TSLA–XOM) self-heals on the next run. Cost: €0 then, €0 now —
 the free tier remains the design, and the limit notification is now teaching material.
+
+Week 5½ — the value pool · logged 14 Oct 2026
+**Finding.** 31 of 31 fail Graham's defensive screen; 29 fail each price test; none pass both.
+Reading: a glamour universe (chosen for recognisability and free-tier coverage) screened by
+tests written to reject glamour (TII p. 349) — the screen working, on an expensive market.
+**Decided.** Widen the pool with the unglamorous end — 44 mid/large value names and 52 small
+caps, Graham's enterprising hunting ground (p. 386), weighted small so the class can build a
+paper portfolio from it; the sweep decides which the free plan serves. Build Graham's
+enterprising-investor screen (ch. 15) alongside the defensive one.
+**Built (v0.5.3).** Resumable sweep (+ classifier-order fix); second price cron invocation with
+last_price_fetch guard (capacity ~90); accounts 15/night; goodwill & intangibles stored →
+tangible book per share and P/TBV in the ratio engine (ch. 15's price test); fail-count footer
+on /screen. Migration 0004. 47 tests. Verified in sandbox: second invocation skips what the
+first fetched (doneTonight: 3, fetches: 2); footer renders; sweep resume/merge tested with a
+stubbed network, including stop-on-limit and carry-on-tomorrow.

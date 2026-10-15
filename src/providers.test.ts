@@ -5,7 +5,7 @@
  * shape the nightly job must tell apart.
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { fetchFmpDailyAdjusted, fetchFmpIncomeAnnual } from "./providers";
+import { fetchFmpDailyAdjusted, fetchFmpIncomeAnnual, fetchFmpBalanceAnnual } from "./providers";
 
 const respond = (status: number, body: unknown) =>
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body), { status })));
@@ -37,6 +37,18 @@ describe("FMP response classification", () => {
     expect(r.kind).toBe("error");
     expect("detail" in r && r.detail).toMatch(/Too many subrequests/);
     expect((await fetchFmpDailyAdjusted("COST", "k")).kind).toBe("error");
+  });
+
+  it("the balance sheet carries goodwill + intangibles, combined line first, parts as fallback", async () => {
+    respond(200, [{ fiscalYear: "2025", date: "2025-12-31", totalStockholdersEquity: 500, goodwillAndIntangibleAssets: 120 }]);
+    const a = await fetchFmpBalanceAnnual("X", "k");
+    expect(a.kind === "ok" && a.years[0].goodwillAndIntangibles).toBe(120);
+    respond(200, [{ fiscalYear: "2025", date: "2025-12-31", totalStockholdersEquity: 500, goodwill: 70, intangibleAssets: 30 }]);
+    const b = await fetchFmpBalanceAnnual("X", "k");
+    expect(b.kind === "ok" && b.years[0].goodwillAndIntangibles).toBe(100);
+    respond(200, [{ fiscalYear: "2025", date: "2025-12-31", totalStockholdersEquity: 500 }]);
+    const c = await fetchFmpBalanceAnnual("X", "k");
+    expect(c.kind === "ok" && c.years[0].goodwillAndIntangibles).toBeNull();
   });
 
   it("a real statement array parses", async () => {

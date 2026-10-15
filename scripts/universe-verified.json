@@ -1,6 +1,7 @@
 {
-  "verified_at": "2026-10-01T14:07:05.465Z",
-  "candidates": 48,
+  "verified_at": "2026-10-14T12:51:02.149Z",
+  "candidates": 144,
+  "probed_this_run": 75,
   "greens": [
     "AAPL",
     "PFE",
@@ -32,9 +33,16 @@
     "GE",
     "CSCO",
     "ADBE",
-    "DAL"
+    "DAL",
+    "VZ",
+    "T",
+    "F",
+    "GM",
+    "CARR",
+    "C",
+    "WFC"
   ],
-  "aborted_early": false,
+  "aborted_early": true,
   "results": [
     {
       "symbol": "AAPL",
@@ -529,7 +537,757 @@
       "verdict": "GREEN",
       "name": "Delta Air Lines, Inc.",
       "sector": "Industrials"
+    },
+    {
+      "symbol": "VZ",
+      "statements": "ok",
+      "statement_years": 5,
+      "history": "ok",
+      "history_from": "2021-10-15",
+      "history_days": 1253,
+      "verdict": "GREEN",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "T",
+      "statements": "ok",
+      "statement_years": 5,
+      "history": "ok",
+      "history_from": "2021-10-15",
+      "history_days": 1253,
+      "verdict": "GREEN",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "CMCSA",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "F",
+      "statements": "ok",
+      "statement_years": 5,
+      "history": "ok",
+      "history_from": "2021-10-15",
+      "history_days": 1253,
+      "verdict": "GREEN",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "GM",
+      "statements": "ok",
+      "statement_years": 5,
+      "history": "ok",
+      "history_from": "2021-10-15",
+      "history_days": 1253,
+      "verdict": "GREEN",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "PCAR",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "EMR",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "CARR",
+      "statements": "ok",
+      "statement_years": 5,
+      "history": "ok",
+      "history_from": "2021-10-15",
+      "history_days": 1253,
+      "verdict": "GREEN",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "SWK",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "WHR",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "MMM",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "DOW",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "LYB",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "IP",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "NUE",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "FCX",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "KMI",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "HAL",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "SLB",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "OXY",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "COP",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "KHC",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "GIS",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "CAG",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "CPB",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "HRL",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "TSN",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "ADM",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "KR",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "TAP",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "MO",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "CVS",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "BMY",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "VTRS",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "BAX",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "C",
+      "statements": "ok",
+      "statement_years": 5,
+      "history": "ok",
+      "history_from": "2021-10-15",
+      "history_days": 1253,
+      "verdict": "GREEN",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "WFC",
+      "statements": "ok",
+      "statement_years": 5,
+      "history": "ok",
+      "history_from": "2021-10-15",
+      "history_days": 1253,
+      "verdict": "GREEN",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "USB",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "TFC",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "MET",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "PRU",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "HPQ",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "HPE",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "GLW",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "ETD",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "HOFT",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "BSET",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "FLXS",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "LZB",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "HVT",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "WEYS",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "RCKY",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "BKE",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "CATO",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "SCVL",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "MOV",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "BBW",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "HBB",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "JBSS",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "IMKTA",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "VLGEA",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "WMK",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "ANDE",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "CALM",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "UVV",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "MLR",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "SMP",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "SGC",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "ODC",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "GRC",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "HURC",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "PLPC",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "EML",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "IIIN",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "MLI",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-14T12:51:02.149Z"
     }
   ],
-  "note": "Raw-materials certificate for the course universe. Free-plan coverage is a whitelist (VC-10); this file is the discovery evidence. Education, not advice."
+  "note": "Raw-materials certificate for the course universe. Free-plan coverage is a whitelist (VC-10); this file is the discovery evidence, merged across runs (each result carries its own verified_at). Education, not advice."
 }

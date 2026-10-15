@@ -22,6 +22,9 @@ export type FundamentalsYear = {
   longTermDebt: number | null;
   equity: number | null;
   sharesDiluted: number | null;
+  /** Goodwill + intangibles (balance sheet). Optional: rows stored before
+   *  migration 0004 carry null, and the defensive screen never needs it. */
+  goodwillAndIntangibles?: number | null;
 };
 
 export type Ratios = {
@@ -34,6 +37,11 @@ export type Ratios = {
   ltDebtToWorkingCapital: number | null;
   /** Equity ÷ diluted shares. */
   bookValuePerShare: number | null;
+  /** (Equity − goodwill − intangibles) ÷ diluted shares — Graham's "net tangible
+   *  assets" per share (ch. 15). Null until the intangibles figure is held. */
+  tangibleBookPerShare: number | null;
+  /** Price ÷ tangible book per share. Graham's enterprising bar: < 1.2 (p. 386). */
+  pTangibleBook: number | null;
   /** Price ÷ latest diluted EPS — informational. Null when EPS ≤ 0. */
   pe: number | null;
   /** Average diluted EPS of the newest three fiscal years (Graham's basis). */
@@ -88,6 +96,11 @@ export function computeRatios(
       ? round(latest.equity / latest.sharesDiluted)
       : null;
 
+  const tangibleBookPerShare =
+    latest && ok(latest.equity) && ok(latest.goodwillAndIntangibles) && ok(latest.sharesDiluted) && latest.sharesDiluted > 0
+      ? round((latest.equity - latest.goodwillAndIntangibles!) / latest.sharesDiluted)
+      : null;
+
   const latestEps = latest && ok(latest.epsDiluted) ? latest.epsDiluted : null;
 
   const pe =
@@ -107,6 +120,11 @@ export function computeRatios(
 
   const peTimesPb = ok(pe3) && ok(pb) ? round(pe3! * pb!, 1) : null;
 
+  const pTangibleBook =
+    ok(lastClose) && ok(tangibleBookPerShare) && tangibleBookPerShare! > 0
+      ? round(lastClose / tangibleBookPerShare!, 2)
+      : null;
+
   const epsSeries = years.map((y) => y.epsDiluted).filter(ok);
   const epsPositiveYears = epsSeries.filter((e) => e > 0).length;
 
@@ -124,6 +142,8 @@ export function computeRatios(
     workingCapital,
     ltDebtToWorkingCapital,
     bookValuePerShare,
+    tangibleBookPerShare,
+    pTangibleBook,
     pe,
     epsAvg3,
     pe3,

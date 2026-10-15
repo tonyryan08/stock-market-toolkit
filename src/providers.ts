@@ -333,6 +333,8 @@ export type BalanceYear = {
   totalLiabilities: number | null;
   longTermDebt: number | null;
   equity: number | null;
+  /** Goodwill + intangible assets; equity minus this is Graham's "net tangible assets" (ch. 15). */
+  goodwillAndIntangibles: number | null;
 };
 
 export async function fetchFmpBalanceAnnual(symbol: string, apiKey: string) {
@@ -348,9 +350,20 @@ export async function fetchFmpBalanceAnnual(symbol: string, apiKey: string) {
       totalLiabilities: pick(row, "totalLiabilities"),
       longTermDebt: pick(row, "longTermDebt"),
       equity: pick(row, "totalStockholdersEquity", "totalEquity", "stockholdersEquity"),
+      goodwillAndIntangibles: goodwillPlusIntangibles(row),
     };
   });
   return { kind: "ok" as const, years };
+}
+
+/** FMP reports a combined line; fall back to goodwill + intangibleAssets when only the parts are present. */
+function goodwillPlusIntangibles(row: Record<string, unknown>): number | null {
+  const combined = pick(row, "goodwillAndIntangibleAssets");
+  if (combined !== null) return combined;
+  const g = pick(row, "goodwill");
+  const i = pick(row, "intangibleAssets");
+  if (g === null && i === null) return null;
+  return (g ?? 0) + (i ?? 0);
 }
 
 export type DividendRow = { exDate: string; amount: number | null };

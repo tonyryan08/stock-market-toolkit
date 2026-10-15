@@ -48,14 +48,18 @@ type Env = {
 
 /** Free plan ≈ 250 provider calls/day; the cron never spends more than this. */
 const MAX_CALLS_PER_RUN = 200;
-/** Price-row inserts per run. ~2 metered writes each; cap ≈ 60k metered, well under 100k/day. */
-const MAX_INSERTS_PER_RUN = 30000;
+/** Price-row inserts per INVOCATION, ~2 metered writes each. Two price
+ *  invocations a night (v0.5.3) → ≤ 40k inserts ≈ 80k metered, under the
+ *  100k/day allowance even on a night that backfills new symbols. */
+const MAX_INSERTS_PER_RUN = 20000;
 /** Symbols given a full-history realign each night. Universe realigns fully every ~⌈N/this⌉ nights. */
 const REALIGN_PER_NIGHT = 4;
 /** Consecutive D1 write failures treated as the daily write limit. */
 const MAX_WRITE_FAILURES = 3;
 /** Workers Free: 50 external fetches per invocation. Stop well short. */
 const MAX_FETCHES_PER_INVOCATION = 45;
+/** A price fetched this recently counts as "done tonight" for a later invocation. */
+const FRESH_HOURS = 6;
 const DELAY_MS = 250;
 const CHUNK = 40;
 
@@ -90,19 +94,31 @@ export async function runNightly(env: Env, phase: Phase = "all"): Promise<void> 
     return;
   }
 
-  // Stalest prices first, so a run stopped by any budget resumes where it left off.
-  const tickers = (
+  // Stalest prices first, so a run stopped by any budget resumes where it
+  // left off — and so a SECOND price invocation the same night (v0.5.3: the
+  // universe may exceed one invocation's 45 fetches) carries on from where
+  // the first stopped instead of repeating it: anything fetched within the
+  // last FRESH_HOURS is "done tonight" and skipped.
+  const all = (
     await env.DB.prepare(
-      `SELECT t.symbol, t.last_full_fetch, MAX(p.date) AS last_date
+      `SELECT t.symbol, t.last_full_fetch, t.last_price_fetch, MAX(p.date) AS last_date
        FROM tickers t LEFT JOIN daily_prices p ON p.symbol = t.symbol
        WHERE t.status = 'active'
        GROUP BY t.symbol
-       ORDER BY last_date IS NOT NULL, last_date, t.symbol`,
-    ).all<{ symbol: string; last_full_fetch: string | null; last_date: string | null }>()
+       ORDER BY t.last_price_fetch IS NOT NULL, t.last_price_fetch, t.symbol`,
+    ).all<{ symbol: string; last_full_fetch: string | null; last_price_fetch: string | null; last_date: string | null }>()
   ).results;
 
-  if (tickers.length === 0) {
+  if (all.length === 0) {
     await log(null, "run_summary", 0, "No active tickers — seed the universe first.");
+    return;
+  }
+
+  const freshCutoff = Date.now() - FRESH_HOURS * 3600 * 1000;
+  const tickers = all.filter((t) => !(t.last_price_fetch && Date.parse(t.last_price_fetch) > freshCutoff));
+  const doneTonight = all.length - tickers.length;
+  if (tickers.length === 0) {
+    await log(null, "run_summary", 0, JSON.stringify({ phase, tickers: all.length, doneTonight, fetches: 0, note: "all prices already fetched tonight" }));
     return;
   }
 
@@ -156,10 +172,11 @@ export async function runNightly(env: Env, phase: Phase = "all"): Promise<void> 
         writeFailures = 0;
         bump("ok");
         await log(symbol, "ok", written, mode);
-        if (!fromDate) {
-          await env.DB.prepare("UPDATE tickers SET last_full_fetch = ?2 WHERE symbol = ?1")
-            .bind(symbol, runAt).run();
-        }
+        await env.DB.prepare(
+          fromDate
+            ? "UPDATE tickers SET last_price_fetch = ?2 WHERE symbol = ?1"
+            : "UPDATE tickers SET last_price_fetch = ?2, last_full_fetch = ?2 WHERE symbol = ?1",
+        ).bind(symbol, runAt).run();
       } catch (err) {
         writeFailures++;
         bump("write_error");
@@ -208,7 +225,8 @@ export async function runNightly(env: Env, phase: Phase = "all"): Promise<void> 
 
   await log(null, "run_summary", inserted, JSON.stringify({
     phase,
-    tickers: tickers.length,
+    tickers: all.length,
+    doneTonight,
     fetches: budget.fetches,
     inserts: inserted,
     realigned: [...realignSet],
@@ -256,7 +274,8 @@ import {
   type BalanceYear,
 } from "../providers";
 
-const FUND_PER_NIGHT = 12;
+/** 15 × 3 calls = 45 fetches: the whole accounts invocation's budget. */
+const FUND_PER_NIGHT = 15;
 const FUND_STALE_DAYS = 30;
 
 type EnvF = {
@@ -328,15 +347,16 @@ export async function runFundamentals(
         `INSERT INTO fundamentals_annual
            (symbol, fiscal_year, period_end, revenue, net_income, eps_diluted,
             current_assets, current_liabilities, total_assets, total_liabilities,
-            long_term_debt, shareholders_equity, shares_diluted)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)
+            long_term_debt, shareholders_equity, shares_diluted, goodwill_and_intangibles)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)
          ON CONFLICT (symbol, fiscal_year) DO UPDATE SET
            period_end=excluded.period_end, revenue=excluded.revenue,
            net_income=excluded.net_income, eps_diluted=excluded.eps_diluted,
            current_assets=excluded.current_assets, current_liabilities=excluded.current_liabilities,
            total_assets=excluded.total_assets, total_liabilities=excluded.total_liabilities,
            long_term_debt=excluded.long_term_debt, shareholders_equity=excluded.shareholders_equity,
-           shares_diluted=excluded.shares_diluted`,
+           shares_diluted=excluded.shares_diluted,
+           goodwill_and_intangibles=excluded.goodwill_and_intangibles`,
       );
       try {
         await env.DB.batch(
@@ -347,6 +367,7 @@ export async function runFundamentals(
               b?.currentAssets ?? null, b?.currentLiabilities ?? null,
               b?.totalAssets ?? null, b?.totalLiabilities ?? null,
               b?.longTermDebt ?? null, b?.equity ?? null, y.sharesDiluted,
+              b?.goodwillAndIntangibles ?? null,
             );
           }),
         );

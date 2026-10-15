@@ -7,7 +7,7 @@
 
   // Week 3: the nightly close. 22:30 UTC = after the US close settles,
   // 23:30 Irish time (summer). One run per night is the whole design.
-  "triggers": { "crons": ["30 22 * * *","50 22 * * *"] },
+  "triggers": { "crons": ["30 22 * * *","40 22 * * *","50 22 * * *"] },
 
   // Week 3: the D1 cache. After `npx wrangler d1 create stock-market-db`,
   // paste the database_id it prints over the placeholder below.

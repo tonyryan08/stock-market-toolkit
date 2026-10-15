@@ -220,7 +220,7 @@ async function loadFundamentals(env: Env, ticker: string) {
     await env.DB.prepare(
       `SELECT fiscal_year, period_end, revenue, net_income, eps_diluted,
               current_assets, current_liabilities, total_assets, total_liabilities,
-              long_term_debt, shareholders_equity, shares_diluted
+              long_term_debt, shareholders_equity, shares_diluted, goodwill_and_intangibles
        FROM fundamentals_annual WHERE symbol = ?1
        ORDER BY fiscal_year DESC LIMIT 10`,
     ).bind(ticker).all<{
@@ -229,7 +229,7 @@ async function loadFundamentals(env: Env, ticker: string) {
       current_assets: number | null; current_liabilities: number | null;
       total_assets: number | null; total_liabilities: number | null;
       long_term_debt: number | null; shareholders_equity: number | null;
-      shares_diluted: number | null;
+      shares_diluted: number | null; goodwill_and_intangibles: number | null;
     }>()
   ).results;
 
@@ -263,6 +263,7 @@ async function loadFundamentals(env: Env, ticker: string) {
     longTermDebt: y.long_term_debt,
     equity: y.shareholders_equity,
     sharesDiluted: y.shares_diluted,
+    goodwillAndIntangibles: y.goodwill_and_intangibles,
   }));
 
   return {
@@ -359,7 +360,7 @@ async function loadScreen(env: Env) {
     env.DB.prepare(
       `SELECT symbol, fiscal_year, period_end, revenue, net_income, eps_diluted,
               current_assets, current_liabilities, total_assets, total_liabilities,
-              long_term_debt, shareholders_equity, shares_diluted
+              long_term_debt, shareholders_equity, shares_diluted, goodwill_and_intangibles
        FROM fundamentals_annual ORDER BY symbol, fiscal_year DESC`,
     ),
     env.DB.prepare("SELECT symbol, ex_date, amount FROM dividends"),
@@ -375,6 +376,7 @@ async function loadScreen(env: Env) {
     net_income: number | null; eps_diluted: number | null; current_assets: number | null;
     current_liabilities: number | null; total_assets: number | null; total_liabilities: number | null;
     long_term_debt: number | null; shareholders_equity: number | null; shares_diluted: number | null;
+    goodwill_and_intangibles: number | null;
   };
   const yearsBy = new Map<string, FundamentalsYear[]>();
   for (const y of fund.results as FRow[]) {
@@ -384,6 +386,7 @@ async function loadScreen(env: Env) {
       epsDiluted: y.eps_diluted, currentAssets: y.current_assets, currentLiabilities: y.current_liabilities,
       totalAssets: y.total_assets, totalLiabilities: y.total_liabilities, longTermDebt: y.long_term_debt,
       equity: y.shareholders_equity, sharesDiluted: y.shares_diluted,
+      goodwillAndIntangibles: y.goodwill_and_intangibles,
     });
     yearsBy.set(y.symbol, list);
   }
@@ -478,6 +481,18 @@ function screenPage(
     </tr>`;
   }).join("");
 
+  // Footer: how many companies each test rejected — the column tally that
+  // used to be counted by hand off a screenshot (14 Oct 2026).
+  const failCells = CRITERIA.map((c) => {
+    const outcomes = rows.map((r) => r.results.find((y) => y.id === c.id)!.outcome);
+    const fails = outcomes.filter((o) => o === "fail").length;
+    const applicable = outcomes.filter((o) => o === "pass" || o === "fail").length;
+    return `<td class="m" title="${esc(c.short)}: ${fails} of ${applicable} companies with data fail this test"><b>${fails}</b><span class="hs">of ${applicable}</span></td>`;
+  }).join("");
+  const foot = rows.length
+    ? `<tfoot><tr><th scope="row">Fail this test</th>${failCells}<td></td><td></td></tr></tfoot>`
+    : "";
+
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Graham screen</title>
@@ -503,7 +518,11 @@ ${PAGE_CSS}
   td.pass { color:var(--entry); } td.fail { color:var(--stamp); } td.na, td.skip { color:var(--faint); }
   td.p { font-family:"IBM Plex Mono",monospace; white-space:nowrap; }
   tr.survivor { background:rgba(62,107,84,.10); }
-  tbody th, thead th:first-child { position:sticky; left:0; background:#F6F8F4; z-index:1; }
+  tbody th, thead th:first-child, tfoot th { position:sticky; left:0; background:#F6F8F4; z-index:1; }
+  tfoot th { text-align:left; font-family:"IBM Plex Mono",monospace; font-size:.72rem; letter-spacing:.06em; text-transform:uppercase; color:var(--faint); }
+  tfoot td { border-top:2px solid var(--ink); text-align:center; }
+  tfoot td b { font-family:"Libre Caslon Text",serif; font-size:1.05rem; color:var(--stamp); display:block; line-height:1.1; }
+  tfoot .hs { font-family:"IBM Plex Mono",monospace; font-size:.6rem; color:var(--faint); white-space:nowrap; }
   tr.survivor th { background:#E3EBE5; }
   .tag { font-family:"IBM Plex Mono",monospace; font-size:.62rem; letter-spacing:.1em; border:1.4px solid; border-radius:3px; padding:.1rem .35rem; white-space:nowrap; }
   .tag.survivor { color:var(--entry); border-color:var(--entry); }
@@ -527,6 +546,7 @@ ${PAGE_CSS}
   <div class="wrap"><table>
     <thead><tr><th scope="col" style="text-align:left">Company</th>${head}<th scope="col">Score</th><th scope="col"></th></tr></thead>
     <tbody>${body || `<tr><td colspan="10">No company has cached accounts yet — the nightly refresh fills the books over three nights.</td></tr>`}</tbody>
+    ${foot}
   </table></div>
   <p class="key">✓ pass · ✗ fail · – not applied (financial companies skip test 2 — Graham's rule; their score is out of 6) · ? data missing. Hover or tap a mark for the numbers. Column numbers link to the <a href="/card">checklist card</a>, which prints from the same rules this screen runs. Universe ${universe}; ${screened} with books.</p>
   <p class="caption">Prices to ${esc(asOf ?? "—")} · accounts to the latest fiscal year held · served from the nightly cache in ${ms}&nbsp;ms · <a href="/api/screen/graham">raw JSON</a></p>
@@ -894,13 +914,17 @@ ${PAGE_CSS}
 
 export default {
   fetch: app.fetch,
-  // Two cron invocations, each with its own 50-fetch budget (Workers Free):
-  //   30 22 * * *  → prices        50 22 * * *  → accounts
+  // Cron invocations, each with its own 50-fetch budget (Workers Free):
+  //   30 22 * * *, 40 22 * * *, …  → prices (add lines for capacity)   50 22 * * *  → accounts
   // Any other cron string (local doorbell without a match) runs both.
   scheduled: async (controller, env, ctx) => {
+    // v0.5.3: every "mm 22 * * *" invocation except 22:50 is a price run, so
+    // capacity grows by adding lines to wrangler.jsonc's crons (45 fetches
+    // each; a later run skips what an earlier one fetched tonight). 22:50 is
+    // accounts. Anything else (the local doorbell's "* * * * *") runs both.
     const phase: Phase =
-      controller.cron === "30 22 * * *" ? "prices"
-      : controller.cron === "50 22 * * *" ? "fundamentals"
+      controller.cron === "50 22 * * *" ? "fundamentals"
+      : /^\d{1,2} 22 \* \* \*$/.test(controller.cron) ? "prices"
       : "all";
     ctx.waitUntil(runNightly(env, phase));
   },

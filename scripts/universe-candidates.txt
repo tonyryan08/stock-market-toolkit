@@ -58,3 +58,131 @@ CSCO      # Cisco
 ADBE      # Adobe
 CRM       # Salesforce
 DAL       # Delta — the airline contrast for Ryanair's demo slot
+
+# ---------------------------------------------------------------------------
+# Value pool (added 14 Oct 2026) — the unglamorous end: dividend payers,
+# mostly under $100 a share, the kind of company Graham's screens were
+# written to find. US-domiciled, US-listed. No utilities (Graham's separate
+# rules, p. 348, aren't implemented) and no REITs. The sweep decides which
+# the free plan serves; nothing here is promised until it's green.
+# ---------------------------------------------------------------------------
+# Telecoms & media
+VZ        # Verizon
+T         # AT&T
+CMCSA     # Comcast
+# Cars, machinery, industrials
+F         # Ford
+GM        # General Motors
+PCAR      # PACCAR (trucks)
+EMR       # Emerson Electric
+CARR      # Carrier
+SWK       # Stanley Black & Decker
+WHR       # Whirlpool
+MMM       # 3M
+# Materials & energy
+DOW       # Dow
+LYB       # LyondellBasell
+IP        # International Paper
+NUE       # Nucor (steel)
+FCX       # Freeport-McMoRan (copper)
+KMI       # Kinder Morgan (pipelines)
+HAL       # Halliburton
+SLB       # Schlumberger
+OXY       # Occidental
+COP       # ConocoPhillips
+# Food, drink, staples, retail
+KHC       # Kraft Heinz
+GIS       # General Mills
+CAG       # Conagra
+CPB       # Campbell's
+HRL       # Hormel
+TSN       # Tyson Foods
+ADM       # Archer-Daniels-Midland
+KR        # Kroger
+TAP       # Molson Coors
+MO        # Altria
+# Health
+CVS       # CVS Health
+BMY       # Bristol-Myers Squibb
+VTRS      # Viatris
+BAX       # Baxter
+# Financials (price tests only — Graham p. 361)
+C         # Citigroup
+WFC       # Wells Fargo
+USB       # U.S. Bancorp
+TFC       # Truist
+MET       # MetLife
+PRU       # Prudential
+# Old-guard tech
+HPQ       # HP Inc
+HPE       # Hewlett Packard Enterprise
+GLW       # Corning
+
+# ---------------------------------------------------------------------------
+# Small-cap tier (added 14 Oct 2026) — Graham's enterprising hunting ground:
+# "we set no lower limit on the size of the enterprise. Small companies may
+# afford enough safety if bought carefully and on a group basis" (p. 386).
+# US-domiciled, US-listed, dividend-paying, old-economy, mostly well under
+# $100 a share. Whether the free plan serves ANY small cap is unknown until
+# the sweep says so — this tier is the experiment. Names are from memory as
+# of mid-2026: a few may have been acquired or suspended their dividend
+# since; the sweep and the screens will say so, which is the point.
+# ---------------------------------------------------------------------------
+# Furniture, home, retail
+ETD       # Ethan Allen
+HOFT      # Hooker Furnishings
+BSET      # Bassett Furniture
+FLXS      # Flexsteel
+LZB       # La-Z-Boy
+HVT       # Haverty's
+WEYS      # Weyco (shoes)
+RCKY      # Rocky Brands
+BKE       # The Buckle
+CATO      # Cato
+SCVL      # Shoe Carnival
+MOV       # Movado
+BBW       # Build-A-Bear
+HBB       # Hamilton Beach
+# Food, grocery, farming
+JBSS      # John B. Sanfilippo (nuts)
+IMKTA     # Ingles Markets
+VLGEA     # Village Super Market
+WMK       # Weis Markets
+ANDE      # The Andersons
+CALM      # Cal-Maine (eggs — variable dividend)
+UVV       # Universal Corp (leaf tobacco)
+# Manufacturing, industrial, materials
+MLR       # Miller Industries (tow trucks)
+SMP       # Standard Motor Products
+SGC       # Superior Group (uniforms)
+ODC       # Oil-Dri
+GRC       # Gorman-Rupp (pumps)
+HURC      # Hurco (machine tools)
+PLPC      # Preformed Line Products
+EML       # The Eastern Company
+IIIN      # Insteel Industries
+MLI       # Mueller Industries
+ZEUS      # Olympic Steel
+FRD       # Friedman Industries
+RYI       # Ryerson
+LYTS      # LSI Industries
+APOG      # Apogee Enterprises
+NX        # Quanex
+POWL      # Powell Industries
+HWKN      # Hawkins (chemicals)
+AVD       # American Vanguard
+NTIC      # Northern Technologies
+# Transport
+MRTN      # Marten Transport
+HTLD      # Heartland Express
+ULH       # Universal Logistics
+CVLG      # Covenant Logistics
+# Electronics
+RELL      # Richardson Electronics
+BELFB     # Bel Fuse
+BHE       # Benchmark Electronics
+CSPI      # CSP Inc
+# Energy
+CVI       # CVR Energy
+AE        # Adams Resources & Energy
+EPM       # Evolution Petroleum

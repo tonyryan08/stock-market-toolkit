@@ -112,6 +112,28 @@ describe("computeRatios — hand-checked arithmetic", () => {
   });
 });
 
+describe("tangible book — Graham's net tangible assets (ch. 15)", () => {
+  it("subtracts goodwill and intangibles before dividing by shares: (500 − 100) / 100 = 4; price 6 → 1.5×", () => {
+    const r = computeRatios([year({ equity: 500, goodwillAndIntangibles: 100, sharesDiluted: 100 })], 6);
+    expect(r.bookValuePerShare).toBe(5);
+    expect(r.tangibleBookPerShare).toBe(4);
+    expect(r.pTangibleBook).toBe(1.5);
+  });
+
+  it("is null until the intangibles figure is held (rows stored before migration 0004)", () => {
+    const r = computeRatios([year({ equity: 500, sharesDiluted: 100 })], 6);
+    expect(r.bookValuePerShare).toBe(5);
+    expect(r.tangibleBookPerShare).toBeNull();
+    expect(r.pTangibleBook).toBeNull();
+  });
+
+  it("negative tangible book (goodwill-heavy balance sheet) gives no multiple, like negative book", () => {
+    const r = computeRatios([year({ equity: 300, goodwillAndIntangibles: 450, sharesDiluted: 100 })], 6);
+    expect(r.tangibleBookPerShare).toBe(-1.5);
+    expect(r.pTangibleBook).toBeNull();
+  });
+});
+
 describe("dividendYears — the dividend record", () => {
   it("sums per calendar year from ex-dates and counts distinct years", () => {
     const d = dividendYears([
