@@ -1,7 +1,7 @@
 {
-  "verified_at": "2026-10-14T12:51:02.149Z",
+  "verified_at": "2026-10-15T07:17:47.054Z",
   "candidates": 144,
-  "probed_this_run": 75,
+  "probed_this_run": 21,
   "greens": [
     "AAPL",
     "PFE",
@@ -42,7 +42,7 @@
     "C",
     "WFC"
   ],
-  "aborted_early": true,
+  "aborted_early": false,
   "results": [
     {
       "symbol": "AAPL",
@@ -546,7 +546,9 @@
       "history_from": "2021-10-15",
       "history_days": 1253,
       "verdict": "GREEN",
-      "verified_at": "2026-10-14T12:51:02.149Z"
+      "verified_at": "2026-10-14T12:51:02.149Z",
+      "name": "Verizon Communications Inc.",
+      "sector": "Communication Services"
     },
     {
       "symbol": "T",
@@ -556,7 +558,9 @@
       "history_from": "2021-10-15",
       "history_days": 1253,
       "verdict": "GREEN",
-      "verified_at": "2026-10-14T12:51:02.149Z"
+      "verified_at": "2026-10-14T12:51:02.149Z",
+      "name": "AT&T Inc.",
+      "sector": "Communication Services"
     },
     {
       "symbol": "CMCSA",
@@ -576,7 +580,9 @@
       "history_from": "2021-10-15",
       "history_days": 1253,
       "verdict": "GREEN",
-      "verified_at": "2026-10-14T12:51:02.149Z"
+      "verified_at": "2026-10-14T12:51:02.149Z",
+      "name": "Ford Motor Company",
+      "sector": "Consumer Cyclical"
     },
     {
       "symbol": "GM",
@@ -586,7 +592,9 @@
       "history_from": "2021-10-15",
       "history_days": 1253,
       "verdict": "GREEN",
-      "verified_at": "2026-10-14T12:51:02.149Z"
+      "verified_at": "2026-10-14T12:51:02.149Z",
+      "name": "General Motors Company",
+      "sector": "Consumer Cyclical"
     },
     {
       "symbol": "PCAR",
@@ -616,7 +624,9 @@
       "history_from": "2021-10-15",
       "history_days": 1253,
       "verdict": "GREEN",
-      "verified_at": "2026-10-14T12:51:02.149Z"
+      "verified_at": "2026-10-14T12:51:02.149Z",
+      "name": "Carrier Global Corporation",
+      "sector": "Industrials"
     },
     {
       "symbol": "SWK",
@@ -896,7 +906,9 @@
       "history_from": "2021-10-15",
       "history_days": 1253,
       "verdict": "GREEN",
-      "verified_at": "2026-10-14T12:51:02.149Z"
+      "verified_at": "2026-10-14T12:51:02.149Z",
+      "name": "Citigroup Inc.",
+      "sector": "Financial Services"
     },
     {
       "symbol": "WFC",
@@ -906,7 +918,9 @@
       "history_from": "2021-10-15",
       "history_days": 1253,
       "verdict": "GREEN",
-      "verified_at": "2026-10-14T12:51:02.149Z"
+      "verified_at": "2026-10-14T12:51:02.149Z",
+      "name": "Wells Fargo & Company",
+      "sector": "Financial Services"
     },
     {
       "symbol": "USB",
@@ -1287,6 +1301,216 @@
       "history_days": 0,
       "verdict": "blocked",
       "verified_at": "2026-10-14T12:51:02.149Z"
+    },
+    {
+      "symbol": "ZEUS",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-15T07:17:47.054Z"
+    },
+    {
+      "symbol": "FRD",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-15T07:17:47.054Z"
+    },
+    {
+      "symbol": "RYI",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-15T07:17:47.054Z"
+    },
+    {
+      "symbol": "LYTS",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-15T07:17:47.054Z"
+    },
+    {
+      "symbol": "APOG",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-15T07:17:47.054Z"
+    },
+    {
+      "symbol": "NX",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-15T07:17:47.054Z"
+    },
+    {
+      "symbol": "POWL",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-15T07:17:47.054Z"
+    },
+    {
+      "symbol": "HWKN",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-15T07:17:47.054Z"
+    },
+    {
+      "symbol": "AVD",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-15T07:17:47.054Z"
+    },
+    {
+      "symbol": "NTIC",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-15T07:17:47.054Z"
+    },
+    {
+      "symbol": "MRTN",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-15T07:17:47.054Z"
+    },
+    {
+      "symbol": "HTLD",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-15T07:17:47.054Z"
+    },
+    {
+      "symbol": "ULH",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-15T07:17:47.054Z"
+    },
+    {
+      "symbol": "CVLG",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-15T07:17:47.054Z"
+    },
+    {
+      "symbol": "RELL",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-15T07:17:47.054Z"
+    },
+    {
+      "symbol": "BELFB",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-15T07:17:47.054Z"
+    },
+    {
+      "symbol": "BHE",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-15T07:17:47.054Z"
+    },
+    {
+      "symbol": "CSPI",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-15T07:17:47.054Z"
+    },
+    {
+      "symbol": "CVI",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-15T07:17:47.054Z"
+    },
+    {
+      "symbol": "AE",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-15T07:17:47.054Z"
+    },
+    {
+      "symbol": "EPM",
+      "statements": "blocked",
+      "statement_years": 0,
+      "history": "blocked",
+      "history_from": null,
+      "history_days": 0,
+      "verdict": "blocked",
+      "verified_at": "2026-10-15T07:17:47.054Z"
     }
   ],
   "note": "Raw-materials certificate for the course universe. Free-plan coverage is a whitelist (VC-10); this file is the discovery evidence, merged across runs (each result carries its own verified_at). Education, not advice."
