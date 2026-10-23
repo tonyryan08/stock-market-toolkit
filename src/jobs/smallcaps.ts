@@ -42,6 +42,13 @@ export const AV_CALLS_PER_NIGHT = 20;
 export const AV_SPACING_MS = 13_000;
 /** Accounts are refreshed when older than this (annual reports: once a year is the truth). */
 export const ACCOUNTS_REFRESH_DAYS = 400;
+/** The dividend record is refreshed on its own cadence (review F2, 23 Oct 2026):
+ *  "some current dividend" needs an ex-date within 366 days and the gap rule
+ *  456, so a record fetched only with the accounts (every 400 days) would fail
+ *  every payer for months. One call per company per quarter ≈ 0.5 a night. */
+export const DIVIDEND_REFRESH_DAYS = 100;
+/** EDGAR-only retries a night for companies whose EPS lookup failed transiently (0 AV calls). */
+export const EDGAR_RETRY_PER_NIGHT = 5;
 const FRESH_HOURS = 6;
 const CHUNK = 40;
 
@@ -51,14 +58,17 @@ export type SmallTicker = {
   last_price_fetch: string | null;
   fundamentals_as_of: string | null;
   fundamentals_status: string | null;
+  dividends_as_of: string | null;
 };
 
-export type Visit = { symbol: string; accounts: boolean; cost: number };
+/** accounts ⇒ dividends (the accounts visit fetches the record too). */
+export type Visit = { symbol: string; accounts: boolean; dividends: boolean; cost: number };
 
 /** Pure: which companies tonight, and whether each gets its accounts. Tested on its own. */
 export function planNight(tickers: SmallTicker[], avCalls: number, now: Date): { visits: Visit[]; avCalls: number; skippedFresh: number; skippedBlocked: number } {
   const fresh = now.getTime() - FRESH_HOURS * 3600 * 1000;
   const stale = new Date(now.getTime() - ACCOUNTS_REFRESH_DAYS * 86_400_000).toISOString();
+  const divStale = new Date(now.getTime() - DIVIDEND_REFRESH_DAYS * 86_400_000).toISOString();
   const order = [...tickers].sort((a, b) => {
     const ap = a.last_price_fetch ?? "";
     const bp = b.last_price_fetch ?? "";
@@ -78,9 +88,10 @@ export function planNight(tickers: SmallTicker[], avCalls: number, now: Date): {
       !t.fundamentals_as_of ||
       t.fundamentals_status === "partial" || t.fundamentals_status === "error" ||
       t.fundamentals_as_of < stale;
-    const cost = 1 + (accounts ? 3 : 0);
+    const dividends = accounts || !t.dividends_as_of || t.dividends_as_of < divStale;
+    const cost = 1 + (accounts ? 3 : dividends ? 1 : 0);
     if (cost > remaining) continue;
-    visits.push({ symbol: t.symbol, accounts, cost });
+    visits.push({ symbol: t.symbol, accounts, dividends, cost });
     remaining -= cost;
   }
   return { visits, avCalls: Math.max(0, avCalls) - remaining, skippedFresh, skippedBlocked };
@@ -102,7 +113,7 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
 
   const tickers = (
     await env.DB.prepare(
-      `SELECT symbol, cik, last_price_fetch, fundamentals_as_of, fundamentals_status
+      `SELECT symbol, cik, last_price_fetch, fundamentals_as_of, fundamentals_status, dividends_as_of
        FROM tickers WHERE status = 'active' AND tier = 'small'`,
     ).all<SmallTicker>()
   ).results;
@@ -134,6 +145,41 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
     return call();
   };
 
+  // 0) EDGAR-only retries (review S6): a company whose EPS lookup failed for a
+  //    transient reason (5xx, network) carries fundamentals_status
+  //    'eps_missing'; it costs no Alpha Vantage call to ask EDGAR again. A 403
+  //    (User-Agent) is a configuration fault and is never retried this way.
+  let edgarRetried = 0;
+  if (env.EDGAR_USER_AGENT) {
+    for (const t of tickers.filter((x) => x.fundamentals_status === "eps_missing" && x.cik).slice(0, EDGAR_RETRY_PER_NIGHT)) {
+      if (budget.fetches + 6 > budget.max) break;
+      const periods = (await env.DB.prepare("SELECT fiscal_year, period_end FROM fundamentals_annual WHERE symbol = ?1 AND source = 'av' AND period_end IS NOT NULL ORDER BY fiscal_year DESC")
+        .bind(t.symbol).all<{ fiscal_year: string; period_end: string }>()).results;
+      if (periods.length === 0) { await env.DB.prepare("UPDATE tickers SET fundamentals_status = 'ok' WHERE symbol = ?1").bind(t.symbol).run(); continue; }
+      const e = await edgarEpsForPeriods(t.cik!, periods.map((p) => p.period_end), env.EDGAR_USER_AGENT, edgarOpts);
+      edgarCalls += e.calls;
+      budget.fetches += e.calls;
+      edgarRetried++;
+      if (e.fatal) {
+        const forbidden = /403/.test(e.fatal);
+        if (forbidden) await env.DB.prepare("UPDATE tickers SET fundamentals_status = 'ok' WHERE symbol = ?1").bind(t.symbol).run();
+        await log(t.symbol, "edgar_failed", 0, `${e.fatal.slice(0, 160)}${forbidden ? " — not retried (configuration)" : " — will retry"}`);
+        continue;
+      }
+      let got = 0;
+      for (const p of periods) {
+        const y = e.years.find((x) => x.end === p.period_end);
+        if (!y || y.eps === null) continue;
+        got++;
+        await env.DB.prepare("UPDATE fundamentals_annual SET eps_diluted = ?3, eps_source = ?4, shares_diluted = COALESCE(?5, shares_diluted) WHERE symbol = ?1 AND fiscal_year = ?2")
+          .bind(t.symbol, p.fiscal_year, y.eps, y.epsSource, y.sharesDiluted).run();
+      }
+      await env.DB.prepare("UPDATE tickers SET fundamentals_status = 'ok' WHERE symbol = ?1").bind(t.symbol).run();
+      bump("edgar_retry");
+      await log(t.symbol, "edgar_ok", got, `EDGAR retry: eps ${got}/${periods.length}`);
+    }
+  }
+
   for (const visit of plan.visits) {
     if (stop) break;
     const t = tickers.find((x) => x.symbol === visit.symbol)!;
@@ -155,10 +201,15 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
       if (r.kind === "auth_failed") { stop = `auth_failed at ${sym} (${what})`; bump("auth_failed"); return true; }
       return false;
     };
+    /** The per-symbol receipt carries the real outcome (review N6). */
+    const haltLog = async (r: AvResult<unknown>) => {
+      const outcome = r.kind === "premium" ? "av_premium" : r.kind === "auth_failed" ? "auth_failed" : "rate_limited";
+      await log(sym, outcome, 0, `${r.kind === "ok" ? "" : r.detail} — run stopped; resumes tomorrow.`);
+    };
 
     // 1) prices: one call decides whether Alpha Vantage knows the symbol at all
     const px = await av(() => fetchAvDailyCompact(sym, env.ALPHAVANTAGE_API_KEY, avOpts));
-    if (halts(px, "prices")) { await log(sym, "rate_limited", 0, `${px.kind === "ok" ? "" : px.detail} — run stopped; resumes tomorrow.`); break; }
+    if (halts(px, "prices")) { await haltLog(px); break; }
     if (px.kind === "not_served") {
       bump("blocked");
       await env.DB.prepare("UPDATE tickers SET status = 'blocked', notes = ?2 WHERE symbol = ?1")
@@ -167,12 +218,13 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
       continue;
     }
 
-    // 2) dividends next when accounts are due, so tonight's adjustment uses the fresh record
+    // 2) dividends next when due (with the accounts, or on their own 100-day
+    //    cadence), so tonight's adjustment uses the fresh record
     let newExDates = 0;
     let divOutcome = "not due";
-    if (visit.accounts) {
+    if (visit.dividends) {
       const div = await av(() => fetchAvDividends(sym, env.ALPHAVANTAGE_API_KEY, avOpts));
-      if (halts(div, "dividends")) { await log(sym, "rate_limited", 0, `${div.kind === "ok" ? "" : div.detail} — run stopped; resumes tomorrow.`); break; }
+      if (halts(div, "dividends")) { await haltLog(div); break; }
       if (div.kind === "ok") {
         const before = await env.DB.prepare("SELECT MAX(ex_date) AS d, COUNT(*) AS n FROM dividends WHERE symbol = ?1").bind(sym).first<{ d: string | null; n: number }>();
         const recent = div.data.slice(0, 80); // ~20 years of quarters
@@ -184,6 +236,7 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
           newExDates = recent.filter((d) => !before?.d || d.exDate > before.d).length;
           if (!before?.n) newExDates = recent.length;
           divOutcome = `dividends ${recent.length}${newExDates ? ` (+${newExDates} new)` : ""}`;
+          await env.DB.prepare("UPDATE tickers SET dividends_as_of = ?2 WHERE symbol = ?1").bind(sym, runAt).run();
         } catch (err) {
           divOutcome = `dividends write_error ${String((err as Error).message ?? err).slice(0, 60)}`;
         }
@@ -230,9 +283,9 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
     // 4) accounts, when due
     if (visit.accounts) {
       const inc = await av(() => fetchAvIncomeAnnual(sym, env.ALPHAVANTAGE_API_KEY, avOpts));
-      if (halts(inc, "income")) { await log(sym, "rate_limited", 0, `${inc.kind === "ok" ? "" : inc.detail} — run stopped; resumes tomorrow.`); break; }
+      if (halts(inc, "income")) { await haltLog(inc); break; }
       const bal = await av(() => fetchAvBalanceAnnual(sym, env.ALPHAVANTAGE_API_KEY, avOpts));
-      if (halts(bal, "balance")) { await log(sym, "rate_limited", 0, `${bal.kind === "ok" ? "" : bal.detail} — run stopped; resumes tomorrow.`); break; }
+      if (halts(bal, "balance")) { await haltLog(bal); break; }
 
       const parts: string[] = [divOutcome];
       let rows = 0;
@@ -245,17 +298,19 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
         const balBy = new Map<string, AvBalanceYear>(bal.kind === "ok" ? bal.data.map((b) => [b.fiscalDateEnding, b]) : []);
         // EDGAR: EPS with provenance, net income for the cross-check, diluted shares.
         let edgarNote = "edgar skipped: no CIK on the ticker row";
+        let epsMissing = false;
         const eps = new Map<string, { eps: number | null; epsSource: string | null; shares: number | null; ni: number | null }>();
         if (t.cik && env.EDGAR_USER_AGENT) {
           const e = await edgarEpsForPeriods(t.cik, years.map((y) => y.fiscalDateEnding), env.EDGAR_USER_AGENT, edgarOpts);
           edgarCalls += e.calls;
           budget.fetches += e.calls;
           if (e.fatal) {
-            // Not retried nightly on purpose: a persistent 403 would otherwise
-            // burn the ration on the same companies every night. The accounts
-            // are kept (status ok), EPS stays empty and says so on the page;
-            // the yearly refresh, or a manual status reset, asks EDGAR again.
-            edgarNote = `edgar failed: ${e.fatal.slice(0, 100)} — EPS left empty`;
+            // The accounts are kept; EPS stays empty and the page says so. A
+            // transient fault (5xx, network) marks the company 'eps_missing' and
+            // step 0 asks EDGAR again on a later night at no Alpha Vantage cost;
+            // a 403 is the User-Agent (configuration) and is not retried.
+            epsMissing = !/403/.test(e.fatal);
+            edgarNote = `edgar failed: ${e.fatal.slice(0, 100)} — EPS left empty${epsMissing ? ", EDGAR retried later" : ""}`;
             await log(sym, "edgar_failed", 0, e.fatal.slice(0, 200));
           } else {
             for (const y of e.years) eps.set(y.end, { eps: y.eps, epsSource: y.epsSource, shares: y.sharesDiluted, ni: y.netIncome });
@@ -278,15 +333,16 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
           `INSERT INTO fundamentals_annual
              (symbol, fiscal_year, period_end, revenue, net_income, eps_diluted,
               current_assets, current_liabilities, total_assets, total_liabilities,
-              long_term_debt, shareholders_equity, shares_diluted, goodwill_and_intangibles, source, eps_source)
-           VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)
+              long_term_debt, shareholders_equity, shares_diluted, goodwill_and_intangibles, source, eps_source, readings)
+           VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)
            ON CONFLICT (symbol, fiscal_year) DO UPDATE SET
              period_end=excluded.period_end, revenue=excluded.revenue, net_income=excluded.net_income,
              eps_diluted=excluded.eps_diluted, current_assets=excluded.current_assets,
              current_liabilities=excluded.current_liabilities, total_assets=excluded.total_assets,
              total_liabilities=excluded.total_liabilities, long_term_debt=excluded.long_term_debt,
              shareholders_equity=excluded.shareholders_equity, shares_diluted=excluded.shares_diluted,
-             goodwill_and_intangibles=excluded.goodwill_and_intangibles, source=excluded.source, eps_source=excluded.eps_source`,
+             goodwill_and_intangibles=excluded.goodwill_and_intangibles, source=excluded.source, eps_source=excluded.eps_source,
+             readings=excluded.readings`,
         );
         try {
           await env.DB.batch(years.map((y) => {
@@ -298,6 +354,7 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
               sym, y.fiscalYear, y.fiscalDateEnding, y.revenue, y.netIncome, ed?.eps ?? null,
               b?.currentAssets ?? null, b?.currentLiabilities ?? null, b?.totalAssets ?? null, b?.totalLiabilities ?? null,
               b?.longTermDebt ?? null, b?.equity ?? null, shares, b?.goodwillAndIntangibles ?? null, "av", epsSource,
+              b?.notes.length ? b.notes.join("; ") : null,
             );
           }));
           rows += years.length;
@@ -321,7 +378,7 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
         // sheet or a transient dividend fault. "Dividends not served" is an
         // answer: the record stays empty and Graham's dividend tests say so.
         const divTransient = /dividends (error|write_error)/.test(divOutcome);
-        status = bal.kind === "ok" && !divTransient ? "ok" : "partial";
+        status = bal.kind === "ok" && !divTransient ? (epsMissing ? "eps_missing" : "ok") : "partial";
       } else {
         parts.push(`income ${inc.kind}${inc.kind === "ok" ? ": no annual reports" : ": " + inc.detail.slice(0, 80)}`);
         status = inc.kind === "not_served" ? "blocked" : "error";
@@ -329,18 +386,21 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
       await env.DB.prepare("UPDATE tickers SET fundamentals_as_of = ?2, fundamentals_status = ?3 WHERE symbol = ?1").bind(sym, runAt, status).run();
       bump(`fund_${status}`);
       await log(sym, `fund_${status}`, rows, parts.join(" · "));
+    } else if (visit.dividends) {
+      await log(sym, "dividends", 0, divOutcome);
+    }
 
-      // 5) a new ex-date changes every earlier adjusted close: re-do the stored series
-      if (newExDates > 0 && px.kind === "ok") {
-        const n = await realignSymbol(env.DB, sym);
-        if (n > 0) await log(sym, "realigned", n, `${newExDates} new ex-date(s): ${n} stored closes re-adjusted`);
-      }
+    // 5) a new ex-date changes every earlier adjusted close: re-do the stored series
+    if (newExDates > 0 && px.kind === "ok") {
+      const n = await realignSymbol(env.DB, sym);
+      if (n > 0) await log(sym, "realigned", n, `${newExDates} new ex-date(s): ${n} stored closes re-adjusted`);
     }
   }
 
-  if (stop) await log(null, stop.startsWith("premium") ? "av_premium" : stop.startsWith("write") ? "write_limited" : "rate_limited", 0, `${stop} — small-cap run stopped; resumes tomorrow`);
+  if (stop) await log(null, stop.startsWith("premium") ? "av_premium" : stop.startsWith("write") ? "write_limited" : stop.startsWith("auth") ? "auth_failed" : "rate_limited", 0, `${stop} — small-cap run stopped; resumes tomorrow`);
   await log(null, "run_summary", inserted, JSON.stringify({
     phase: "smallcaps", tickers: tickers.length, planned: plan.visits.length, withAccounts: plan.visits.filter((v) => v.accounts).length,
+    dividendsOnly: plan.visits.filter((v) => v.dividends && !v.accounts).length, edgarRetried,
     skippedFresh: plan.skippedFresh, skippedBlocked: plan.skippedBlocked, avCalls, edgarCalls, fetches: budget.fetches, inserts: inserted, outcomes: counts, ms: Date.now() - started,
   }));
 }

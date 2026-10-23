@@ -141,8 +141,9 @@ export function buildFactSheet(input: ScreenInput, priceDate: string | null = nu
       : wc > 0
         ? `long-term debt ${money(ltd)}, ${Math.round((ltd / wc) * 100)}% of working capital`
         : `long-term debt ${money(ltd)} against negative working capital`;
+    const debtReading = latest.readings && /debt/i.test(latest.readings) ? ` (reading: ${latest.readings.split("; ").filter((r) => /debt/i.test(r)).join("; ")})` : "";
     fStrength = add(
-      `Current assets ${money(latest.currentAssets)} against current liabilities ${money(latest.currentLiabilities)}: current ratio ${ratios.currentRatio ?? "—"}, working capital ${money(wc)}; ${dPart}.`,
+      `Current assets ${money(latest.currentAssets)} against current liabilities ${money(latest.currentLiabilities)}: current ratio ${ratios.currentRatio ?? "—"}, working capital ${money(wc)}; ${dPart}${debtReading}.`,
       "books",
     );
   } else if (latest) {
@@ -154,7 +155,7 @@ export function buildFactSheet(input: ScreenInput, priceDate: string | null = nu
     const gi = ok(latest.goodwillAndIntangibles) ? latest.goodwillAndIntangibles : null;
     fBook = add(
       `Shareholders' equity ${money(latest.equity)}${ok(latest.sharesDiluted) ? ` over ${r1(latest.sharesDiluted / 1e6)}m diluted shares: book value per share ${ratios.bookValuePerShare === null ? "—" : px(ratios.bookValuePerShare)}` : ""}` +
-      (gi !== null ? `; goodwill and intangibles ${money(gi)}, so tangible book per share ${ratios.tangibleBookPerShare === null ? "—" : px(ratios.tangibleBookPerShare)}.` : "; goodwill and intangibles not yet held."),
+      (gi !== null ? `; goodwill and intangibles ${money(gi)}${latest.readings && /goodwill/i.test(latest.readings) ? " (reading: no goodwill/intangibles line reported → 0)" : ""}, so tangible book per share ${ratios.tangibleBookPerShare === null ? "—" : px(ratios.tangibleBookPerShare)}.` : "; goodwill and intangibles not yet held."),
       "books",
     );
   }
@@ -411,9 +412,52 @@ export type Grounding = {
   clean: boolean;
 };
 
-const NUM = /-?\d[\d,]*(?:\.\d+)?/g;
-const norm = (x: string) => x.replace(/,/g, "").replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
-const ADVICE = /\b(you should (?:buy|sell|hold|invest|avoid)|(?:we|i) recommend|recommended buy|strong buy|price target|target price|(?:will|is going to) (?:rise|fall|double|outperform|recover)|buy now|sell now|undervalued stock to buy)\b/i;
+/**
+ * Numbers as VALUES, not strings (review S13, 23 Oct 2026): "$3,200m" and
+ * "$3.2bn" are the same figure; "−$52m" (Unicode minus) and "-52m" too; and
+ * the digits inside an ISO date (2026-10-14) are a date, not a number.
+ */
+const UNIT: Record<string, number> = { bn: 1e9, billion: 1e9, m: 1e6, million: 1e6, k: 1e3, thousand: 1e3 };
+const NUM_UNIT = /(-?)\$?(\d[\d,]*(?:\.\d+)?)\s*(bn|billion|m|million|k|thousand)?\b/gi;
+export function extractNumbers(text: string): number[] {
+  const t = text
+    .replace(/[−–]\s*(?=\$?\d)/g, "-")                    // Unicode minus / dash before a figure → ASCII minus
+    .replace(/\b\d{4}-\d{2}-\d{2}\b/g, " ")               // ISO dates
+    .replace(/\b(?:pp?\.|ch\.|chapter|page)\s*\d+(?:[–-]\d+)?/gi, " "); // page and chapter references
+  const out: number[] = [];
+  for (const m of t.matchAll(NUM_UNIT)) {
+    const v = parseFloat(m[2].replace(/,/g, "")) * (m[3] ? UNIT[m[3].toLowerCase()] : 1);
+    if (Number.isFinite(v)) out.push(m[1] === "-" ? -v : v);
+  }
+  return out;
+}
+const sameValue = (a: number, b: number) => Math.abs(a - b) <= Math.max(1e-9, 0.005 * Math.abs(b));
+/** Small counts and Graham's own thresholds need no fact behind them. */
+const FREE_VALUES = new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 22.5, 1.5, 1.2, 120, 110, 100, 366, 15]);
+
+/**
+ * Advice-shaped language (review S4): the prompt's own forbidden words plus the
+ * phrasings a reader would hear as a tip. One pattern per family; one test per
+ * family. The course's disclaimer ("whether anyone should buy or sell") is not
+ * advice, hence the subject list and the lookbehind.
+ */
+export const ADVICE_PATTERNS: { family: string; re: RegExp }[] = [
+  { family: "subject should buy/sell", re: /(?<!whether )\b(?:you|investors?|one|we|i|they|readers?|anyone|everyone)\s+(?:should|would|could|ought to|might want to|need to|must)\s+(?:not\s+|also\s+)?(?:buy|sell|hold|invest|avoid|accumulate|add|trim|short|own|get in|get out|steer clear)\b/i },
+  { family: "recommend/advise", re: /\b(?:(?:we|i)(?:'d| would)?\s+(?:recommend|suggest|advise)|recommended (?:buy|sell)|strong (?:buy|sell)|(?:a|the) (?:good |great |clear |screaming )?(?:buy|sell)\b(?! list))/i },
+  { family: "price target", re: /\b(?:price target|target price|fair value|intrinsic value of)\b/i },
+  { family: "forecast", re: /\b(?:will|is going to|likely to|set to|poised to|expected to|bound to|about to|should|could)\s+(?:rise|fall|double|halve|recover|outperform|rally|rebound|climb|drop|crash|re-?rate)\b/i },
+  { family: "expect the price", re: /\b(?:expect|expects|expecting)\s+(?:the\s+)?(?:price|shares?|stock)\s+to\b/i },
+  { family: "valuation verdict", re: /\b(?:under-?valued|over-?valued|bargain|opportunity|attractive|compelling|entry point|worth buying|worth a look|good value|great value)\b/i },
+  { family: "position words", re: /\b(?:accumulate|overweight|underweight|buy (?:now|the dip|before)|sell (?:now|before|into)|get in before|load up)\b/i },
+];
+export function findAdvice(text: string): string[] {
+  const hits: string[] = [];
+  for (const { re } of ADVICE_PATTERNS) {
+    const m = text.match(re);
+    if (m) hits.push(m[0]);
+  }
+  return hits;
+}
 
 export function checkGrounding(n: Narrative, sheet: FactSheet): Grounding {
   const byId = new Map(sheet.facts.map((f) => [f.id, f.text]));
@@ -423,23 +467,17 @@ export function checkGrounding(n: Narrative, sheet: FactSheet): Grounding {
   n.paragraphs.forEach((p, i) => {
     const unknown = p.facts.filter((id) => !byId.has(id));
     if (unknown.length) unknownFacts.push({ paragraph: i + 1, ids: unknown });
-    const cited = p.facts.filter((id) => byId.has(id)).map((id) => byId.get(id)!).join(" ");
-    // Numbers are checked against the cited facts first, then the whole sheet
-    // (a fact id may be cited loosely; a number from nowhere is the real fault).
-    const all = sheet.facts.map((f) => f.text).join(" ");
-    const citedNums = new Set((cited.match(NUM) ?? []).map(norm));
-    const allNums = new Set((all.match(NUM) ?? []).map(norm));
-    // Page and chapter references (p. 374, pp. 385–386, ch. 14) are citations, not figures.
-    const body = p.text.replace(/\b(?:pp?\.|ch\.|chapter|page)\s*\d+(?:[–-]\d+)?/gi, "");
-    const bad = (body.match(NUM) ?? []).map(norm)
-      .filter((x) => x !== "" && !/^(1|2|3|4|5|6|7|8|9|10|15|20|22.5|1.5|1.2|120|110|9|0)$/.test(x)) // small counts and Graham's own thresholds
-      .filter((x) => !citedNums.has(x) && !allNums.has(x));
+    // Numbers are checked as values against the whole sheet (a fact id may be
+    // cited loosely; a number from nowhere is the real fault).
+    const sheetValues = extractNumbers(sheet.facts.map((f) => f.text).join(" "));
+    const bad = extractNumbers(p.text)
+      .filter((v) => !FREE_VALUES.has(v))
+      .filter((v) => !sheetValues.some((f) => sameValue(v, f)))
+      .map((v) => String(v));
     if (bad.length) unsupportedNumbers.push({ paragraph: i + 1, numbers: [...new Set(bad)] });
-    const m = p.text.match(ADVICE);
-    if (m) recommendationLanguage.push(m[0]);
+    recommendationLanguage.push(...findAdvice(p.text));
   });
-  const qm = n.question.match(ADVICE);
-  if (qm) recommendationLanguage.push(qm[0]);
+  recommendationLanguage.push(...findAdvice(n.question));
   return {
     unsupportedNumbers, unknownFacts, recommendationLanguage,
     clean: !unsupportedNumbers.length && !unknownFacts.length && !recommendationLanguage.length,

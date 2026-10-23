@@ -37,3 +37,5 @@ Nothing here is required in week 1. Assigned chapters are announced in the week 
 ---
 
 *Living document — items are added in the week they're taught. Suggestions welcome; tips are not.*
+
+*Education, not advice — nothing in this kit is a recommendation to buy or sell anything.*

@@ -23,7 +23,7 @@ const divs = (from: number, to: number) =>
 
 /** The clean survivor. Hand check:
  *  CR 400/150 = 2.67 · LTD 100 / WC 250 = 0.4 · EPS 5,4.6,4.4,4,3.8 all > 0
- *  avg3 = 14/3 = 4.67 · P/E = 60/4.67 = 12.8 · BVPS 2000/50 = 40 · P/B = 1.5
+ *  avg3 = 14/3 = 4.667 · P/E = 60/4.667 = 12.86 → 12.9 · BVPS 2000/50 = 40 · P/B = 1.5
  *  growth: late (5+4.6)/2 = 4.8 vs early (4+3.8)/2 = 3.9 → +23.1% · divs 2016–2025 = 10y */
 const survivor = (over: Partial<ScreenInput> = {}): ScreenInput => ({
   symbol: "GOOD", name: "Good Co", sector: "Consumer Defensive",
@@ -51,7 +51,7 @@ describe("screenCompany — hand-checked verdicts", () => {
     expect(r.figures.currentRatio).toBe(2.67);
     expect(r.figures.ltDebtToWc).toBe(0.4);
     expect(r.figures.epsAvg3).toBe(4.67);
-    expect(r.figures.pe3).toBe(12.8);
+    expect(r.figures.pe3).toBe(12.9); // 60 / 4.6667 = 12.857 — the unrounded average (review F3)
     expect(r.figures.pb).toBe(1.5);
     expect(r.figures.epsGrowthPct).toBe(23.1);
     expect(r.figures.dividendYears).toBe(10);
@@ -145,21 +145,40 @@ describe("screenCompany — hand-checked verdicts", () => {
   });
 
   it("P/B above 1.5 can still pass via the 22.5 product", () => {
-    // equity 1000 → BVPS 20 → P/B 3.0; price 60 / avg EPS 4.67 = 12.8 → product 38.4 → FAIL.
+    // equity 1000 → BVPS 20 → P/B 3.0; price 60 / avg EPS 4.667 = 12.86 → product 38.6 → FAIL.
     const fails = screenCompany(survivor({ years: survivor().years.map((y) => ({ ...y, equity: 1000 })) }));
     expect(fails.figures.pb).toBe(3);
     expect(outcome(fails, "price_assets")).toBe("fail");
-    // Same P/B of 3.0 (equity 500 → BVPS 10 at price 30) but a cheap P/E: 30 / 4.67 = 6.4; product 19.2 → rescued.
+    // Same P/B of 3.0 (equity 500 → BVPS 10 at price 30) but a cheap P/E: 30 / 4.667 = 6.43; product 19.3 → rescued.
     const rescued = screenCompany(survivor({ lastClose: 30, years: survivor().years.map((y) => ({ ...y, equity: 500 })) }));
     expect(rescued.figures.pb).toBe(3);
-    expect(rescued.figures.peTimesPb).toBe(19.2);
+    expect(rescued.figures.peTimesPb).toBe(19.3);
     expect(outcome(rescued, "price_assets")).toBe("pass");
   });
 
-  it("growth below Graham's pace fails: 4.0 vs 3.9 is +2.6%", () => {
+  it("compares the unrounded ratio, not the display figure (review F3, 23 Oct 2026)", () => {
+    // P/E 15.04 displays as 15.0 but is MORE than 15 → fail; 14.96 → pass.
+    const avg = 14 / 3;
+    expect(outcome(screenCompany(survivor({ lastClose: 15.04 * avg })), "pe")).toBe("fail");
+    expect(screenCompany(survivor({ lastClose: 15.04 * avg })).figures.pe3).toBe(15);
+    expect(outcome(screenCompany(survivor({ lastClose: 14.96 * avg })), "pe")).toBe("pass");
+    // Current ratio 399.2/200 = 1.996 displays as 2.00 but is LESS than 2 → fail.
+    const thin = survivor({ years: survivor().years.map((y) => ({ ...y, currentAssets: 399.2, currentLiabilities: 200 })) });
+    expect(screenCompany(thin).figures.currentRatio).toBe(2);
+    expect(outcome(screenCompany(thin), "condition")).toBe("fail");
+    // P/B 1.549 displays as 1.5; with the product above 22.5 it must fail.
+    const dear = survivor({ lastClose: 61.96, years: survivor().years.map((y) => ({ ...y, epsDiluted: y.epsDiluted! / 2 })) }); // avg3 2.333 → P/E 26.6 → product 41
+    expect(screenCompany(dear).figures.pb).toBe(1.5);
+    expect(outcome(screenCompany(dear), "price_assets")).toBe("fail");
+  });
+
+  it("growth below Graham's pace fails: 4.0 vs 3.9 is +2.6% — and the detail names the fiscal years compared (review N4)", () => {
     const r = screenCompany(survivor({ years: [yr(2025, 4), yr(2024, 4), yr(2023, 4), yr(2022, 4), yr(2021, 3.8)] }));
     expect(r.figures.epsGrowthPct).toBe(2.6);
     expect(outcome(r, "growth")).toBe("fail");
+    expect(r.results.find((t) => t.id === "growth")!.detail).toBe("EPS +2.6% from the FY2021–2022 average to FY2024–2025 average (need +9%).");
+    const four = screenCompany(survivor({ years: [yr(2025, 4.4), yr(2024, 4.2), yr(2023, 4), yr(2022, 3.8)] }));
+    expect(four.results.find((t) => t.id === "growth")!.detail).toContain("(four years held: a two-year span against the three-year hurdle)");
   });
 
   it("no dividend record fails — the Tesla case", () => {
@@ -349,6 +368,11 @@ describe("screenEnterprising — hand-checked verdicts", () => {
   it("tangible assets: price under 120% of tangible book passes, 120% fails, negative tangible book fails", () => {
     expect(eOutcome(screenEnterprising(smallCo({ lastClose: 19.1 })), "e_tangible")).toBe("pass"); // 19.1/16 = 1.19
     expect(eOutcome(screenEnterprising(smallCo({ lastClose: 19.2 })), "e_tangible")).toBe("fail"); // 1.20 — "less than"
+    // Review F3: 19.18/16 = 1.19875 displays as 1.20 but IS less than 120% → pass; 9.04× displays 9.0 but fails the multiplier.
+    expect(screenEnterprising(smallCo({ lastClose: 19.18 })).figures.pTangibleBook).toBe(1.2);
+    expect(eOutcome(screenEnterprising(smallCo({ lastClose: 19.18 })), "e_tangible")).toBe("pass");
+    expect(screenEnterprising(smallCo({ lastClose: 18.08 })).figures.pe).toBe(9);
+    expect(eOutcome(screenEnterprising(smallCo({ lastClose: 18.08 })), "multiplier")).toBe("fail");
     const r = screenEnterprising(smallCo({ years: latestWith({ goodwillAndIntangibles: 2500 }) })); // 2000 − 2500 = −500
     expect(eOutcome(r, "e_tangible")).toBe("fail");
     expect(r.figures.tangibleBookPerShare).toBe(-5);

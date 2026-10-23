@@ -36,6 +36,11 @@
  *     genuine paywall response can. partial/error are retried next night
  *   - the price phase walks the universe stalest-first, so a stopped run
  *     resumes where it left off
+ *
+ * Assumption on the record (review N8, 23 Oct 2026): D1 binding calls are
+ * taken NOT to count against the 50-subrequest cap. The receipts fit that —
+ * 31 FMP fetches plus ~90 D1 operations a night, and the failure was at
+ * fetch 51 — but it has not been verified from the platform's own meter.
  */
 
 import { fetchFmpDailyAdjusted, type DailyBar } from "../providers";

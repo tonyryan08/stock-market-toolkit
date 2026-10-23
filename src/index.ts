@@ -44,8 +44,12 @@ type Env = {
   SMALLCAP_AV_CALLS?: string;
   /** Test hook only (.dev.vars): shorten the 13-second spacing against a stub server. */
   SMALLCAP_AV_SPACING_MS?: string;
+  /** Optional override: live demo quotes allowed per day on the shared Alpha Vantage key (default 3). */
+  QUOTE_DAILY_CAP?: string;
   DB: D1Database;
 };
+
+const QUOTE_DAILY_CAP_DEFAULT = 3;
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -104,6 +108,27 @@ app.get("/api/quote/:ticker", async (c) => {
     );
   }
 
+  // Review S7 (23 Oct 2026): this demo spends the same 25-a-day Alpha Vantage
+  // key the small-cap tier runs on, so it is rationed — QUOTE_DAILY_CAP live
+  // calls in any 24 hours, counted in fetch_log, the rest answered from the
+  // nightly cache with the reason. The tutor's "858 ms vs 9 ms" demo survives.
+  const cap = Math.max(0, parseInt(c.env.QUOTE_DAILY_CAP ?? "", 10) || QUOTE_DAILY_CAP_DEFAULT);
+  const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+  const used = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM fetch_log WHERE outcome = 'quote_demo' AND run_at >= ?1").bind(since).first<{ n: number }>();
+  if ((used?.n ?? 0) >= cap) {
+    const cached = await c.env.DB.prepare("SELECT date, adj_close FROM daily_prices WHERE symbol = ?1 ORDER BY date DESC LIMIT 1").bind(ticker).first<{ date: string; adj_close: number }>();
+    return c.json({
+      ticker,
+      error: `The live demo is rationed to ${cap} calls a day (the free Alpha Vantage key serves the small-cap tier too); today's are spent.`,
+      cached_close: cached ?? null,
+      hint: "Everything students use is served from the nightly cache: /prices/:ticker, /fundamentals/:ticker, /screen.",
+    }, 429, { "cache-control": "no-store" });
+  }
+  try {
+    await c.env.DB.prepare("INSERT INTO fetch_log (run_at, symbol, outcome, rows_written, detail) VALUES (?1, ?2, 'quote_demo', 0, ?3)")
+      .bind(new Date().toISOString(), ticker, `live demo call ${(used?.n ?? 0) + 1} of ${cap} today`).run();
+  } catch { /* the receipt is a convenience */ }
+
   const [av, fmp] = await Promise.all([
     fetchAlphaVantageQuote(ticker, avKey),
     fetchFmpProfile(ticker, fmpKey),
@@ -130,6 +155,7 @@ app.get("/api/quote/:ticker", async (c) => {
           price: "Alpha Vantage (free tier: ~25 requests/day, 5/min)",
           company: "Financial Modeling Prep (free plan: ~250 requests/day)",
         },
+        demo_calls_today: `${(used?.n ?? 0) + 1} of ${cap}`,
         warnings,
         note: "Education, not advice.",
       },
@@ -222,13 +248,18 @@ app.get("/api/prices/:ticker", async (c) => {
   )
     .bind(ticker)
     .first<{ run_at: string }>();
+  const tierRow = await c.env.DB.prepare("SELECT tier FROM tickers WHERE symbol = ?1").bind(ticker).first<{ tier: string | null }>();
+  const small = tierRow?.tier === "small";
 
   return c.json({
     ticker,
     prices: rows,
     meta: {
       source: "d1-cache",
-      adjusted: "split- and dividend-adjusted (lesson 2: charts longer than a season use adjusted prices)",
+      tier: small ? "small" : "core",
+      adjusted: small
+        ? "as traded (Alpha Vantage), dividend-adjusted by the toolkit from the dividend record; NOT split-adjusted (review S11)"
+        : "split- and dividend-adjusted by the provider (lesson 2: charts longer than a season use adjusted prices)",
       count: rows.length,
       first_date: rows[0].date,
       last_date: rows[rows.length - 1].date,
@@ -249,7 +280,7 @@ async function loadFundamentals(env: Env, ticker: string) {
       `SELECT fiscal_year, period_end, revenue, net_income, eps_diluted,
               current_assets, current_liabilities, total_assets, total_liabilities,
               long_term_debt, shareholders_equity, shares_diluted, goodwill_and_intangibles,
-              source, eps_source
+              source, eps_source, readings
        FROM fundamentals_annual WHERE symbol = ?1
        ORDER BY fiscal_year DESC LIMIT 10`,
     ).bind(ticker).all<{
@@ -259,7 +290,7 @@ async function loadFundamentals(env: Env, ticker: string) {
       total_assets: number | null; total_liabilities: number | null;
       long_term_debt: number | null; shareholders_equity: number | null;
       shares_diluted: number | null; goodwill_and_intangibles: number | null;
-      source: string | null; eps_source: string | null;
+      source: string | null; eps_source: string | null; readings: string | null;
     }>()
   ).results;
 
@@ -297,6 +328,7 @@ async function loadFundamentals(env: Env, ticker: string) {
     equity: y.shareholders_equity,
     sharesDiluted: y.shares_diluted,
     goodwillAndIntangibles: y.goodwill_and_intangibles,
+    readings: y.readings,
   }));
 
   return {
@@ -418,7 +450,7 @@ async function loadScreen(env: Env) {
     env.DB.prepare(
       `SELECT symbol, fiscal_year, period_end, revenue, net_income, eps_diluted,
               current_assets, current_liabilities, total_assets, total_liabilities,
-              long_term_debt, shareholders_equity, shares_diluted, goodwill_and_intangibles
+              long_term_debt, shareholders_equity, shares_diluted, goodwill_and_intangibles, readings
        FROM fundamentals_annual ORDER BY symbol, fiscal_year DESC`,
     ),
     env.DB.prepare("SELECT symbol, ex_date, amount FROM dividends"),
@@ -434,7 +466,7 @@ async function loadScreen(env: Env) {
     net_income: number | null; eps_diluted: number | null; current_assets: number | null;
     current_liabilities: number | null; total_assets: number | null; total_liabilities: number | null;
     long_term_debt: number | null; shareholders_equity: number | null; shares_diluted: number | null;
-    goodwill_and_intangibles: number | null;
+    goodwill_and_intangibles: number | null; readings: string | null;
   };
   const yearsBy = new Map<string, FundamentalsYear[]>();
   for (const y of fund.results as FRow[]) {
@@ -444,7 +476,7 @@ async function loadScreen(env: Env) {
       epsDiluted: y.eps_diluted, currentAssets: y.current_assets, currentLiabilities: y.current_liabilities,
       totalAssets: y.total_assets, totalLiabilities: y.total_liabilities, longTermDebt: y.long_term_debt,
       equity: y.shareholders_equity, sharesDiluted: y.shares_diluted,
-      goodwillAndIntangibles: y.goodwill_and_intangibles,
+      goodwillAndIntangibles: y.goodwill_and_intangibles, readings: y.readings,
     });
     yearsBy.set(y.symbol, list);
   }
@@ -1023,7 +1055,7 @@ ${PAGE_CSS}
   </div>
   <p class="source">${sourceLine}</p>
 
-  <p class="argue"><strong>Check the story.</strong> Every sentence above should rest on a numbered fact below; the small tags say which. Find one that doesn't — a number from nowhere, a claim the sheet can't support — and say so. That is tonight's exercise, and it is the habit for every story you will ever be told about a share.</p>
+  <p class="argue"><strong>Check the story.</strong> Every sentence above should rest on a numbered fact below; the small tags say which. Find one that doesn't — a number from nowhere, a claim the sheet can't support — and say so. That is tonight's exercise, and it is the habit for every story you will ever be told about a share.${g.unsupportedNumbers.length || g.unknownFacts.length ? ` <strong>A ⚠ under a paragraph is the toolkit's own catch:</strong> a figure that is on no fact, or a fact tag that does not exist. The paragraph is shown, not hidden — the catch is yours to confirm.` : ""} The toolkit refuses a story only for advice-shaped language; a wrong <em>word</em> it cannot see.</p>
 
   <h2>The fact sheet</h2>
   <ol class="facts">${facts}</ol>
@@ -1120,12 +1152,12 @@ function fundamentalsPage(
           : "Can it pay this year's bills? Current assets ÷ current liabilities.",
         chip: financial
           ? `<span class="chip na">not applied to financials</span>`
-          : verdict(r.currentRatio === null ? null : r.currentRatio >= 2, "Graham bar: ≥ 2"),
+          : verdict(r.raw.currentRatio === null ? null : r.raw.currentRatio >= 2, "Graham bar: ≥ 2"),
       },
       {
         k: "P/E (3-yr avg)", v: fmt(r.pe3),
         gloss: `Years of average recent earnings you pay for the share — Graham's basis. On the latest year alone: ${fmt(r.pe)}.`,
-        chip: verdict(r.pe3 === null ? null : r.pe3 <= 15, "Graham bar: ≤ 15"),
+        chip: verdict(r.raw.pe3 === null ? null : r.raw.pe3 <= 15, "Graham bar: ≤ 15"),
       },
       {
         k: "P/B", v: r.bookValuePerShare !== null && r.bookValuePerShare <= 0 ? "neg. book" : fmt(r.pb),
@@ -1134,14 +1166,14 @@ function fundamentalsPage(
           : "Price against the book value behind each share.",
         chip: r.bookValuePerShare !== null && r.bookValuePerShare <= 0
           ? verdict(false, "Graham bar: ≤ 1.5")
-          : verdict(r.pb === null ? null : r.pb <= 1.5, "Graham bar: ≤ 1.5"),
+          : verdict(r.raw.pb === null ? null : r.raw.pb <= 1.5, "Graham bar: ≤ 1.5"),
       },
       {
         k: "P/E × P/B", v: fmt(r.peTimesPb),
-        gloss: r.pb !== null && r.pb <= 1.5
+        gloss: r.raw.pb !== null && r.raw.pb <= 1.5
           ? "Graham's combined test, on the 3-year P/E. Only needed when P/B is above 1.5 — this company's P/B already meets his bar, so test 7 passes either way."
           : "Graham's combined test, on the 3-year P/E. Test 7 passes if P/B ≤ 1.5 OR this product ≤ 22.5.",
-        chip: verdict(r.peTimesPb === null ? null : r.peTimesPb <= 22.5, "Graham bar: ≤ 22.5"),
+        chip: verdict(r.raw.peTimesPb === null ? null : r.raw.peTimesPb <= 22.5, "Graham bar: ≤ 22.5"),
       },
     ];
     const cardHtml = cards
@@ -1165,7 +1197,7 @@ function fundamentalsPage(
 
     body = `
   <p class="figures">${close ? `Last close <span class="mono">${close.adj_close >= 100 ? close.adj_close.toFixed(0) : close.adj_close.toFixed(2)}</span> (${close.date})` : "No cached price yet"} · accounts to FY ${esc(r.asOfYear ?? "—")}${sources?.tier === "small" ? ` · <span class="tiertag">small-cap tier</span>` : ""}</p>
-  ${sources ? `<p class="sources"><b>Where these figures come from.</b> Prices: ${esc(sources.prices)}. Accounts: ${esc(sources.accounts)}. EPS: ${esc(sources.eps)}.</p>` : ""}
+  ${sources ? `<p class="sources"><b>Where these figures come from.</b> Prices: ${esc(sources.prices)}. Accounts: ${esc(sources.accounts)}. EPS: ${esc(sources.eps)}.${years[0]?.readings ? ` <b>Readings for FY ${esc(years[0].fiscalYear)}:</b> ${esc(years[0].readings)} — a pass that rests on a reading says so in the test's hover.` : ""}</p>` : ""}
   <div class="cards">${cardHtml}</div>
 
   <h2>Five years, four lines</h2>

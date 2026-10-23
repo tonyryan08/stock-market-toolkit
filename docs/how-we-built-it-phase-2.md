@@ -98,7 +98,7 @@ A class question went on the record the same week. *Why not just use Yahoo Finan
 
 - A verified universe of **38** companies with five years of prices *and* accounts, refreshed nightly by a robot with two alarms and two budgets it counts itself
 - **Two Graham screens**, a two-page checklist card generated from the same rules, and an "explain this stock" page for every company, written by an AI and checked by the toolkit
-- **90 tests** that must pass before anything ships; **15 decisions** in the log; verification records VC-12 to VC-15; one independent review, fourteen findings, all resolved on the record
+- **90 tests** that must pass before anything ships; **15 decisions** in the log; verification records VC-13 to VC-15; one independent review, fourteen findings, all resolved on the record
 - **Survivors found: 0. Candidates found: 0.** That is a result, not a failure, and the course would rather report it than fudge it
 - Running cost: **€0.00** for everything except the stories, at about **six hundredths of a cent each**: the first non-zero line in the project's ledger
 - On the record this phase: two design flaws of the AI's (found by the landlord's meters), two stale memories of the AI's (found by a filing and an error message), one slip of the tutor's (found by him, fixed within the hour), one wrong word in an AI story (found by reading it)
@@ -113,7 +113,17 @@ Phase 1's rhythm held: say what's wanted → a package with an expected result b
 
 **The machine started writing prose, and the room became the last check.** Weeks 4 and 5 produced numbers, which can be reconciled. Week 6 produces sentences, which can only be *read*. The toolkit catches invented numbers and advice; it cannot catch a wrong word or an invented reason, and it says so on the page. Nobody leaves their brain or autonomy at the door: not the machine's, and not the tutor's verification form either.
 
-Next: the small companies Graham actually meant, and then Phase 3, rules for *when*, now that Graham has given us rules for *what*.
+## Postscript — the small companies, and the second review (20–23 Oct)
+
+**The second data spine.** The small companies Graham actually meant were the ones the free plan would not serve, so they got their own supplier: as-traded prices and accounts from the ration-limited provider of week 2, the audited earnings-per-share figure from the SEC's own filings with the filing named on every row, and dividend adjustment done by the toolkit itself, because this provider's prices are not adjusted and a furniture maker's $3.00 special dividend had painted a 13% fall that never happened. The hand check reconciled that adjustment to the cent.
+
+**Three findings on the first night, all from the receipts.** The provider serves ten years of accounts and the code had kept them all, so a growth test that promised five years was quietly reading ten: Ethan Allen's earnings read as *up* 37% instead of *down* 56%. Its debt read as unknown because, since 2019, leased shops sit on the balance sheet as liabilities and the provider folds them into "debt"; Graham's debt is borrowed money, so the toolkit now subtracts the leases and prints that it did. And the robot never got past its first call, three nights running: the free tier is metered by sender address as well as by key, and Cloudflare's shared addresses are spent before midnight. The fix is not clever. The tutor runs the visit from his own computer, against the live database, once a day while the tier fills. A chore, not a robot; the record says so.
+
+**The second reader, again — and the thing the AI missed.** Before Phase 3 a second model was handed a cold copy of the repository, the brief, and the book. It wrote its own probes, broke the tests on purpose to see which ones noticed, and searched every commit. Twenty-seven findings; three it called *must*. The first was the project's own data key, sitting in the public verification record for twenty-two days inside a pasted provider message. The code had been given a scrubber on the day the record was written; the record had not been scrubbed; and the AI's own search, asked to confirm the repo was clean, had looked for the key in web addresses, not in prose. A free key, burned either way — redact and rotate, not debate; the lesson is that *the thing that checks must not be the thing that wrote*. The other two: small-cap dividends refreshed only with the accounts, every four hundred days, would have failed Graham's "some current dividend" for every payer from the following summer; and the checklist compared *rounded* figures with Graham's bars, so a share at 1.199 times tangible book, which Graham's "less than 120%" admits, displayed as 1.20 and failed. Everything the review recommended was built the same day, with the review's own probe cases turned into tests, and the review and its resolution are in the repository.
+
+**The archive's gate.** The project's archive refused a push that week: a key had been staged in a text file inside the project folder and committed locally. The archive's own scanner caught it; the key was rotated; the folder rule changed. Three key incidents in Phase 2 — one pasted into the wrong box, one in a staging file that the archive's scanner stopped at the gate, one in a pasted notice that a reviewer found — and every one caught by a meter, a reader or a machine that was not the author. That is the course's whole argument, applied to its own builders.
+
+Next: Phase 3, rules for *when*, now that Graham has given us rules for *what*.
 
 ---
 

@@ -39,6 +39,17 @@ describe("selectAnnualFacts", () => {
     expect(selectAnnualFacts(facts).map((f) => f.val)).toEqual([3]);
     expect(selectAnnualFacts(facts, "instant").map((f) => f.val)).toEqual([471461000]);
   });
+  it("a 270-day transition period (10-KT) is not a year — the 340–380-day window holds (review mutation M10)", () => {
+    const facts = [
+      K({ form: "10-KT", start: "2025-10-01", end: "2026-06-30", val: 1.1 }),   // 272 days
+      K({ form: "10-K", start: "2025-06-15", end: "2026-06-30", val: 1.2 }),    // 380 days — the edge, in
+      K({ form: "10-K", start: "2025-06-10", end: "2026-06-30", val: 1.3 }),    // 385 days — out
+      K({ form: "10-K", start: "2025-07-25", end: "2026-06-30", val: 1.4, filed: "2026-01-01" }),   // 340 days — the edge, in (older filing)
+    ];
+    expect(selectAnnualFacts(facts).map((f) => f.val)).toEqual([1.2]); // the newest-filed in-window copy for that end
+    expect(selectAnnualFacts([facts[0]])).toEqual([]);
+    expect(selectAnnualFacts([facts[3]]).map((f) => f.val)).toEqual([1.4]);
+  });
   it("factForEnd tolerates a few days of fiscal-calendar wobble, not more", () => {
     const sel = selectAnnualFacts([K({ start: "2025-01-05", end: "2026-01-03", val: 3 })]);
     expect(factForEnd(sel, "2025-12-31")?.val).toBe(3);
@@ -76,14 +87,29 @@ describe("edgarEpsForPeriods with a fake EDGAR", () => {
     });
     const r = await edgarEpsForPeriods("896156", ends, "stock-market-toolkit test@example.com", { fetchImpl });
     expect(r.fatal).toBeNull();
-    expect(r.calls).toBe(3);
+    expect(r.calls).toBe(5); // EPS, NetIncomeLoss (2 of 3 periods), ProfitLoss (404), NetIncomeLossAvailable… (404), shares
     expect(calls[0].ua).toBe("stock-market-toolkit test@example.com");
     expect(calls[0].url).toContain("/CIK0000896156/us-gaap/EarningsPerShareDiluted.json");
     expect(r.years.map((y) => y.eps)).toEqual([1.56, 2.01, 2.49]);
     expect(r.years[0].epsSource).toBe("edgar:EarningsPerShareDiluted 10-K filed 2026-09-03 accn 0001437749-26-029578");
     expect(r.years[0].netIncome).toBe(39883000);
     expect(r.years[0].sharesDiluted).toBe(25584000);
-    expect(r.years[2].netIncome).toBeNull(); // not every period has to be covered
+    expect(r.years[2].netIncome).toBeNull(); // no tag covered it — stays empty rather than guessed
+  });
+
+  it("tries the next net-income tag for the periods the first one left uncovered (review S5)", async () => {
+    const { fetchImpl } = route({
+      EarningsPerShareDiluted: concept("EarningsPerShareDiluted", "USD/shares", [K({}), K({ start: "2024-07-01", end: "2025-06-30", val: 2.01 }), K({ start: "2023-07-01", end: "2024-06-30", val: 2.49 })]),
+      NetIncomeLoss: concept("NetIncomeLoss", "USD", [K({ val: 39883000 })]),                                   // newest year only
+      ProfitLoss: concept("ProfitLoss", "USD", [K({ val: 39900000 }), K({ start: "2024-07-01", end: "2025-06-30", val: 51596000 }), K({ start: "2023-07-01", end: "2024-06-30", val: 63816000 })]),
+      WeightedAverageNumberOfDilutedSharesOutstanding: concept("W", "shares", [K({ val: 25584000 })]),
+    });
+    const r = await edgarEpsForPeriods("896156", ends, "ua", { fetchImpl });
+    expect(r.years.map((y) => [y.netIncome, y.netIncomeTag])).toEqual([
+      [39883000, "NetIncomeLoss"],   // the first tag keeps its period — NetIncomeLoss preferred
+      [51596000, "ProfitLoss"],      // the drifted tag fills the rest
+      [63816000, "ProfitLoss"],
+    ]);
   });
 
   it("falls back to net income ÷ diluted shares when the EPS tag is dimensioned away (Ford's case), and drifts to ProfitLoss", async () => {

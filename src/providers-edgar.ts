@@ -188,19 +188,22 @@ export async function edgarEpsForPeriods(
     if (out.years.every((y) => y.eps !== null)) break;
   }
 
-  // 2) Net income — always fetched once: the cross-check against the
-  //    provider's figure is the point of having a second source.
+  // 2) Net income — the cross-check against the provider's figure is the
+  //    point of having a second source. Tags drift within a filer, so each
+  //    tag is tried for the periods the earlier ones left uncovered (review
+  //    S5, 23 Oct 2026: stopping at the first tag with any hit left 2 of 5
+  //    years empty live). NetIncomeLoss comes first because ProfitLoss
+  //    includes non-controlling interests.
   for (const tag of NET_INCOME_TAGS) {
+    if (out.years.every((y) => y.netIncome !== null)) break;
     const facts = await pull(tag, "USD");
     if (out.fatal) return out;
     if (!facts) continue;
-    let hit = 0;
     for (const y of out.years) {
       if (y.netIncome !== null) continue;
       const f = factForEnd(facts, y.end);
-      if (f) { y.netIncome = f.val; y.netIncomeTag = tag; hit++; }
+      if (f) { y.netIncome = f.val; y.netIncomeTag = tag; }
     }
-    if (out.years.every((y) => y.netIncome !== null) || hit > 0) break;
   }
 
   // 3) Diluted shares — needed for the fallback EPS and useful on its own (book value per share).

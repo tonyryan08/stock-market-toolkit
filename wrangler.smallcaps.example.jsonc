@@ -7,9 +7,10 @@
   // Worker code locally, with this config: the database binding is REMOTE
   // (the live D1), the outbound calls leave from your PC with your key.
   //
-  // Make your copy: save this file as `_wrangler.smallcaps.jsonc` (drop
-  // ".example"), paste your database_id from wrangler.jsonc over the zeros,
-  // and leave it unticked in GitHub Desktop like the other `_` files.
+  // Make your copy: save this file as `_wrangler.smallcaps.jsonc` (leading
+  // underscore, no ".example"), paste your database_id from wrangler.jsonc
+  // over the zeros. `.gitignore` excludes `_*.jsonc`, so the copy never
+  // reaches the repo; this example (no underscore) is the committed template.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "stock-market-toolkit",
   "main": "src/index.ts",
@@ -19,7 +20,7 @@
     {
       "binding": "DB",
       "database_name": "stock-market-db",
-      "database_id": "c513da6e-1072-49e5-bc87-47be9c669111", // REPLACE: the id from your wrangler.jsonc
+      "database_id": "00000000-0000-0000-0000-000000000000", // REPLACE: the id from your wrangler.jsonc
       "migrations_dir": "migrations",
       "remote": true // the live database, from a local run (wrangler ≥ 4.37)
     }

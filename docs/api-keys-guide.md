@@ -1,6 +1,6 @@
 # API Keys, Step by Step — the fully explicit edition
 
-An API key is a long code that identifies *you* to a data service — an ID badge for software. This project needs two, both free, and each key ends up living in exactly **two places**: a local file on your machine (for `npm run dev`) and Cloudflare's credential vault (for the live site). Nowhere else, ever — not in the code, not on GitHub.
+An API key is a long code that identifies *you* to a data service — an ID badge for software. This project needs four secrets — two free data keys (Parts 1–5, written in week 2), a Claude API key and an EDGAR User-Agent (Part 6, added for weeks 6 and the small-cap tier) — and each ends up living in exactly **two places**: a local file on your machine (for `npm run dev`) and Cloudflare's credential vault (for the live site). Nowhere else, ever — not in the code, not on GitHub.
 
 Total time from nothing: **~15 minutes.** Every step has an expected result. If you see it, proceed; if not, jump to "If something goes sideways" at the bottom.
 
@@ -144,13 +144,42 @@ npm run deploy
 
 ---
 
+## Part 6 — The two later secrets: the Claude key and the EDGAR User-Agent (~10 min)
+
+Week 6's "explain this stock" page calls the Claude API; the small-cap tier calls SEC EDGAR. Both go in through the same two places as the data keys. The site runs without them (the explain page serves its plain version and says why; the tier simply has no EPS), so nothing breaks while you set them up.
+
+**6.1 The Claude key.** Create an account at console.anthropic.com, separate from any chat subscription, on **pre-paid credit with a spend limit** — the worst case is then bounded (a story costs hundredths of a cent; sixty a day is the toolkit's own cap). Create one API key, copy it once.
+
+**6.2 The EDGAR User-Agent.** Not a key: the SEC's fair-access policy asks every program to say who it is. The value is the project name, a space, and an email address you read — `stock-market-toolkit you@example.com`. It carries your address, so it stays out of the repo like a key.
+
+**6.3 Locally.** `notepad .dev.vars` and fill the two lines (the `.dev.vars.example` of v0.8.2 has them, with `SMALLCAP_AV_CALLS = "4"` underneath — keep that one):
+
+```
+ANTHROPIC_API_KEY = "sk-ant-…"
+EDGAR_USER_AGENT = "stock-market-toolkit you@example.com"
+```
+
+**6.4 Live — and the rule that two incidents taught.** `wrangler secret put` reads the value from the keyboard, invisibly, which is fine for a key you can paste. For a value with a space in it, or on a day the paste misbehaves, put the value in a text file and pipe it in — but that file must live **outside the project folder**, for example on the Desktop:
+
+```
+type C:\Users\you\Desktop\ua.txt | npx wrangler secret put EDGAR_USER_AGENT
+type C:\Users\you\Desktop\key.txt | npx wrangler secret put ANTHROPIC_API_KEY
+```
+
+then delete the files. Two slips in the record (K-1, K-2 in `docs/data-provider-checks.md`): a key pasted into the *name* prompt, so the vault listed it by name; and a `key.txt` left inside the project folder, committed locally, caught only by GitHub's push protection. `.gitignore` now refuses `key*.txt` and `ua.txt`, and the rule is the same as week 2's: a key that has been on a screen, in a commit, or in a notice you pasted into a document is no longer a key — rotate it.
+
+**6.5 Prove it.** `npx wrangler secret list` → four names: `ALPHAVANTAGE_API_KEY`, `FMP_API_KEY`, `ANTHROPIC_API_KEY`, `EDGAR_USER_AGENT`. `npm run deploy`. Open `/explain/NVDA` on the live site: the source line reads *Written by Claude (…) · fresh · N tokens in, M out*. The tier's EPS arrives with the next `npm run smallcaps` (the README's runbook).
+
+---
+
 ## The map: where the keys live
 
 | Place | Holds real keys? | How to check |
 |---|---|---|
-| Your safe note / password manager | **Yes — the master copy** | You put them there in Parts 1–2 |
+| Your safe note / password manager | **Yes — the master copy** | You put them there in Parts 1–2 and 6 |
 | `.dev.vars` (local machine only) | **Yes** — feeds `npm run dev` | `dir .dev.vars*` + open it |
-| Cloudflare secrets vault | **Yes** — feeds the live site | `npx wrangler secret list` (names only) |
+| Cloudflare secrets vault | **Yes** — feeds the live site | `npx wrangler secret list` (four names, never values) |
+| A staging file for `secret put` | **Briefly, outside the project folder only** | Delete it after the `put`; `.gitignore` refuses `key*.txt`/`ua.txt` inside the folder anyway |
 | `.dev.vars.example` | **Never** — placeholders only | Open it: `paste-yours-here` |
 | GitHub / anything committed | **Never** | Desktop's changes list never shows `.dev.vars` |
 

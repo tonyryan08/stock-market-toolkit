@@ -35,12 +35,18 @@ const LOCAL_TEST = process.env.SMALLCAP_VISIT_LOCAL === "1";
 const CONFIG = argOf("--config", LOCAL_TEST ? "wrangler.jsonc" : "_wrangler.smallcaps.jsonc");
 const WAIT_MINUTES = 14;
 const win = process.platform === "win32";
-const npx = win ? "npx.cmd" : "npx";
+// Wrangler is run through node directly: no shell, no cmd.exe quoting, no
+// npx.cmd (23 Oct 2026: the shell route mangled the receipt query on Windows).
+const WRANGLER = join(ROOT, "node_modules", "wrangler", "bin", "wrangler.js");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // --- preflight --------------------------------------------------------------
+if (!existsSync(WRANGLER)) {
+  console.error("node_modules/wrangler/bin/wrangler.js not found — run npm install first.");
+  process.exit(1);
+}
 if (!existsSync(join(ROOT, CONFIG))) {
-  console.error(`No ${CONFIG}. Save _wrangler.smallcaps.example.jsonc as ${CONFIG}, paste your database_id from wrangler.jsonc over the zeros, keep it unticked in Desktop.`);
+  console.error(`No ${CONFIG}. Save wrangler.smallcaps.example.jsonc as ${CONFIG}, paste your database_id from wrangler.jsonc over the zeros, keep it unticked in Desktop.`);
   process.exit(1);
 }
 let devVars = "";
@@ -60,7 +66,7 @@ const d1 = (sql) => {
   // The I-2 shape (7403) is transient: three attempts, then give up on this read.
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const out = execFileSync(npx, ["wrangler", "d1", "execute", "stock-market-db", LOCAL_TEST ? "--local" : "--remote", "--json", "--command", sql], { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], shell: win });
+      const out = execFileSync(process.execPath, [WRANGLER, "d1", "execute", "stock-market-db", LOCAL_TEST ? "--local" : "--remote", "--json", "--command", sql], { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
       const start = out.indexOf("[");
       return JSON.parse(out.slice(start))[0].results;
     } catch (err) {
@@ -73,8 +79,8 @@ const startedAt = new Date().toISOString();
 console.log(`Small-cap visit from this computer — ${CALLS} Alpha Vantage calls, 13 s apart (about ${Math.ceil((CALLS * 13) / 60) + 1} minutes). Started ${startedAt}.`);
 
 // --- 1) the local server, live database -------------------------------------
-const child = spawn(npx, ["wrangler", "dev", "-c", CONFIG, "--test-scheduled", "--port", String(PORT), "--var", `SMALLCAP_AV_CALLS:${CALLS}`], {
-  cwd: ROOT, shell: win, stdio: ["ignore", "pipe", "pipe"], detached: !win, // its own process group, so stop() takes workerd with it
+const child = spawn(process.execPath, [WRANGLER, "dev", "-c", CONFIG, "--test-scheduled", "--port", String(PORT), "--var", `SMALLCAP_AV_CALLS:${CALLS}`], {
+  cwd: ROOT, stdio: ["ignore", "pipe", "pipe"], detached: !win, // its own process group, so stop() takes workerd with it
 });
 let ready = false;
 let serverLog = "";
@@ -123,7 +129,7 @@ while (Date.now() < deadline) {
   await sleep(20_000);
   let rows = [];
   try {
-    rows = d1("SELECT run_at, detail FROM fetch_log WHERE outcome='run_summary' AND detail LIKE '%smallcaps%' ORDER BY id DESC LIMIT 1") ?? [];
+    rows = d1("SELECT run_at, detail FROM fetch_log WHERE outcome='run_summary' AND instr(detail, 'smallcaps') > 0 ORDER BY id DESC LIMIT 1") ?? [];
   } catch (err) {
     console.log(`(reading the receipt failed, will retry: ${String(err.message ?? err).split("\n")[0].slice(0, 120)})`);
     continue;

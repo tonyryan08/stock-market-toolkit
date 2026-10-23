@@ -25,6 +25,9 @@ export type FundamentalsYear = {
   /** Goodwill + intangibles (balance sheet). Optional: rows stored before
    *  migration 0004 carry null, and the defensive screen never needs it. */
   goodwillAndIntangibles?: number | null;
+  /** The toolkit's readings of a provider's "None" on this year's balance sheet
+   *  ("no debt line reported → long-term debt 0"), shown wherever a test rests on them (review S8). */
+  readings?: string | null;
 };
 
 export type Ratios = {
@@ -63,6 +66,15 @@ export type Ratios = {
    * Null when the early average isn't positive.
    */
   epsGrowthPct: number | null;
+  /** The same ratios UNROUNDED, for comparisons against Graham's bars (review F3:
+   *  the chips must agree with the screen, which compares unrounded). */
+  raw: {
+    currentRatio: number | null;
+    pe3: number | null;
+    pb: number | null;
+    peTimesPb: number | null;
+    pTangibleBook: number | null;
+  };
 };
 
 const ok = (v: number | null | undefined): v is number =>
@@ -111,19 +123,23 @@ export function computeRatios(
     recent3.length === 3 && recent3.every(ok)
       ? round((recent3 as number[]).reduce((a, b) => a + b, 0) / 3)
       : null;
-  const pe3 = ok(lastClose) && ok(epsAvg3) && epsAvg3 > 0 ? round(lastClose / epsAvg3, 1) : null;
+  const epsAvg3Raw = recent3.length === 3 && recent3.every(ok) ? (recent3 as number[]).reduce((a, b) => a + b, 0) / 3 : null;
+  const pe3Raw = ok(lastClose) && epsAvg3Raw !== null && epsAvg3Raw > 0 ? lastClose / epsAvg3Raw : null;
+  const pe3 = pe3Raw === null ? null : round(pe3Raw, 1);
 
-  const pb =
-    ok(lastClose) && ok(bookValuePerShare) && bookValuePerShare! > 0
-      ? round(lastClose / bookValuePerShare!, 1)
-      : null;
+  const bvpsRaw = latest && ok(latest.equity) && ok(latest.sharesDiluted) && latest.sharesDiluted > 0 ? latest.equity / latest.sharesDiluted : null;
+  const pbRaw = ok(lastClose) && bvpsRaw !== null && bvpsRaw > 0 ? lastClose / bvpsRaw : null;
+  const pb = pbRaw === null ? null : round(pbRaw, 1);
 
-  const peTimesPb = ok(pe3) && ok(pb) ? round(pe3! * pb!, 1) : null;
+  const peTimesPbRaw = pe3Raw !== null && pbRaw !== null ? pe3Raw * pbRaw : null;
+  const peTimesPb = peTimesPbRaw === null ? null : round(peTimesPbRaw, 1);
 
-  const pTangibleBook =
-    ok(lastClose) && ok(tangibleBookPerShare) && tangibleBookPerShare! > 0
-      ? round(lastClose / tangibleBookPerShare!, 2)
-      : null;
+  const tbvpsRaw = latest && ok(latest.equity) && ok(latest.goodwillAndIntangibles) && ok(latest.sharesDiluted) && latest.sharesDiluted > 0
+    ? (latest.equity - latest.goodwillAndIntangibles!) / latest.sharesDiluted : null;
+  const pTangibleBookRaw = ok(lastClose) && tbvpsRaw !== null && tbvpsRaw > 0 ? lastClose / tbvpsRaw : null;
+  const pTangibleBook = pTangibleBookRaw === null ? null : round(pTangibleBookRaw, 2);
+  const crRaw = latest && ok(latest.currentAssets) && ok(latest.currentLiabilities) && latest.currentLiabilities > 0
+    ? latest.currentAssets / latest.currentLiabilities : null;
 
   const epsSeries = years.map((y) => y.epsDiluted).filter(ok);
   const epsPositiveYears = epsSeries.filter((e) => e > 0).length;
@@ -152,6 +168,7 @@ export function computeRatios(
     epsYearsAvailable: epsSeries.length,
     epsPositiveYears,
     epsGrowthPct,
+    raw: { currentRatio: crRaw, pe3: pe3Raw, pb: pbRaw, peTimesPb: peTimesPbRaw, pTangibleBook: pTangibleBookRaw },
   };
 }
 

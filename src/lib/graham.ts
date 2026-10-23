@@ -241,30 +241,47 @@ export function screenCompany(input: ScreenInput): ScreenResult {
   // --- figures ---
   const revenue = latest && ok(latest.revenue) ? latest.revenue : null;
 
+  // Every test compares the UNROUNDED ratio (review F3, 23 Oct 2026: comparing
+  // the 1-dp display figure let 15.04× pass "not more than 15" and made 1.199×
+  // tangible book fail "less than 120%"). The rounded figures are for display.
   const ca = latest?.currentAssets, cl = latest?.currentLiabilities;
-  const currentRatio = ok(ca) && ok(cl) && cl > 0 ? r2(ca / cl) : null;
+  const crRaw = ok(ca) && ok(cl) && cl > 0 ? ca / cl : null;
+  const currentRatio = crRaw === null ? null : r2(crRaw);
   const wc = ok(ca) && ok(cl) ? ca - cl : null;
   const ltd = latest && ok(latest.longTermDebt) ? latest.longTermDebt : null;
-  const ltDebtToWc = ok(wc) && ok(ltd) ? (wc > 0 ? r2(ltd / wc) : ltd > 0 ? Infinity : 0) : null;
+  const dwRaw = ok(wc) && ok(ltd) ? (wc > 0 ? ltd / wc : ltd > 0 ? Infinity : 0) : null;
+  const ltDebtToWc = dwRaw === null ? null : Number.isFinite(dwRaw) ? r2(dwRaw) : dwRaw;
 
   const eps = years.map((y) => y.epsDiluted).filter(ok);
   const positiveEpsYears = eps.filter((e) => e > 0).length;
 
   const recent3 = years.slice(0, 3).map((y) => y.epsDiluted);
-  const epsAvg3 = recent3.length === 3 && recent3.every(ok) ? r2((recent3 as number[]).reduce((a, b) => a + b, 0) / 3) : null;
-  const pe3 = ok(lastClose) && ok(epsAvg3) && epsAvg3 > 0 ? r1(lastClose / epsAvg3) : null;
+  const epsAvg3Raw = recent3.length === 3 && recent3.every(ok) ? (recent3 as number[]).reduce((a, b) => a + b, 0) / 3 : null;
+  const epsAvg3 = epsAvg3Raw === null ? null : r2(epsAvg3Raw);
+  const pe3Raw = ok(lastClose) && epsAvg3Raw !== null && epsAvg3Raw > 0 ? lastClose / epsAvg3Raw : null;
+  const pe3 = pe3Raw === null ? null : r1(pe3Raw);
 
   const bvps = latest && ok(latest.equity) && ok(latest.sharesDiluted) && latest.sharesDiluted > 0
     ? latest.equity / latest.sharesDiluted : null;
-  const pb = ok(lastClose) && ok(bvps) && bvps > 0 ? r1(lastClose / bvps) : null;
-  const peTimesPb = ok(pe3) && ok(pb) ? r1(pe3 * pb) : null;
+  const pbRaw = ok(lastClose) && ok(bvps) && bvps > 0 ? lastClose / bvps : null;
+  const pb = pbRaw === null ? null : r1(pbRaw);
+  const peTimesPbRaw = pe3Raw !== null && pbRaw !== null ? pe3Raw * pbRaw : null;
+  const peTimesPb = peTimesPbRaw === null ? null : r1(peTimesPbRaw);
 
-  let epsGrowthPct: number | null = null;
+  let growthRaw: number | null = null;
+  // The pairs are named in the detail (review N4, 23 Oct 2026): with four
+  // EPS years the span is two years, not three, and a missing middle year
+  // compacts the series — the row says which fiscal years it compared.
+  const epsYears = years.filter((y) => ok(y.epsDiluted));
+  const growthSpan = epsYears.length >= 4
+    ? `FY${epsYears[epsYears.length - 1].fiscalYear}–${epsYears[epsYears.length - 2].fiscalYear} average to FY${epsYears[1].fiscalYear}–${epsYears[0].fiscalYear} average${epsYears.length === 4 ? " (four years held: a two-year span against the three-year hurdle)" : ""}`
+    : "";
   if (eps.length >= 4) {
     const late = (eps[0] + eps[1]) / 2;
     const early = (eps[eps.length - 1] + eps[eps.length - 2]) / 2;
-    if (early > 0) epsGrowthPct = r1(((late - early) / early) * 100);
+    if (early > 0) growthRaw = ((late - early) / early) * 100;
   }
+  const epsGrowthPct = growthRaw === null ? null : r1(growthRaw);
 
   const dividendYears = consecutiveDividendYears(input.dividendsPerYear, input.currentYear, input.exDates, input.today);
 
@@ -281,10 +298,10 @@ export function screenCompany(input: ScreenInput): ScreenResult {
   } else if (currentRatio === null || ltDebtToWc === null) {
     add("condition", "na", "Current assets/liabilities or long-term debt not reported.");
   } else {
-    const crOk = currentRatio >= T.minCurrentRatio;
-    const dOk = ltDebtToWc <= T.maxLtDebtToWc;
+    const crOk = crRaw! >= T.minCurrentRatio;
+    const dOk = dwRaw! <= T.maxLtDebtToWc;
     const dTxt = Number.isFinite(ltDebtToWc) ? `${ltDebtToWc}× working capital` : "debt with no working-capital cushion";
-    add("condition", crOk && dOk ? "pass" : "fail", `Current ratio ${currentRatio}; long-term debt ${dTxt}.`);
+    add("condition", crOk && dOk ? "pass" : "fail", `Current ratio ${currentRatio}; long-term debt ${dTxt}.${readingNote(latest, /debt/i)}`);
   }
 
   add("stability", eps.length < T.earningsYears ? "na" : positiveEpsYears === eps.length ? "pass" : "fail",
@@ -295,12 +312,12 @@ export function screenCompany(input: ScreenInput): ScreenResult {
       ? (input.exDates?.length ? "No dividend in the last 15 months." : "No dividend in the record.")
       : `${dividendYears} consecutive years paid${input.exDates?.length ? ", no gap over 15 months" : ""}.`);
 
-  add("growth", epsGrowthPct === null ? (eps.length < 4 ? "na" : "fail") : epsGrowthPct >= requiredGrowthPct ? "pass" : "fail",
+  add("growth", growthRaw === null ? (eps.length < 4 ? "na" : "fail") : growthRaw >= requiredGrowthPct ? "pass" : "fail",
     epsGrowthPct === null
       ? eps.length < 4 ? "Not enough years." : "Early years weren't profitable — no growth base."
-      : `EPS ${epsGrowthPct >= 0 ? "+" : ""}${epsGrowthPct}% across the window (need +${requiredGrowthPct}%).`);
+      : `EPS ${epsGrowthPct >= 0 ? "+" : ""}${epsGrowthPct}% from the ${growthSpan} (need +${requiredGrowthPct}%).`);
 
-  add("pe", !ok(lastClose) || epsAvg3 === null ? "na" : pe3 === null ? "fail" : pe3 <= T.maxPe ? "pass" : "fail",
+  add("pe", !ok(lastClose) || epsAvg3 === null ? "na" : pe3Raw === null ? "fail" : pe3Raw <= T.maxPe ? "pass" : "fail",
     !ok(lastClose) || epsAvg3 === null ? "Price or 3-year EPS missing."
       : pe3 === null ? "3-year average earnings not positive — no meaningful P/E." : `P/E on 3-yr EPS ${pe3}.`);
 
@@ -310,7 +327,7 @@ export function screenCompany(input: ScreenInput): ScreenResult {
   } else if (pb === null) {
     add("price_assets", "na", "Book value or price not reported.");
   } else {
-    const pass = pb <= T.maxPb || (peTimesPb !== null && peTimesPb <= T.maxPeTimesPb);
+    const pass = pbRaw! <= T.maxPb || (peTimesPbRaw !== null && peTimesPbRaw <= T.maxPeTimesPb);
     add("price_assets", pass ? "pass" : "fail",
       `P/B ${pb}${peTimesPb !== null ? `; P/E × P/B ${peTimesPb}` : ""}.`);
   }
@@ -402,7 +419,7 @@ export const ENTERPRISING: EnterprisingCriterion[] = [
   {
     id: "e_condition", n: 2, short: "Strength", title: "Financial condition",
     graham: "Current assets at least 1½ times current liabilities, and debt not more than 110% of net current assets (for industrial companies).",
-    ours: `Current ratio ≥ ${E.minCurrentRatio} AND long-term debt ≤ ${Math.round(E.maxDebtToWc * 100)}% of working capital. Skipped for financial companies — Graham's parenthesis.`,
+    ours: `Current ratio ≥ ${E.minCurrentRatio} AND long-term debt ≤ ${Math.round(E.maxDebtToWc * 100)}% of working capital. Skipped for financial companies — Graham's parenthesis "(for industrial companies)" (p. 385) and his rule that only the price tests apply to financials (ch. 14, p. 361).`,
     why: "The defensive bars (2× and 100%), relaxed: a cushion, not a fortress.",
     adapted: false,
   },
@@ -456,6 +473,12 @@ export type EnterprisingResult = {
   };
 };
 
+/** A test that rests on the toolkit's reading of a provider's "None" says so (review S8). */
+const readingNote = (latest: FundamentalsYear | null, about: RegExp): string => {
+  const r = latest?.readings?.split("; ").filter((x) => about.test(x)) ?? [];
+  return r.length ? ` Reading: ${r.join("; ")}.` : "";
+};
+
 const daysBetween = (a: string, b: string) =>
   Math.round((Date.parse(a + "T00:00:00Z") - Date.parse(b + "T00:00:00Z")) / 86_400_000);
 
@@ -465,14 +488,18 @@ export function screenEnterprising(input: ScreenInput): EnterprisingResult {
   const today = input.today ?? new Date().toISOString().slice(0, 10);
 
   // --- figures ---
+  // Unrounded comparisons, rounded display (review F3) — as in screenCompany.
   const epsLatest = latest && ok(latest.epsDiluted) ? latest.epsDiluted : null;
-  const pe = ok(lastClose) && ok(epsLatest) && epsLatest > 0 ? r1(lastClose / epsLatest) : null;
+  const peRaw = ok(lastClose) && ok(epsLatest) && epsLatest > 0 ? lastClose / epsLatest : null;
+  const pe = peRaw === null ? null : r1(peRaw);
 
   const ca = latest?.currentAssets, cl = latest?.currentLiabilities;
-  const currentRatio = ok(ca) && ok(cl) && cl > 0 ? r2(ca / cl) : null;
+  const crRaw = ok(ca) && ok(cl) && cl > 0 ? ca / cl : null;
+  const currentRatio = crRaw === null ? null : r2(crRaw);
   const wc = ok(ca) && ok(cl) ? ca - cl : null;
   const ltd = latest && ok(latest.longTermDebt) ? latest.longTermDebt : null;
-  const ltDebtToWc = ok(wc) && ok(ltd) ? (wc > 0 ? r2(ltd / wc) : ltd > 0 ? Infinity : 0) : null;
+  const dwRaw = ok(wc) && ok(ltd) ? (wc > 0 ? ltd / wc : ltd > 0 ? Infinity : 0) : null;
+  const ltDebtToWc = dwRaw === null ? null : Number.isFinite(dwRaw) ? r2(dwRaw) : dwRaw;
 
   const eps = years.map((y) => y.epsDiluted).filter(ok);
   const positiveEpsYears = eps.filter((e) => e > 0).length;
@@ -483,7 +510,8 @@ export function screenEnterprising(input: ScreenInput): EnterprisingResult {
 
   const tbvps = latest && ok(latest.equity) && ok(latest.goodwillAndIntangibles) && ok(latest.sharesDiluted) && latest.sharesDiluted > 0
     ? (latest.equity - latest.goodwillAndIntangibles) / latest.sharesDiluted : null;
-  const pTangibleBook = ok(lastClose) && ok(tbvps) && tbvps > 0 ? r2(lastClose / tbvps) : null;
+  const pTangibleBookRaw = ok(lastClose) && ok(tbvps) && tbvps > 0 ? lastClose / tbvps : null;
+  const pTangibleBook = pTangibleBookRaw === null ? null : r2(pTangibleBookRaw);
 
   // --- the six requirements ---
   const res: CriterionResult<EnterprisingId>[] = [];
@@ -494,7 +522,7 @@ export function screenEnterprising(input: ScreenInput): EnterprisingResult {
   } else if (epsLatest <= 0) {
     add("multiplier", "fail", `Latest EPS ${r2(epsLatest)} — a deficit year has no multiplier to be low.`);
   } else {
-    add("multiplier", pe !== null && pe <= E.maxPe ? "pass" : "fail", `P/E on the latest year ${pe}.`);
+    add("multiplier", peRaw !== null && peRaw <= E.maxPe ? "pass" : "fail", `P/E on the latest year ${pe}.`);
   }
 
   if (input.sector === "Financial Services") {
@@ -503,10 +531,10 @@ export function screenEnterprising(input: ScreenInput): EnterprisingResult {
   } else if (currentRatio === null || ltDebtToWc === null) {
     add("e_condition", "na", "Current assets/liabilities or long-term debt not reported.");
   } else {
-    const crOk = currentRatio >= E.minCurrentRatio;
-    const dOk = ltDebtToWc <= E.maxDebtToWc;
+    const crOk = crRaw! >= E.minCurrentRatio;
+    const dOk = dwRaw! <= E.maxDebtToWc;
     const dTxt = Number.isFinite(ltDebtToWc) ? `${Math.round(ltDebtToWc * 100)}% of working capital` : "debt with no working-capital cushion";
-    add("e_condition", crOk && dOk ? "pass" : "fail", `Current ratio ${currentRatio}; long-term debt ${dTxt}.`);
+    add("e_condition", crOk && dOk ? "pass" : "fail", `Current ratio ${currentRatio}; long-term debt ${dTxt}.${readingNote(latest, /debt/i)}`);
   }
 
   add("e_stability", eps.length < E.earningsYears ? "na" : positiveEpsYears === eps.length ? "pass" : "fail",
@@ -537,8 +565,8 @@ export function screenEnterprising(input: ScreenInput): EnterprisingResult {
   } else if (pTangibleBook === null) {
     add("e_tangible", "na", "Price missing.");
   } else {
-    add("e_tangible", pTangibleBook < E.maxPTangibleBook ? "pass" : "fail",
-      `Price ${pTangibleBook}× tangible book (${r2(tbvps)} per share).`);
+    add("e_tangible", pTangibleBookRaw! < E.maxPTangibleBook ? "pass" : "fail",
+      `Price ${pTangibleBook}× tangible book (${r2(tbvps)} per share).${readingNote(latest, /goodwill/i)}`);
   }
 
   const { passes, applicable, fails, verdict } = tally(res, "candidate");

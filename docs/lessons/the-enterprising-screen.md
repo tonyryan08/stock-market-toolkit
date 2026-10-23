@@ -12,7 +12,7 @@
 | 2 | Current ratio ≥ 1.5; debt ≤ 110% of working capital | ≥ 2; ≤ 100% | relaxed |
 | 3 | No deficit in 5 years | Earnings in each of 10 years | relaxed |
 | 4 | Some current dividend | 20 years uninterrupted | relaxed |
-| 5 | Latest EPS above five years ago | +⅓ over ten years | relaxed |
+| 5 | Latest EPS above four fiscal years earlier (the oldest of the five years held — Graham's 1970 v 1966) | +⅓ over ten years | relaxed |
 | 6 | Price < 120% of **net tangible** assets | P/B ≤ 1.5 (or P/E × P/B ≤ 22.5) | **stricter**: goodwill doesn't count |
 | — | **No size test** (p. 386) | Sales ≥ $100m (1971) | removed |
 

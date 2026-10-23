@@ -4,11 +4,11 @@
  * dividends + income + balance); never-visited companies first.
  */
 import { describe, it, expect } from "vitest";
-import { planNight, AV_CALLS_PER_NIGHT, ACCOUNTS_REFRESH_DAYS, type SmallTicker } from "./smallcaps";
+import { planNight, AV_CALLS_PER_NIGHT, ACCOUNTS_REFRESH_DAYS, DIVIDEND_REFRESH_DAYS, type SmallTicker } from "./smallcaps";
 
 const now = new Date("2026-10-20T23:10:00Z");
 const t = (symbol: string, over: Partial<SmallTicker> = {}): SmallTicker =>
-  ({ symbol, cik: "0000896156", last_price_fetch: null, fundamentals_as_of: null, fundamentals_status: null, ...over });
+  ({ symbol, cik: "0000896156", last_price_fetch: null, fundamentals_as_of: null, fundamentals_status: null, dividends_as_of: over.fundamentals_as_of ?? null, ...over });
 
 describe("planNight", () => {
   it("a fresh tier: 20 calls buy 5 full visits, alphabetical among the never-visited", () => {
@@ -56,6 +56,23 @@ describe("planNight", () => {
     const p = planNight(tier, 20, now);
     expect(p.visits.map((v) => v.symbol)).toEqual(["B"]);
     expect(p.skippedBlocked).toBe(1);
+  });
+  it("the dividend record has its own cadence: 100 days old → one extra call, without the accounts (review F2)", () => {
+    const old = new Date(now.getTime() - (DIVIDEND_REFRESH_DAYS + 1) * 86_400_000).toISOString();
+    const recent = new Date(now.getTime() - 30 * 86_400_000).toISOString();
+    const tier = [
+      t("A", { last_price_fetch: "2026-10-18T23:10:00Z", fundamentals_as_of: "2026-10-01T23:10:00Z", fundamentals_status: "ok", dividends_as_of: old }),
+      t("B", { last_price_fetch: "2026-10-18T23:10:00Z", fundamentals_as_of: "2026-10-01T23:10:00Z", fundamentals_status: "ok", dividends_as_of: recent }),
+      t("C", { last_price_fetch: "2026-10-18T23:10:00Z", fundamentals_as_of: "2026-10-01T23:10:00Z", fundamentals_status: "ok", dividends_as_of: null }),
+    ];
+    const p = planNight(tier, 20, now);
+    expect(p.visits.map((v) => [v.symbol, v.dividends, v.accounts, v.cost])).toEqual([["A", true, false, 2], ["B", false, false, 1], ["C", true, false, 2]]);
+  });
+  it("an accounts visit always carries the dividends; eps_missing does not re-fetch the accounts", () => {
+    const tier = [t("A"), t("B", { last_price_fetch: "2026-10-18T23:10:00Z", fundamentals_as_of: "2026-10-18T23:10:00Z", fundamentals_status: "eps_missing" })];
+    const p = planNight(tier, 20, now);
+    expect(p.visits[0]).toEqual({ symbol: "A", accounts: true, dividends: true, cost: 4 });
+    expect(p.visits[1]).toEqual({ symbol: "B", accounts: false, dividends: false, cost: 1 });
   });
   it("a zero budget plans nothing", () => {
     expect(planNight([t("A")], 0, now).visits).toEqual([]);

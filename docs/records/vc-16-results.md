@@ -16,9 +16,9 @@ Executed by:  Tony Ryan        Date:                      wrangler:
 **Expected:** one line per symbol; `✓ ETD    CIK 0000896156  Ethan Allen Interiors Inc   Household Furniture` (sector is EDGAR's SIC description, title-cased); a closing line "N of 52 found on EDGAR". Any `✗` names a symbol not on EDGAR's ticker map — record it; it is not seeded.
 
 ```
-> N of 52 found:                           ✗ symbols, if any:
-> ETD line as printed:
-> Result (PASS / FAIL / NOTE):
+> N of 52 found: 48 of 52 found on EDGAR      ✗ symbols, if any: RYI    not on EDGAR's ticker map, ZEUS   not on EDGAR's ticker map
+> ETD line as printed:✓ ETD    CIK 0000896156  Ethan Allen Interiors Inc          Wood Household Furniture, (no Upholstered)
+> Result (PASS / FAIL / NOTE): Pass
 ```
 
 ## VC-16b — the first visit, local (4 Alpha Vantage calls)
@@ -28,10 +28,10 @@ Executed by:  Tony Ryan        Date:                      wrangler:
 **Expected rows (newest first):** `run_summary` with `"phase":"smallcaps"`, `"avCalls":4`, `"edgarCalls":3` or 4 · `ETD fund_ok` with `dividends N (+N new) · income 5y+balance · edgar: eps 5/5 (EarningsPerShareDiluted) · net income agrees 5/5 · balance readings: no debt line reported → long-term debt 0` · `ETD ok` with `av compact ~100 days … as traded; N days dividend-adjusted by the toolkit`. If EDGAR answered 403 locally, `edgar failed: HTTP 403` → the User-Agent has no email in it; fix `.dev.vars`, reset ETD (`UPDATE tickers SET fundamentals_as_of=NULL, last_price_fetch=NULL WHERE symbol='ETD'`) and ring again tomorrow (ration).
 
 ```
-> run_summary avCalls / edgarCalls:
-> fund_ok detail (paste):
-> ok detail (paste):
-> Result (PASS / FAIL / NOTE):
+> run_summary avCalls / edgarCalls: run_summary │ 100          │ {"phase":"smallcaps","tickers":1,"planned":1,"withAccounts":1,"skippedFresh":0,"skippedBlocked":0,"avCalls":4,"edgarCalls":3,"fetches":7,"inserts":100,"outcomes":{"ok":1,"fund_ok":1},"ms":41741}
+> fund_ok detail (paste):  fund_ok     │ 10           │ dividends 80 (+80 new) · income 10y+balance · edgar: eps 10/10 (EarningsPerShareDiluted) · net income agrees 8/8
+> ok detail (paste): ok          │ 100          │ av compact 100 days 2026-06-01→2026-10-21, as traded; 66 days dividend-adjusted by the toolkit
+> Result (PASS / FAIL / NOTE):Pass
 ```
 
 ## VC-16c — the books page: the Worker's figures against the 10-K
@@ -49,9 +49,31 @@ Executed by:  Tony Ryan        Date:                      wrangler:
 Cards: **current ratio 2.06** (305,453 ÷ 148,364); P/B about close ÷ 18.43; the P/E card's "latest year alone" = close ÷ 1.56.
 
 ```
-> EPS row as shown (FY2022→FY2026):
-> Sources line names the 10-K filed 2026-09-03?            Current ratio:
-> Anything that does not match (line, value shown, value expected):
+> EPS row as shown (FY2022→FY2026): EPS (diluted)	1.29	1.32	0.96	0.34	2.37	4.05	4.13	2.49	2.01	1.56
+> Sources line names the 10-K filed 2026-09-03?            Current ratio:2.06
+> Anything that does not match (line, value shown, value expected):{
+  "ticker": "ETD",
+  "name": "Ethan Allen Interiors Inc",
+  "last_close": {
+    "date": "2026-10-21",
+    "adj_close": 19.78
+  },
+  "years": [
+    {
+      "fiscalYear": "2026",
+      "periodEnd": "2026-06-30",
+      "revenue": 579487000,
+      "netIncome": 39883000,
+      "epsDiluted": 1.56,
+      "currentAssets": 305453000,
+      "currentLiabilities": 148364000,
+      "totalAssets": 719673000,
+      "totalLiabilities": 248212000,
+      "longTermDebt": null,
+      "equity": 471461000,
+      "sharesDiluted": 25584000,
+      "goodwillAndIntangibles": 45128000
+    },
 > Result (PASS / FAIL / NOTE):
 ```
 
@@ -63,11 +85,22 @@ Cards: **current ratio 2.06** (305,453 ÷ 148,364); P/B about close ÷ 18.43; th
 **Expected:** `close` (as traded) drops by about $3 on the ex-date; `adj_close` does not — the day before and the ex-date sit within pennies of each other; every `adj_close` before the ex-date = `close × (1 − 3.00 ÷ the close on the last day before it)`, which you can check on a calculator for one row. On `http://localhost:8787/prices/ETD` the caption reads *as traded (Alpha Vantage), dividend-adjusted by the toolkit; not adjusted for splits*, and the chart shows no cliff where VC-14a's data had one. The newest row has `close = adj_close` (nothing after it to adjust for).
 
 ```
-> Special's ex-date and amount:2026-09-03
-> Day before: close / adj_close:  23.41/20..67831          Ex-date: close / adj_close:
-> One row checked by calculator (date, close, factor, adj_close): 
+> Special's ex-date and amount:
+> Day before: close / adj_close:            Ex-date: close / adj_close:
+> One row checked by calculator (date, close, factor, adj_close):
 > Chart caption as shown:
-> Result (PASS / FAIL / NOTE): fail./onlydateand date, adl__close isplayed 
+> Result (PASS / FAIL / NOTE): FAIL - error givem "C:\Dev\stock-market-toolkit>npx wrangler d1 execute stock-market-db --local --command "SELECT date, close, adj_close FROM daily_prices WHERE symbol='ETD' AND date BETWEEN date('<EX-DATE>','-7 days') AND date('<EX-DATE>','+2 days') ORDER BY date"`
+
+ ⛅️ wrangler 4.122.0 (update available 4.151.3)
+───────────────────────────────────────────────
+Resource location: local
+
+Use --remote if you want to access the remote instance.
+
+🌀 Executing on local database stock-market-db (<database_id>) from .wrangler\state\v3\d1:
+🌀 To execute on your remote database, add a --remote flag to your wrangler command.
+
+X [ERROR] unrecognized token: "`" at offset 157: SQLITE_ERROR"
 ```
 
 ## VC-16e — the enterprising screen scores it
@@ -76,9 +109,9 @@ Cards: **current ratio 2.06** (305,453 ÷ 148,364); P/B about close ÷ 18.43; th
 **Expected:** ETD with a small `s` marker (hover: the tier's sources). Test 1 (P/E ≤ 9) **fails** — the hover shows close ÷ 1.56. Test 2 (strength) **passes** — CR 2.06, long-term debt 0. Test 3 **passes** (five positive years). Test 4 **passes** (ex-date within a year). Test 5 (growth) **fails** — 1.56 now vs the EPS four years earlier. Test 6 (price < 1.2 × tangible book): tangible book per share = (471,461 − 45,128) ÷ 25,584 = **$16.66**, so the test passes **at or below $19.99** — whichever side of that the close is, the hover shows the arithmetic. On `/screen`: size fails (revenue $579m against $800m); the rest as above.
 
 ```
-> Row as shown (marks 1–6, score, verdict):
-> Hover on test 6 (the numbers shown):
-> Result (PASS / FAIL / NOTE):
+> Row as shown (marks 1–6, score, verdict): mostly correct Test 2 give a ?
+> Hover on test 6 (the numbers shown): Test 6 has different numbers 1.19X tangible book
+> Result (PASS / FAIL / NOTE):FAIL
 ```
 
 ## VC-16f — explain this stock, small-cap edition
@@ -87,8 +120,8 @@ Cards: **current ratio 2.06** (305,453 ÷ 148,364); P/B about close ÷ 18.43; th
 **Expected:** both chips; the story (AI if `.dev.vars` has the key, plain otherwise); kinds include **Below the defensive size floor**; fact F7 reads *long-term debt $0m*; F5 lists the five EPS figures above.
 
 ```
-> Kinds listed:  F1 to F20, B1,B2                            F5 as shown:Diluted EPS by year: FY2017 1.29, FY2018 1.32, FY2019 0.96, FY2020 0.34, FY2021 2.37, FY2022 4.05, FY2023 4.13, FY2024 2.49, FY2025 2.01, FY2026 1.56.
-> Result (PASS / FAIL / NOTE):Pass
+> Kinds listed:                              F5 as shown:
+> Result (PASS / FAIL / NOTE): FAIL Test "The plain version — the course's own sentences, assembled from the sheet. Why: the AI call failed (HTTP 401 authentication_error invalid x-api-key); the plain version is shown."
 ```
 
 ## VC-16g — the first live run (next morning)

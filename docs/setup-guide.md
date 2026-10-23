@@ -6,7 +6,7 @@
 
 No prior web-development knowledge assumed. Every step has an expected result — if you see it, proceed; if you don't, jump to the troubleshooting table at the bottom.
 
-Honest time estimate: **~45 minutes** from a bare machine, including account creation. Parts 0–D happen **once, ever**. After that the weekly rhythm is Part E, which takes a minute.
+Honest time estimate: **~45 minutes** from a bare machine, including account creation, plus the data setup in the README's Quickstart (the universe probe, the database, the migrations, the two seeds) and the four secrets (`docs/api-keys-guide.md`). Parts 0–D happen **once, ever**. After that the weekly rhythm is Part E; the operating detail — alarms, rations, the doorbell, the small-cap visit, reading a receipt, resets — is the README's **Runbook**.
 
 Instructions show Windows; where the Mac differs, it's flagged inline.
 
@@ -225,11 +225,11 @@ You will never deploy by hand again. From now on, **pushing is deploying**.
 
 This is the whole loop from here to week 12. Two verbs, two meanings: **push = backup** (the record), **deploy = release** (the live site).
 
-1. Build the week's feature (this is where Claude Code earns its keep).
-2. `npm run dev` → check it locally at localhost:8787.
-3. Tick the hand-verification boxes in `BUILD-LOG.md`.
-4. GitHub Desktop: review the diff → commit → **Push origin**. *(The backup.)*
-5. `npm run deploy` → refresh the live URL. *(The release.)*
+1. Build the week's feature (this is where Claude Code earns its keep). A shipment arrives as a zip extracted over the project folder; its `_SHIPMENT-NOTES-*` / `_PATCH-NOTES-*` file is the apply sheet and is **never committed** (`.gitignore` excludes `_*.md`) — its record pastes go into `BUILD-LOG.md`, the decision log and the verification record *before* the commit, not after (decision #16: the Phase 2 review found six weeks of pastes unapplied).
+2. `npm test` (149 at v0.8.2), then `npm run dev` → check it locally at localhost:8787. A new migration: `npx wrangler d1 migrations apply stock-market-db --local`, then `--remote` before the deploy.
+3. Run the week's verification check (VC-nn) and close it in `docs/data-provider-checks.md`; state the hand gates in `BUILD-LOG.md` as the record supports them.
+4. GitHub Desktop: review the diff (no `_` files, no `.dev.vars`, no `key*.txt`) → commit → **Push origin**. *(The backup.)* If GitHub's push protection refuses the push, a secret is in a commit: never "bypass" — rotate the key, fold the commit (K-2 in the record).
+5. `npm run deploy` → refresh the live URL. *(The release.)* The nightly alarms, the doorbell, the small-cap visit from this PC, the receipts and the resets are in the README's **Runbook**.
 
 When automation is eventually switched on (Part D), step 5 disappears into step 4 — pushing becomes deploying. Until then they are deliberately separate acts, and that's fine.
 
@@ -241,9 +241,10 @@ That's it. Parts 0–C never repeat.
 
 These mirror the hand-verification gates in `BUILD-LOG.md`:
 
-- [ ] Site runs locally (`npm run dev`, both URLs respond)
+- [ ] Site runs locally (`npm run dev`, both URLs respond); `npm test` green
 - [ ] Live `workers.dev` URL opens on your phone over mobile data
-- [ ] Repository public on GitHub; both secrets stored
+- [ ] Repository public on GitHub; the four secrets stored (`npx wrangler secret list` → four names; `docs/api-keys-guide.md` Part 6)
+- [ ] D1 created, migrations 0001–0007 applied local and remote, both seeds applied; `fetch_log` shows a `run_summary` row after the first night
 - [ ] *(Parked with Part D.)* Instead: an `npm run deploy` after a change produced a visible change on the live site
 - [ ] Landing-page placeholder replaced with the real repo link
 

@@ -4,6 +4,8 @@ How this toolkit is being built, one honest entry per week. Design invariant 5 f
 
 Entry format: **Designed** (decisions and their reasoning) · **Built** (what shipped, and by what means) · **Verified** (machine checks that ran, and the hand checks that gate "done").
 
+Entries run oldest first. Dates are the commit dates where an entry was logged with its commit; the Phase 2 entries (weeks 2–6 and the small-cap tier) were written with their shipments but sat in uncommitted notes until the Phase 2 independent review (23 Oct 2026) found the gap — they were applied on 23 Oct, dated as shipped, with their "hand" gates stated as the verification record supports them (`docs/data-provider-checks.md`) rather than ticked from memory.
+
 ---
 
 ## Week 1 — Hello, Worker · logged 12 Aug 2026
@@ -17,51 +19,135 @@ Entry format: **Designed** (decisions and their reasoning) · **Built** (what sh
 - `npm install` clean, 0 vulnerabilities; `wrangler types` + `tsc --noEmit` pass.
 - `wrangler dev` boots; `GET /` → 200 HTML; `GET /api/hello` → 200 JSON with the week-1 payload; unknown route → 404 JSON.
 
-**Verified — hand (gates "done"; tick before class).**
+**Verified — hand (gates "done").** Closed in practice: the site has been live on the tutor's account since August, the repo is public, the landing page carries the real repo link. The deploy-on-merge pipeline was parked by decision #6 in week 2 before it was ever exercised (manual `npm run deploy` is the release).
 
-- [ ] `npm run dev` works on my own machine; site renders correctly on a phone-width screen.
-- [ ] Deployed to my Cloudflare account (`npx wrangler login && npm run deploy`); live URL opens on my phone over mobile data.
-- [ ] GitHub repo public; `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` secrets set; a trivial push to `main` produces a green Actions run and a visible change on the live site.
-- [ ] Landing-page GitHub placeholder replaced with the real repo URL.
-- [ ] Journal template prints cleanly; one stack printed for lesson 1.
+---
 
-Deviation (wk 3, closed): production backfill breached D1's 100k/day metered-write
-allowance — each insert counts the table plus every index, and idx_prices_symbol_date
-duplicated the PK (≈3 writes/row × 38,874 ≈ 116k). Fix: migration 0002 drops the
-redundant index (~2 writes/row); Sunday full refresh replaced by rolling realign
-(4 symbols/night, last_full_fetch-tracked); insert budget + write-failure abort added
-to the cron. Verified in sandbox: index gone, realign set selects stalest-first,
-auth abort after one call, summary records the realign list. Alphabetical tail of
-night-one backfill (≈TSLA–XOM) self-heals on the next run. Cost: €0 then, €0 now —
-the free tier remains the design, and the limit notification is now teaching material.
+## Week 2 — Where prices come from · logged 24 Sep 2026 (shipped 24 Aug; regenerated 22 Sep after the project's hold)
+
+**Designed (Claude chat).** Hono adopted as the router (first runtime dependency); live per-request provider calls accepted as deliberately throwaway plumbing — week 3's cache replaces them, on schedule. CI parked by decision: backup habit before automation; deploy stays manual. Provider terms re-verified (Aug 2026): Alpha Vantage free ≈25 req/day & 5/min, with rate limits arriving as HTTP 200 + a "Note" field; FMP free ≈250 req/day on /stable endpoints, ~5y of annual statements (Graham's 10-year criterion may adapt — pending VC-07).
+
+**Built (Claude, sandboxed).** `GET /api/quote/:ticker`: parallel Alpha Vantage + FMP fetch, partial-failure warnings, honest metadata (`delayed: true`, source rations, education-not-advice note); ticker validation; missing-keys 503 with setup hint; landing page gains the lookup form and week 2's stamp; lesson plan 2; data-provider verification record; setup guide reworked (Part D parked, Part E Desktop rhythm); deploy.yml switched to manual trigger. Shipment regenerated 22 Sep after the original download expired; re-verified fresh (type-check + smoke tests) before reissue.
+
+**Verified — machine (sandbox; live market data unreachable there by design).** Type-check clean. Landing renders with two stamps; /api/hello unchanged; no keys → 503 with hint; fake keys + blocked network → graceful 502 with both provider warnings (failure path proven); malformed ticker → 400; unknown route → 404. Ticker normalisation (trim/uppercase) verified by inspection.
+
+**Verified — hand (as the record stands).** VC-01 (22–23 Sep: `/api/quote/AAPL` live → 200), VC-03 (FMP profile live), VC-04 (nonsense ticker fails politely, closed 30 Sep), VC-05 (London quote on Alpha Vantage, closed 30 Sep), VC-06 (Euronext Dublin: negative), VC-07 (N = 5 annual periods — the week-3 gate), VC-09 (FMP dividend-adjusted history ≈5 years) — all in `docs/data-provider-checks.md` and `docs/record-addendum.md`, committed 1 Oct. Production secrets set and the live lookup proven by VC-01 itself. Decision #5 (universe) updated in week 3 on VC-10's evidence.
+
+Hold and restart: project on hold late Aug – mid Sep 2026 (the day job took priority); the August doc batch was found uncommitted by the gap audit and consolidated with the week-2 apply.
+
+---
+
+## Week 3 — The nightly close · logged 1 Oct 2026
+
+**Designed (Claude chat).** VC-10 falsified the domicile hypothesis (DVN — US-domiciled — blocked alongside RYAAY/AZN, while AAPL/PFE/JNJ pass): FMP free-plan coverage is a whitelist, discoverable only empirically. Consequence: the universe is *measured*, not declared — a verifier script probes every candidate and publishes the evidence; greens become the universe. Decision #7 confirmed: FMP dividend-adjusted EOD (~5y) is the price spine; Alpha Vantage exits the cron (its adjusted history is premium, M-4 captured) and remains the tutor's live-demo route only. Schema ships minimal (tickers, daily_prices, fetch_log); fundamentals arrives as a later migration — migrations are the curriculum. First cron run doubles as the backfill; Sundays refetch in full because dividend adjustment rewrites history. Error handling is the verification record's M-shape map, executed: blocked = permanent per symbol; rate-limit = resume tomorrow; auth = abort the run.
+
+**Built (Claude, sandboxed).** Migration 0001; nightly job (incremental from last-date−7d, budget cap 200 calls, 40-row D1 batches, fetch_log evidence incl. per-run summary); cache-first /api/prices and /api/universe; server-rendered SVG chart pages at /prices/:ticker (hover crosshair, range links, last-10 table, serve-time caption); universe verifier + candidates file + seed-SQL generator; landing stamped wk 3 with chart form; favicon route; providers key-scrub (closes the M-1b echo leak at source — in the code; see K-3 below for the record).
+
+**Verified — machine (sandbox; provider network blocked by design).** Type-check clean. Migration applies; universe + prices routes serve from local D1 in ~9–12 ms (vs 858 ms live — the lesson's number); chart page renders; three distinct 404 explanations (no-history-yet / blocked / not-in-universe); scheduled trigger with no key → one graceful log row; with unusable key → HTTP 403 classified auth_failed, run aborted after ONE call (no budget wasted), run_summary written.
+
+**Verified — hand (as the record stands).** `verify-universe` run 1 Oct: DVN blocked (the control), evidence committed as `scripts/universe-verified.json`, VC-10 closure in the record. D1 created, migrations and seed applied, deployed; production backfilled itself on the first nights (the deviation below is the proof it ran). Phase-1 gate — green nights, ≥2 years of closes (5), zero live calls on student routes — met in the first half of October once the two deviations below were closed; "CI deploys on merge" is replaced by manual deploy per decision #6. **Open at the time, closed only on 23 Oct:** the key-echo check. The record was never redacted and the Alpha Vantage key sat in `docs/data-provider-checks.md` in every public commit from this one (K-3 in the record).
+
+Deviation (wk 3, closed 2 Oct): production backfill breached D1's 100k/day metered-write allowance — each insert counts the table plus every index, and idx_prices_symbol_date duplicated the PK (≈3 writes/row × 38,874 ≈ 116k). Fix: migration 0002 drops the redundant index (~2 writes/row); Sunday full refresh replaced by rolling realign (4 symbols/night, last_full_fetch-tracked); insert budget + write-failure abort added to the cron. Verified in sandbox: index gone, realign set selects stalest-first, auth abort after one call, summary records the realign list. Alphabetical tail of night-one backfill (≈TSLA–XOM) self-heals on the next run. Cost: €0 then, €0 now — the free tier remains the design, and the limit notification is now teaching material.
+
+---
+
+## Week 4 — What is a company worth? · logged 5 Oct 2026
+
+**Designed (Claude chat).** Three fundamentals streams (income, balance, dividends) ride the existing nightly cron as a second phase: 12 stalest companies/night × 3 calls, 30-day staleness rotation, skipped automatically when the price phase hits auth/rate/write walls. Ratios computed in our own tested code from stored raw lines — never provider-precomputed — so week 5's checklist card and the code cannot disagree. fiscal_year stored as TEXT; no extra indexes (0002's lesson). Dividend record ingested now for week 5's criterion. Source texts lodged: TII 2003 revised ed. (page anchors in lesson 4), Security Analysis 1940 2nd ed.; Zweig-75 framing (digital Mr. Market).
+
+**Built (Claude, sandboxed).** Migration 0003 (fundamentals_annual, dividends, 2 ticker columns); three fetchers through one M-shape classifier with multi-spelling field fallbacks; ratio engine (src/lib/ratios.ts) + 25 passing tests (`npm test`); /api/fundamentals + books page with Graham-bar verdict chips, plain-word glosses, five-year table incl. dividend row; chart/books cross-links; landing stamped wk 4.
+
+**Verified — machine (sandbox; provider network blocked by design).** Type-check + 25/25 tests green. Migration applies; schema matches code contract (13-column insert proven). Fundamentals API hand-check vs paper: CR 1.06, P/E 20.2, P/B 39.9, growth 15.4% — all reconcile. Books page renders; loss-year P/E shows a dash by design; three distinct no-data messages. Scheduled run with bad key: price phase aborts after ONE call and summary records "fundamentals":"skipped". Found in passing: wrangler ≥4.145 moved the scheduled-test endpoint to /cdn-cgi/handler/scheduled (docs and bookmark updated).
+
+**Verified — hand (as the record stands).** Migrations applied remote and deployed: the accounts phase ran nightly from 5 Oct (the week-5 deviation below is its diary). The balance-sheet and dividends endpoints (the VC-12 pre-flight) were never written up as a form; their evidence is the nightly `fund_ok` rows from 5 Oct and VC-14/VC-15's hand reconciliations. Not recorded: a by-eye reconciliation of `/fundamentals/AAPL` against Apple's annual report (the syllabus exit check was met instead on ETD against its 10-K, VC-16 c, 22 Oct).
+
+---
+
+## Week 5 — The Graham checklist · logged 12 Oct 2026
+
+**Designed (Claude chat).** One rules table (src/lib/graham.ts) drives the screen, its column headers and the printable card, so card and code cannot disagree (syllabus wk-5 promise). Seven ch. 14 tests; four adapted openly where free data is shorter than Graham's windows (stability 5y, dividends 10y, size inflated ×~8 to $800m, growth at Graham's pace over our 3-yr span = +9.0%); P/E uses the 3-yr average EPS, as Graham specified. Financials marked N/A on test 2 rather than failed. The screen is computed on request from three batched D1 queries, with no new tables or writes.
+
+**Reviewed (independent, same day).** Second model read ch. 14 from the course PDF and the shipped zip, ran probe cases, reported 14 findings before anything changed (docs/reviews/). Three correctness fixes: negative book value scored as a fail (was N/A); books-page P/E moved to Graham's 3-year average so it agrees with the screen; financials skip test 2 by sector (Graham p. 361) and score out of 6. Decisions: growth hurdle stays 9% (pro-rated, documented); a company passing every applicable test is a survivor. Wording fixes (1972 not 1949; utilities vs financials), CPI cited, teaching additions from pp. 354, 367, 374, 375.
+
+**Built (Claude, sandboxed).** graham.ts + 27 tests (38 in total with ratios); /api/screen/graham, /screen (tally, ✓/✗/– grid with hover detail, sticky company column for phones), /card (print-ready, adapted rules flagged with Graham's originals); books pages link to the screen; landing stamped wk 5; lesson 5 + deck.
+
+**Verified — machine (sandbox).** Type-check clean; 38/38 tests. Five synthetic companies built to hit every path: survivor 7/7 (VAL), bank skipped on test 2 → near miss 5/6 (BNK), no-dividend (NOD), expensive + weak (PRC), loss-maker with negative book → explicit fail (LSS). All verdicts matched the hand predictions. Screen served in 7–66 ms. Desktop, phone-width and card pages visually checked before and after the patch.
+
+**Verified — hand (as the record stands).** Deployed; the live screen's first count — 31 of 31 fail, 29 fail each price test — is the 14 Oct finding below and lesson 5's opening number. Three ✗ reconciled by hand against the books on 16 Oct (GM, Ford, Citi, under v0.6.1). Not recorded: the KO dividend-order check and whether `/card` was printed for the kit.
+
+Deviation (wk 5, closed 12 Oct): accounts missing for 10 companies, partial for 3. Cause: Workers Free caps external fetches at 50 per invocation; one nightly invocation made 67 (31 prices + 36 accounts), so fetch 51 failed every night at the same company and the classifier recorded a transient failure as a paywall "blocked". Diagnosed from the diary's pattern (6 ok · 1 partial · rest blocked, three nights identical). Fix v0.5.2: two cron invocations (prices 22:30 UTC, accounts 22:50 UTC); per-invocation fetch counter stops at 45 and logs it; transient errors never mark "blocked", partial/error retried nightly; classifier tests "limit" before paywall phrases; provider wording logged on every accounts line. 13 companies reset and refetched. Second landlord's meter in two weeks; both found by reading the diary. (I-1 in the record.)
 
 Week 5½ — the value pool · logged 14 Oct 2026
-**Finding.** 31 of 31 fail Graham's defensive screen; 29 fail each price test; none pass both.
-Reading: a glamour universe (chosen for recognisability and free-tier coverage) screened by
-tests written to reject glamour (TII p. 349) — the screen working, on an expensive market.
-**Decided.** Widen the pool with the unglamorous end — 44 mid/large value names and 52 small
-caps, Graham's enterprising hunting ground (p. 386), weighted small so the class can build a
-paper portfolio from it; the sweep decides which the free plan serves. Build Graham's
-enterprising-investor screen (ch. 15) alongside the defensive one.
-**Built (v0.5.3).** Resumable sweep (+ classifier-order fix); second price cron invocation with
-last_price_fetch guard (capacity ~90); accounts 15/night; goodwill & intangibles stored →
-tangible book per share and P/TBV in the ratio engine (ch. 15's price test); fail-count footer
-on /screen. Migration 0004. 47 tests. Verified in sandbox: second invocation skips what the
-first fetched (doneTonight: 3, fetches: 2); footer renders; sweep resume/merge tested with a
-stubbed network, including stop-on-limit and carry-on-tomorrow.
+**Finding.** 31 of 31 fail Graham's defensive screen; 29 fail each price test; none pass both. Reading: a glamour universe (chosen for recognisability and free-tier coverage) screened by tests written to reject glamour (TII p. 349) — the screen working, on an expensive market.
+**Decided.** Widen the pool with the unglamorous end — 44 mid/large value names and 52 small caps, Graham's enterprising hunting ground (p. 386), weighted small so the class can build a paper portfolio from it; the sweep decides which the free plan serves. Build Graham's enterprising-investor screen (ch. 15) alongside the defensive one.
+**Built (v0.5.3).** Resumable sweep (+ classifier-order fix); second price cron invocation with last_price_fetch guard (capacity ~90); accounts 15/night; goodwill & intangibles stored → tangible book per share and P/TBV in the ratio engine (ch. 15's price test); fail-count footer on /screen. Migration 0004. 47 tests. Verified in sandbox: second invocation skips what the first fetched (doneTonight: 3, fetches: 2); footer renders; sweep resume/merge tested with a stubbed network, including stop-on-limit and carry-on-tomorrow.
+**Outcome (15 Oct).** The sweep probed 144 candidates; the core tier became 38, and none of the 52 small caps was served — they got their own data spine (decision 14, below).
 
-15 Oct 2026 — VC-14: AV compact prices, balance sheet and dividends served for ETD and reconciled
-to the FY2026 10-K; EDGAR dividends-paid fallback confirmed. Found: AV debt totals include leases;
-AV merges same-ex-date dividends; AV daily prices unadjusted (ETD's $3 special = a fake 13% drop).
-VC-14d (EPS) to repeat. Small-cap ingestion is unblocked.
+Week 5½: the enterprising screen · logged 15 Oct 2026
+**Built (v0.6.0).** Graham's ch. 15 winnowing (pp. 385–386) as a second rules table on the same engine: P/E ≤ 9 first, then CR ≥ 1.5 & LTD ≤ 110% WC, no deficit in 5 yrs, a dividend in the last 12 months, latest EPS above four fiscal years earlier (the oldest of the five years held — Graham's 1970 v 1966), price < 1.2× tangible book; no size test. All-pass = "candidate" (Graham's "third selection" by judgment). /screen/enterprising, /api/screen/enterprising, /card page 2. Sweep fix: ceiling stop reserves profile calls (14 Oct's unnamed C/CARR/F). 63 tests. Verified in sandbox: fixture small cap 6/6 candidate; bank scored /5; pre-0004 rows show "?" on P/TBV; pages checked at desktop and phone widths; print splits the card onto two pages.
+**Data spine.** VC-13 closed (EDGAR serves ETD free with history; AV accounts agree with the 10-K). VC-14a: AV TIME_SERIES_DAILY compact served for ETD (last refreshed 2026-10-14, close 20.06). Decision 14 DECIDED. VC-14 b–f pending (line-by-line source choice).
+
+15 Oct 2026 — VC-14: AV compact prices, balance sheet and dividends served for ETD and reconciled to the FY2026 10-K; EDGAR dividends-paid fallback confirmed. Found: AV debt totals include leases; AV merges same-ex-date dividends; AV daily prices unadjusted (ETD's $3 special = a fake 13% drop). VC-14d (EPS) to repeat. Small-cap ingestion is unblocked.
+
+16 Oct 2026 · v0.6.1. First enterprising run: 0 candidates over 35 — all 35 fail P/E ≤ 9 on the latest year. Verified on three: GM 25.6 (2025 charge year; best year still 11.4), Ford a 2025 loss (−2.06; Graham's p. 382 exception tested: 5-yr avg P/E ≈ 13.8, not cheap), Citi 17.6. Reading "expensive" confirmed company by company. Fixed: dividend streak breaks at gaps over 15 months (review finding 9, Ford 2020–21); books page shows "not applied" for financials' current ratio and explains the P/B-or-product OR. 67 tests.
 
 ## VC-14d closure — 16 Oct 2026
 
-EARNINGS served for ETD, 2018–2026. reportedEPS is NOT GAAP diluted: FY2025 2.04 = the company's
-adjusted diluted EPS (GAAP 2.01; Exhibit 99.1 reconciliation: flood, sale-leaseback gain,
-severance); FY2024 2.48 vs 2.49 GAAP/adjusted; FY2026 1.47 vs 1.56 GAAP; FY2021 matches. Pattern:
-sum of quarterly "reported" figures, rounded. Also a zero placeholder dated 2026-09-30 in the
-annual list. Decision: small-cap EPS from EDGAR EarningsPerShareDiluted, fallback net income ÷
-diluted shares (both EDGAR); AV EARNINGS not used. VC-14 closed.
+EARNINGS served for ETD, 2018–2026. reportedEPS is NOT GAAP diluted: FY2025 2.04 = the company's adjusted diluted EPS (GAAP 2.01; Exhibit 99.1 reconciliation: flood, sale-leaseback gain, severance); FY2024 2.48 vs 2.49 GAAP/adjusted; FY2026 1.47 vs 1.56 GAAP; FY2021 matches. Pattern: sum of quarterly "reported" figures, rounded. Also a zero placeholder dated 2026-09-30 in the annual list. Decision: small-cap EPS from EDGAR EarningsPerShareDiluted, fallback net income ÷ diluted shares (both EDGAR); AV EARNINGS not used. VC-14 closed.
 
 **Decision 14, EPS rule (16 Oct 2026):** EPS from EDGAR (EarningsPerShareDiluted; fallback net income ÷ weighted diluted shares), never from AV's EARNINGS endpoint, which carries adjusted quarterly figures. Prices, balance sheet, income statement and dividends from AV; EDGAR verifies them.
+
+---
+
+## Week 6 — Numbers into narrative · logged 19 Oct 2026
+
+**Designed (Claude chat).** The syllabus's first Claude-powered route, built so the AI cannot outrun the numbers: a pure, tested FACT SHEET (facts F1…Fn from the books and both screens; the kinds of ✗ from the first live runs; "what would have to change" as bars in dollars) is the only thing the model sees; it must cite fact ids per paragraph and may not recommend; the toolkit CHECKS the answer (numbers not on the sheet, unknown ids, advice-shaped language) and shows its flags on the page — the class's audit exercise. Plain template narrative when no key / cap / error / rejection. One call per company per data-day, cached in D1, capped per day, receipts in fetch_log. Decision 15 records the grounding rules.
+
+**Built (Claude, sandboxed).** explain.ts (+14 tests), narrative.ts (+9 tests, fake API), migration 0005, /explain/:ticker + /api/explain/:ticker, links from screens and books page, landing stamped wk 6, lesson 6 + deck, enterprising-screen segment, reading-notes addendum (17 Oct: T and VZ pass both price tests; WFC first near miss). 90 tests.
+
+**Verified — machine (sandbox).** Type-check clean; 90/90. Against a stub standing in for the Claude API: fresh → cached on reload; cap of 3 reached → plain version with reason; a narrative with an invented 37.5% → flagged on the page; "You should buy" → rejected, plain served, row kept as source=rejected; fetch_log holds explain_ok ×4, explain_capped ×3, explain_rejected ×1. Pages checked at desktop and phone widths.
+
+**Verified — hand (as the record stands).** VC-15 a–h closed 19 Oct (record): fresh, cached, plain, JSON grounding, the four kinds, D1 rows, fetch_log receipts, no-key control; tokens per first visit recorded (NVDA 2,450 in / 564 out). Migration 0005 applied remote (the rows exist). `ANTHROPIC_API_KEY` set as a secret — after the K-1 slip (below). Not recorded: the Console spend limit; whether the six pages were printed for the pairs.
+
+AI error log, 19 Oct — three live calls to a first page:
+- v0.7.1: sent a deprecated API parameter (`temperature`); found by the live API's 400 on the first real call; the fallback and the receipt worked as designed.
+- v0.7.2: assumed the model answers in a single pass; current models think first and the thinking counts against the output ceiling (`stop_reason max_tokens`). Thinking disabled, `max_tokens` 2000, JSON-schema output. Two API facts were out of date in one feature; both now pinned by tests.
+- v0.7.3: prompt rule 6 reworded; the question appeared twice on the first live page (paragraph and field). Cosmetic; takes effect per company as its fact sheet changes (next close).
+
+Key incident K-1, 19 Oct: the Claude API key pasted as a wrangler secret *name*; listed by `secret list`; deleted, revoked and rotated within the hour. In the record.
+
+---
+
+## Small-cap tier — the second data spine · logged 20 Oct 2026 (v0.8.0), patched 23 Oct (v0.8.1)
+
+**Designed (Claude chat).** Decision 14 as built: Alpha Vantage (25/day, 5/min) for the small caps' prices (compact, as traded) and accounts; SEC EDGAR for EPS and as the audit trail (period + form selection, never fy; latest filing wins; net-income ÷ diluted-shares fallback; the filing named on every row). Dividend adjustment done by the toolkit from the dividend record, as-traded close kept beside it; re-done for the stored series when a new ex-date arrives. One cron invocation at 23:10 UTC, 20 spaced calls a night, stalest-first visits (prices + accounts when due), a company screenable the night it is visited. Alpha Vantage's "None" on debt and intangibles read as 0, printed in the receipt. Core tier untouched.
+
+**Built (Claude, sandboxed).** providers-av.ts (+11 tests), providers-edgar.ts (+8), lib/adjust.ts (+7), jobs/smallcaps.ts (+7, the ration plan), migration 0006 (five columns, no indexes), seed script (EDGAR ticker map + submissions: CIK, name, SIC → sector), tier filters in the nightly job, sources line on the books page, tier marker on both screens, chart caption. 124 tests.
+
+**Verified — machine (sandbox).** Type-check clean; 124/124. Against stubs standing in for Alpha Vantage and EDGAR with Ethan Allen's FY2026 10-K figures: a four-company visit → ETD and a second company screenable (EPS 1.56/2.01/2.49/4.13/4.05 with the 10-K named on each row; net income agrees 5/5), a symbol AV does not serve → blocked after one call, a symbol with prices but no statements → fund_blocked and skipped thereafter; the $3.00 special's cliff gone from the adjusted series (23.20 → 20.20 as traded, 19.81 → 19.81 adjusted); a new ex-date → the stored series re-adjusted; a second ring → nothing refetched; EDGAR 403 → fatal for the night, EPS empty, page complete. Pages checked: books (sources line), both screens (marker), chart, explain.
+
+**Verified — hand (as the record stands).** VC-16 (22–23 Oct): seed 48 of 52 on EDGAR (AE, RYI, SCVL, ZEUS not on the ticker map); first local visit; ETD's figures = the FY2026 10-K; the $3.00 special adjusted to the cent (factor 0.878592); enterprising row right after v0.8.1; explain page; **g FAIL** — the live 23:10 run never got past its first Alpha Vantage call, three nights running (I-4). Migration 0006 and the seed applied remote; deployed with the 23:10 cron, then without it.
+
+**v0.8.1 (23 Oct) — what VC-16 found.** (1) Alpha Vantage serves ten annual reports and the job kept them all, so the growth test read +37% (FY2017–18 → FY2025–26) instead of −56% (FY2022–23 → FY2025–26) and the card's "five years" was untrue for the tier → the newest five kept, wider rows pruned. (2) Long-term debt null → strength test "?": ETD's debt total (120,373,000) is entirely lease obligations (ASC 842) → borrowings = debt total − lease obligations (D-2). (3) The free tier is metered by sender address as well as by key, and Cloudflare's shared egress is spent before the cron fires → the visit runs from the tutor's PC against the live D1 (`npm run smallcaps`, a remote D1 binding), the 23:10 cron removed, the "call volume" wording classed as a throttle. 126 tests.
+
+**VC-17 (23 Oct, the visit from the tutor's PC):** `npm run smallcaps -- --calls 16` → ANDE, APOG, AVD, BBW ok + fund_ok; avCalls 16, edgarCalls 13; EDGAR from the PC served; ANDE's EPS by the net-income ÷ diluted-shares fallback (first live use). Script fault (mine): the receipt read went through cmd.exe on Windows and failed; fixed the same morning (`scripts/visit-small-caps.mjs` runs wrangler through node directly).
+
+Key incident K-2, 19–23 Oct: the replacement Claude key staged in `key.txt` inside the project folder, committed locally, never pushed — GitHub's push protection refused the push on 23 Oct. Rotated; the local history folded into one clean commit; staging files now live outside the project folder and `.gitignore` carries `key*.txt`, `ua.txt`. In the record.
+
+---
+
+## Phase 2 independent review → v0.8.2 · logged 23 Oct 2026
+
+**Reviewed (independent, cold clone at `8449a8a`).** A second model with the brief in `docs/reviews/phase-2-review-brief.md`: read the code against TII, wrote its own probes (`src/probes/`), ran mutations against the suite, grepped every commit. Report: `docs/reviews/phase-2-independent-review.md` — 3 must, 13 should, 11 notes; verdict "fit for Monday, three things before the taught course". The three musts: (F1) the project's Alpha Vantage key in the public verification record since 1 Oct, inside a pasted provider notice — the code got its scrubber that day, the record did not, and my own grep had searched URLs, not prose (K-3); (F2) small-cap dividends fetched only with the accounts, every 400 days, so "some current dividend" would have failed every small-cap payer from mid-2027; (F3) thresholds compared on rounded figures — P/TBV 1.199 read as "1.20" and failed a test Graham's "less than 120%" passes. The tutor's instruction: implement all as recommended.
+
+**Built (v0.8.2, Claude, sandboxed).** Raw ratios compared, rounded only for display (F3); dividends on their own 100-day cadence, one call, realign on new ex-dates (F2, migration 0007); EDGAR-only retries for `eps_missing` at 0 AV calls, 403 never retried (S6); net-income tags tried in turn for uncovered periods (S5); the advice check widened to seven exported pattern families with one test per sentence, numbers compared by value with units, minus signs and dates normalised, and the page saying in plain words that a flagged page is still served (S4, S13); `/api/quote` capped at 3 a day on the shared key (S7); every reading of a provider's "None" carried onto the row, the books page and the test hover (S8); `/api/prices` meta tier-aware (S11); enterprising citation p. 385 + p. 361 (N2); the D1-subrequest assumption recorded in the job header (N8). Content: "four fiscal years earlier (the oldest of five held)" wherever the growth test is described; 1972 revision, not 1949; the two misquotes fixed to pp. 349/347; stale test counts; "advice-shaped phrases" instead of "advice words"; "Education, not advice." on every slide of both decks and at the foot of every lesson plan and kit page (S9, S10). Record: BUILD-LOG weeks 2–6 and the tier applied (this file); decision log rows 7–16; VC-10/12/13/15/16/17, I-1, D-1, D-2, I-4 and the three key incidents in the record; README status, repo map and runbook; `.dev.vars.example` with all four secrets; root `setup-guide.md` removed; lockfile regenerated; the underscore notes taken out of the repo (S1–S3). 149 tests.
+
+**Verified — machine (sandbox).** Type-check clean; 149/149, the review's probe cases now pinned as tests: P/TBV 19.18/16 = 1.19875 displays "1.20" and passes, 1.20 fails; P/E 15.04 displays "15.0" and fails; current ratio 1.996 displays "2.00" and fails; multiplier 9.04 fails (F3); a 100-day-old dividend record plans one extra call without the accounts, and an `eps_missing` company plans no account calls (F2, S6); the second net-income tag fills the periods the first left empty (S5); fifteen advice-shaped sentences caught, one per family and then some, and four guard sentences (the course's own disclaimer, "a buy list", "cheap on earnings", "12 months ago") left alone; `$3,200m` = `$3.2bn`, a Unicode minus is a minus, a date is not a number (S4, S13). Against stubs standing in for Alpha Vantage and EDGAR (four small caps: ETD, BSET, HOFT, FLXS; the rehearsal of VC-18): night 1 with EDGAR unreachable → 13 AV calls, ETD and BSET `fund_eps_missing` ("EPS left empty, EDGAR retried later", readings printed), HOFT `blocked`, FLXS `fund_blocked`; night 2 with EDGAR back → `edgar_ok` ×2 "EDGAR retry: eps 5/5" at avCalls 0 / edgarCalls 8, the rest skipped as fresh, BSET's EPS by the net-income ÷ diluted-shares fallback; night 3 with ETD's dividend record 101 days old and a new $1.00 ex-date at the stub → ETD prices + dividends (+1 new) for 2 calls, BSET prices for 1, `dividendsOnly: 1`, `dividends_as_of` stamped, the stored closes re-adjusted (15 Oct 19.69 → 18.69; 6 Aug 19.81 → 18.80, compounding). Pages: BSET's books page prints "Readings for FY 2025: no goodwill/intangibles line reported → 0; no debt line reported → long-term debt 0"; the enterprising hover reads "Strength: … Reading: no debt line reported → long-term debt 0."; `/api/prices/ETD` meta says tier small, "NOT split-adjusted"; the quote demo's fourth call in a day answers 429 with the cached close (the first three counted even though the sandbox cannot reach the providers).
+
+**Verified — hand (gates "done", for the tutor).**
+- [ ] Alpha Vantage key rotated (new key: `wrangler secret put ALPHAVANTAGE_API_KEY` + `.dev.vars`); the old key is burned either way
+- [ ] `npm test` 149/149; migration 0007 local + remote; deployed
+- [ ] VC-18 (`_PATCH-NOTES-V082.md`): readings on a small-cap books page; a stale-dividend visit; the quote cap; `/screen/enterprising` test 6 on a 1.19× company
+- [ ] Repo hygiene committed: underscore notes removed from the index, root `setup-guide.md` gone, lockfile at 0.8.2, `.gitignore` extended
+
+Open items carried into Phase 3 (from the review's N11): EDGAR from Cloudflare's addresses untested in anger; the tier fills only when the tutor runs `npm run smallcaps`; split handling for the small tier (a jump is logged, nothing acts); `runSmallCaps`/`runNightly` have no fake-D1 tests (S12, 3–4 h, deferred).

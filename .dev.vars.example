@@ -1,11 +1,23 @@
-# Copy this file to `.dev.vars` (which is gitignored — check .gitignore, it's true)
-# and paste your real keys. Real keys must NEVER appear in any committed file.
+# Copy this file to `.dev.vars` (gitignored — check .gitignore, it's true) and
+# paste your real values. Real keys must NEVER appear in any committed file.
+# The live site reads the same four names from Cloudflare's vault instead:
+#   npx wrangler secret put NAME      (one at a time; `npx wrangler secret list` shows the names)
 #
-# Get keys (both free):
-#   Alpha Vantage:            https://www.alphavantage.co/support/#api-key
-#   Financial Modeling Prep:  https://site.financialmodelingprep.com  (Dashboard -> API key)
+# Where to get them (docs/api-keys-guide.md walks through each):
+#   Alpha Vantage (free):            https://www.alphavantage.co/support/#api-key
+#   Financial Modeling Prep (free):  https://site.financialmodelingprep.com  (Dashboard -> API key)
+#   Claude API (pre-paid credit):    https://console.anthropic.com  (API keys; set a spend limit)
+#   EDGAR User-Agent (not a key):    the project name, a space, an email you read —
+#                                    the SEC's fair-access policy requires it on every request
 
 ALPHAVANTAGE_API_KEY = "paste-yours-here"
 FMP_API_KEY = "paste-yours-here"
+ANTHROPIC_API_KEY = "paste-yours-here"
+EDGAR_USER_AGENT = "stock-market-toolkit you@example.com"
 
-ANTHROPIC_API_KEY=
+# Local only — keep this line. A local small-cap run (`npm run dev:cron` + the
+# 10 23 doorbell) then spends 4 Alpha Vantage calls (one full visit), not 20.
+# The key is shared with production and the PC visit; the day holds 25.
+SMALLCAP_AV_CALLS = "4"
+
+# Optional caps (defaults in brackets): EXPLAIN_DAILY_CAP (60), QUOTE_DAILY_CAP (3).

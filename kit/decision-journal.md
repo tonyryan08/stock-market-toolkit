@@ -42,3 +42,5 @@ Notice what the journal just did: it let you lose and still be right. That is th
 ---
 
 *Print a stack. Paper beats apps for this — no edit button, no delete.*
+
+*Education, not advice — nothing in this kit is a recommendation to buy or sell anything.*

@@ -3,7 +3,7 @@
  * sheet itself has to be right — and checkable on paper.
  */
 import { describe, it, expect } from "vitest";
-import { buildFactSheet, templateNarrative, checkGrounding, fingerprint, type Narrative } from "./explain";
+import { buildFactSheet, templateNarrative, checkGrounding, fingerprint, findAdvice, extractNumbers, ADVICE_PATTERNS, type Narrative } from "./explain";
 import type { ScreenInput } from "./graham";
 import type { FundamentalsYear } from "./ratios";
 
@@ -142,5 +142,49 @@ describe("the plain narrative and the grounding checks", () => {
     expect(g.unknownFacts).toEqual([{ paragraph: 3, ids: ["F99"] }]);
     expect(g.recommendationLanguage.length).toBeGreaterThanOrEqual(1);
     expect(g.clean).toBe(false);
+  });
+
+  // Review S4 (23 Oct 2026): the twelve phrasings that got past the old regex, one per family and then some.
+  const advice: [string, string][] = [
+    ["This looks like a good buy.", "recommend/advise"],
+    ["Investors should buy before the results.", "subject should buy/sell"],
+    ["I would avoid this one.", "subject should buy/sell"],
+    ["We'd recommend a small position.", "recommend/advise"],
+    ["At this price it is a bargain.", "valuation verdict"],
+    ["The shares are likely to rise from here.", "forecast"],
+    ["Earnings should double next year.", "forecast"],
+    ["The stock is clearly undervalued.", "valuation verdict"],
+    ["Accumulate on weakness and stay overweight.", "position words"],
+    ["Expect the price to recover by spring.", "expect the price"],
+    ["Sell before the dividend is cut.", "position words"],
+    ["This is an attractive entry point.", "valuation verdict"],
+    ["You should buy it.", "subject should buy/sell"],
+    ["Our price target is $30.", "price target"],
+    ["It will rise once rates fall.", "forecast"],
+  ];
+  it.each(advice)("catches advice-shaped language: %s", (sentence) => {
+    expect(findAdvice(sentence).length).toBeGreaterThan(0);
+  });
+  it("every advice family is exercised by at least one sentence above", () => {
+    const covered = new Set(advice.map(([, f]) => f));
+    for (const p of ADVICE_PATTERNS) expect(covered.has(p.family)).toBe(true);
+  });
+  it("does not mistake the course's own disclaimer, 'a buy list' or 'cheap on earnings' for advice", () => {
+    expect(findAdvice("None of this says whether anyone should buy or sell.")).toEqual([]);
+    expect(findAdvice("A screen is a starting list for reading, never a buy list.")).toEqual([]);
+    expect(findAdvice("Cheap on earnings, failing elsewhere: is the market wrong, or right?")).toEqual([]);
+    expect(findAdvice("The last ex-dividend date was 12 months ago.")).toEqual([]);
+  });
+
+  // Review S13: numbers compared as values.
+  it("reads $3,200m and $3.2bn as the same figure, a Unicode minus as a minus, and a date as no number", () => {
+    expect(extractNumbers("Revenue $3,200m, net income −$52m, close 19.61 on 2026-10-14.")).toEqual([3.2e9, -52e6, 19.61]);
+    expect(extractNumbers("$3.2bn and 12 months and p. 374")).toEqual([3.2e9, 12]);
+    const s = buildFactSheet(base({ lastClose: 80 }), "2026-10-16");
+    const revenueText = s.facts.find((f) => /^Revenue/.test(f.text))!.text; // "$2.0bn" style
+    const n: Narrative = { source: "claude", question: "q?", paragraphs: [{ text: `Revenue was $2,000m, which the sheet gives as ${revenueText.replace(/^Revenue in FY\d+: /, "")}; the last close was 80 on 2026-10-16.`, facts: ["F4"] }] };
+    expect(checkGrounding(n, s).unsupportedNumbers).toEqual([]);
+    const bad: Narrative = { source: "claude", question: "q?", paragraphs: [{ text: "Revenue was $9,999m.", facts: ["F4"] }] };
+    expect(checkGrounding(bad, s).unsupportedNumbers).toEqual([{ paragraph: 1, numbers: ["9999000000"] }]);
   });
 });
