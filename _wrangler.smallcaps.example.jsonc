@@ -1,0 +1,27 @@
+{
+  // The small-cap visit, run from your own computer (v0.8.1).
+  //
+  // Alpha Vantage's free tier counts calls by sender address as well as by
+  // key, and Cloudflare's shared addresses are spent before 23:10 UTC every
+  // night (receipts 20–22 Oct 2026). So `npm run smallcaps` runs the SAME
+  // Worker code locally, with this config: the database binding is REMOTE
+  // (the live D1), the outbound calls leave from your PC with your key.
+  //
+  // Make your copy: save this file as `_wrangler.smallcaps.jsonc` (drop
+  // ".example"), paste your database_id from wrangler.jsonc over the zeros,
+  // and leave it unticked in GitHub Desktop like the other `_` files.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "stock-market-toolkit",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "triggers": { "crons": ["10 23 * * *"] },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "stock-market-db",
+      "database_id": "00000000-0000-0000-0000-000000000000", // REPLACE: the id from your wrangler.jsonc
+      "migrations_dir": "migrations",
+      "remote": true // the live database, from a local run (wrangler ≥ 4.37)
+    }
+  ]
+}

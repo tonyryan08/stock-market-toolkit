@@ -1,6 +1,8 @@
 /**
  * The course landing page — the "twelve-week ledger".
  * Week 4: the books open; week 4's row gets its stamp.
+ * v0.6.0: the enterprising screen joins week 5's row.
+ * v0.7.0: week 6 shipped — explain this stock.
  */
 
 export const LANDING_PAGE = /* html */ `<!doctype html>
@@ -193,12 +195,13 @@ export const LANDING_PAGE = /* html */ `<!doctype html>
       </div>
       <div class="row shipped">
         <span class="wk">Wk 5</span>
-        <span><span class="lesson">The Graham checklist</span><br><span class="feature">The value screener &mdash; <a href="/screen">seven tests, run tonight</a> &amp; <a href="/card">the checklist card</a></span></span>
+        <span><span class="lesson">The Graham checklist</span><br><span class="feature">The value screener &mdash; <a href="/screen">seven tests, run tonight</a>, <a href="/screen/enterprising">the enterprising investor's six</a> &amp; <a href="/card">the checklist cards</a></span></span>
         <span class="stamp">SHIPPED</span>
       </div>
-      <div class="row pending">
+      <div class="row shipped">
         <span class="wk">Wk 6</span>
-        <span><span class="lesson">Numbers into narrative</span><br><span class="feature">&ldquo;Explain this stock&rdquo;</span></span>
+        <span><span class="lesson">Numbers into narrative</span><br><span class="feature">&ldquo;Explain this stock&rdquo; &mdash; <a href="/explain/NVDA">a story with its receipts</a>, written from the fact sheet and checked against it</span></span>
+        <span class="stamp">SHIPPED</span>
       </div>
     </div>
 
@@ -236,9 +239,11 @@ export const LANDING_PAGE = /* html */ `<!doctype html>
   </section>
 
   <div class="try">
-    <strong>New this week:</strong> Graham's seven tests for the defensive investor, run over every
-    company's books after each nightly close. <a href="/screen">See which companies survive</a> &mdash; then argue
-    with a 1949 checklist. The <a href="/card">checklist card</a> prints from the very same rules.
+    <strong>New this week:</strong> numbers into narrative. <a href="/explain/NVDA">Explain this stock</a> turns a company's
+    two screen verdicts into plain sentences &mdash; a numbered fact sheet first, then a short story written from that sheet alone
+    and checked against it, every sentence tagged with the facts it rests on. Your job is to catch the sentence that isn't.
+    Still here: <a href="/screen">the defensive screen</a> &middot; <a href="/screen/enterprising">the enterprising screen</a> &middot;
+    <a href="/card">the cards</a>.
     <form class="lookup" onsubmit="event.preventDefault();var t=this.t.value.trim().toUpperCase();if(t)location.href='/'+(this.books.checked?'fundamentals':'prices')+'/'+encodeURIComponent(t)">
       <input name="t" placeholder="AAPL" aria-label="Ticker symbol" autocapitalize="characters" autocomplete="off" spellcheck="false">
       <label style="display:flex;align-items:center;gap:.3rem;font-size:.8rem;color:var(--faint)"><input type="checkbox" name="books" checked> books</label>

@@ -1,0 +1,508 @@
+{
+  "seeded_at": "2026-10-22T13:01:52.465Z",
+  "listed": 52,
+  "found": 48,
+  "results": [
+    {
+      "symbol": "ETD",
+      "found": true,
+      "cik": "0000896156",
+      "name": "Ethan Allen Interiors Inc",
+      "sic": "2511",
+      "sicDescription": "Wood Household Furniture, (No Upholstered)",
+      "sector": "Wood Household Furniture, (no Upholstered)",
+      "note": null
+    },
+    {
+      "symbol": "HOFT",
+      "found": true,
+      "cik": "0001077688",
+      "name": "Hooker Furnishings Corp",
+      "sic": "2510",
+      "sicDescription": "Household Furniture",
+      "sector": "Household Furniture",
+      "note": null
+    },
+    {
+      "symbol": "BSET",
+      "found": true,
+      "cik": "0000010329",
+      "name": "Bassett Furniture Industries Inc",
+      "sic": "2511",
+      "sicDescription": "Wood Household Furniture, (No Upholstered)",
+      "sector": "Wood Household Furniture, (no Upholstered)",
+      "note": null
+    },
+    {
+      "symbol": "FLXS",
+      "found": true,
+      "cik": "0000037472",
+      "name": "Flexsteel Industries Inc",
+      "sic": "2510",
+      "sicDescription": "Household Furniture",
+      "sector": "Household Furniture",
+      "note": null
+    },
+    {
+      "symbol": "LZB",
+      "found": true,
+      "cik": "0000057131",
+      "name": "La-z-boy Inc",
+      "sic": "2510",
+      "sicDescription": "Household Furniture",
+      "sector": "Household Furniture",
+      "note": null
+    },
+    {
+      "symbol": "HVT",
+      "found": true,
+      "cik": "0000216085",
+      "name": "Haverty Furniture Companies Inc",
+      "sic": "5712",
+      "sicDescription": "Retail-Furniture Stores",
+      "sector": "Retail-furniture Stores",
+      "note": null
+    },
+    {
+      "symbol": "WEYS",
+      "found": true,
+      "cik": "0000106532",
+      "name": "Weyco Group Inc",
+      "sic": "5130",
+      "sicDescription": "Wholesale-Apparel, Piece Goods & Notions",
+      "sector": "Wholesale-apparel, Piece Goods & Notions",
+      "note": null
+    },
+    {
+      "symbol": "RCKY",
+      "found": true,
+      "cik": "0000895456",
+      "name": "Rocky Brands, Inc",
+      "sic": "3140",
+      "sicDescription": "Footwear, (No Rubber)",
+      "sector": "Footwear, (no Rubber)",
+      "note": null
+    },
+    {
+      "symbol": "BKE",
+      "found": true,
+      "cik": "0000885245",
+      "name": "Buckle Inc",
+      "sic": "5651",
+      "sicDescription": "Retail-Family Clothing Stores",
+      "sector": "Retail-family Clothing Stores",
+      "note": null
+    },
+    {
+      "symbol": "CATO",
+      "found": true,
+      "cik": "0000018255",
+      "name": "Cato Corp",
+      "sic": "5621",
+      "sicDescription": "Retail-Women's Clothing Stores",
+      "sector": "Retail-women's Clothing Stores",
+      "note": null
+    },
+    {
+      "symbol": "SCVL",
+      "found": false,
+      "reason": "not on EDGAR's ticker map — delisted, acquired, or spelt differently there"
+    },
+    {
+      "symbol": "MOV",
+      "found": true,
+      "cik": "0000072573",
+      "name": "Movado Group Inc",
+      "sic": "3873",
+      "sicDescription": "Watches, Clocks, Clockwork Operated Devices/Parts",
+      "sector": "Watches, Clocks, Clockwork Operated Devices/parts",
+      "note": null
+    },
+    {
+      "symbol": "BBW",
+      "found": true,
+      "cik": "0001113809",
+      "name": "Build-a-bear Workshop Inc",
+      "sic": "5945",
+      "sicDescription": "Retail-Hobby, Toy & Game Shops",
+      "sector": "Retail-hobby, Toy & Game Shops",
+      "note": null
+    },
+    {
+      "symbol": "HBB",
+      "found": true,
+      "cik": "0001709164",
+      "name": "Hamilton Beach Brands Holding Co",
+      "sic": "3634",
+      "sicDescription": "Electric Housewares & Fans",
+      "sector": "Electric Housewares & Fans",
+      "note": null
+    },
+    {
+      "symbol": "JBSS",
+      "found": true,
+      "cik": "0000880117",
+      "name": "Sanfilippo John B & Son Inc",
+      "sic": "2060",
+      "sicDescription": "Sugar & Confectionery Products",
+      "sector": "Sugar & Confectionery Products",
+      "note": null
+    },
+    {
+      "symbol": "IMKTA",
+      "found": true,
+      "cik": "0000050493",
+      "name": "Ingles Markets Inc",
+      "sic": "5411",
+      "sicDescription": "Retail-Grocery Stores",
+      "sector": "Retail-grocery Stores",
+      "note": null
+    },
+    {
+      "symbol": "VLGEA",
+      "found": true,
+      "cik": "0000103595",
+      "name": "Village Super Market Inc",
+      "sic": "5411",
+      "sicDescription": "Retail-Grocery Stores",
+      "sector": "Retail-grocery Stores",
+      "note": null
+    },
+    {
+      "symbol": "WMK",
+      "found": true,
+      "cik": "0000105418",
+      "name": "Weis Markets Inc",
+      "sic": "5411",
+      "sicDescription": "Retail-Grocery Stores",
+      "sector": "Retail-grocery Stores",
+      "note": null
+    },
+    {
+      "symbol": "ANDE",
+      "found": true,
+      "cik": "0000821026",
+      "name": "Andersons, Inc",
+      "sic": "5150",
+      "sicDescription": "Wholesale-Farm Product Raw Materials",
+      "sector": "Wholesale-farm Product Raw Materials",
+      "note": null
+    },
+    {
+      "symbol": "CALM",
+      "found": true,
+      "cik": "0000016160",
+      "name": "Cal-maine Foods Inc",
+      "sic": "0200",
+      "sicDescription": "Agricultural Prod-Livestock & Animal Specialties",
+      "sector": "Agricultural Prod-livestock & Animal Specialties",
+      "note": null
+    },
+    {
+      "symbol": "UVV",
+      "found": true,
+      "cik": "0000102037",
+      "name": "Universal Corp /va/",
+      "sic": "5150",
+      "sicDescription": "Wholesale-Farm Product Raw Materials",
+      "sector": "Wholesale-farm Product Raw Materials",
+      "note": null
+    },
+    {
+      "symbol": "MLR",
+      "found": true,
+      "cik": "0000924822",
+      "name": "Miller Industries Inc /tn/",
+      "sic": "3713",
+      "sicDescription": "Truck & Bus Bodies",
+      "sector": "Truck & Bus Bodies",
+      "note": null
+    },
+    {
+      "symbol": "SMP",
+      "found": true,
+      "cik": "0000093389",
+      "name": "Standard Motor Products, Inc",
+      "sic": "3714",
+      "sicDescription": "Motor Vehicle Parts & Accessories",
+      "sector": "Motor Vehicle Parts & Accessories",
+      "note": null
+    },
+    {
+      "symbol": "SGC",
+      "found": true,
+      "cik": "0000095574",
+      "name": "Superior Group of Companies, Inc",
+      "sic": "2300",
+      "sicDescription": "Apparel & Other Finishd Prods of  Fabrics & Similar Matl",
+      "sector": "Apparel & Other Finishd Prods of Fabrics & Similar Matl",
+      "note": null
+    },
+    {
+      "symbol": "ODC",
+      "found": true,
+      "cik": "0000074046",
+      "name": "Oil-dri Corp of America",
+      "sic": "3990",
+      "sicDescription": "Miscellaneous Manufacturing Industries",
+      "sector": "Miscellaneous Manufacturing Industries",
+      "note": null
+    },
+    {
+      "symbol": "GRC",
+      "found": true,
+      "cik": "0000042682",
+      "name": "Gorman Rupp Co",
+      "sic": "3561",
+      "sicDescription": "Pumps & Pumping Equipment",
+      "sector": "Pumps & Pumping Equipment",
+      "note": null
+    },
+    {
+      "symbol": "HURC",
+      "found": true,
+      "cik": "0000315374",
+      "name": "Hurco Companies Inc",
+      "sic": "3823",
+      "sicDescription": "Industrial Instruments For Measurement, Display, and Control",
+      "sector": "Industrial Instruments for Measurement, Display, and Control",
+      "note": null
+    },
+    {
+      "symbol": "PLPC",
+      "found": true,
+      "cik": "0000080035",
+      "name": "Preformed Line Products Co",
+      "sic": "1623",
+      "sicDescription": "Water, Sewer, Pipeline, Comm & Power Line Construction",
+      "sector": "Water, Sewer, Pipeline, Comm & Power Line Construction",
+      "note": null
+    },
+    {
+      "symbol": "EML",
+      "found": true,
+      "cik": "0000031107",
+      "name": "Eastern Co",
+      "sic": "3420",
+      "sicDescription": "Cutlery, Handtools & General Hardware",
+      "sector": "Cutlery, Handtools & General Hardware",
+      "note": null
+    },
+    {
+      "symbol": "IIIN",
+      "found": true,
+      "cik": "0000764401",
+      "name": "Insteel Industries Inc",
+      "sic": "3310",
+      "sicDescription": "Steel Works, Blast Furnaces & Rolling & Finishing Mills",
+      "sector": "Steel Works, Blast Furnaces & Rolling & Finishing Mills",
+      "note": null
+    },
+    {
+      "symbol": "MLI",
+      "found": true,
+      "cik": "0000089439",
+      "name": "Mueller Industries Inc",
+      "sic": "3350",
+      "sicDescription": "Rolling Drawing & Extruding of  Nonferrous Metals",
+      "sector": "Rolling Drawing & Extruding of Nonferrous Metals",
+      "note": null
+    },
+    {
+      "symbol": "ZEUS",
+      "found": false,
+      "reason": "not on EDGAR's ticker map — delisted, acquired, or spelt differently there"
+    },
+    {
+      "symbol": "FRD",
+      "found": true,
+      "cik": "0000039092",
+      "name": "Friedman Industries Inc",
+      "sic": "3310",
+      "sicDescription": "Steel Works, Blast Furnaces & Rolling & Finishing Mills",
+      "sector": "Steel Works, Blast Furnaces & Rolling & Finishing Mills",
+      "note": null
+    },
+    {
+      "symbol": "RYI",
+      "found": false,
+      "reason": "not on EDGAR's ticker map — delisted, acquired, or spelt differently there"
+    },
+    {
+      "symbol": "LYTS",
+      "found": true,
+      "cik": "0000763532",
+      "name": "Lsi Industries Inc",
+      "sic": "3640",
+      "sicDescription": "Electric Lighting & Wiring Equipment",
+      "sector": "Electric Lighting & Wiring Equipment",
+      "note": null
+    },
+    {
+      "symbol": "APOG",
+      "found": true,
+      "cik": "0000006845",
+      "name": "Apogee Enterprises, Inc",
+      "sic": "3231",
+      "sicDescription": "Glass Products, Made of  Purchased Glass",
+      "sector": "Glass Products, Made of Purchased Glass",
+      "note": null
+    },
+    {
+      "symbol": "NX",
+      "found": true,
+      "cik": "0001423221",
+      "name": "Quanex Building Products Corp",
+      "sic": "3350",
+      "sicDescription": "Rolling Drawing & Extruding of  Nonferrous Metals",
+      "sector": "Rolling Drawing & Extruding of Nonferrous Metals",
+      "note": null
+    },
+    {
+      "symbol": "POWL",
+      "found": true,
+      "cik": "0000080420",
+      "name": "Powell Industries Inc",
+      "sic": "3613",
+      "sicDescription": "Switchgear & Switchboard Apparatus",
+      "sector": "Switchgear & Switchboard Apparatus",
+      "note": null
+    },
+    {
+      "symbol": "HWKN",
+      "found": true,
+      "cik": "0000046250",
+      "name": "Hawkins Inc",
+      "sic": "5160",
+      "sicDescription": "Wholesale-Chemicals & Allied Products",
+      "sector": "Wholesale-chemicals & Allied Products",
+      "note": null
+    },
+    {
+      "symbol": "AVD",
+      "found": true,
+      "cik": "0000005981",
+      "name": "American Vanguard Corp",
+      "sic": "2870",
+      "sicDescription": "Agricultural Chemicals",
+      "sector": "Agricultural Chemicals",
+      "note": null
+    },
+    {
+      "symbol": "NTIC",
+      "found": true,
+      "cik": "0000875582",
+      "name": "Northern Technologies International Corp",
+      "sic": "3470",
+      "sicDescription": "Coating, Engraving & Allied Services",
+      "sector": "Coating, Engraving & Allied Services",
+      "note": null
+    },
+    {
+      "symbol": "MRTN",
+      "found": true,
+      "cik": "0000799167",
+      "name": "Marten Transport Ltd",
+      "sic": "4213",
+      "sicDescription": "Trucking (No Local)",
+      "sector": "Trucking (no Local)",
+      "note": null
+    },
+    {
+      "symbol": "HTLD",
+      "found": true,
+      "cik": "0000799233",
+      "name": "Heartland Express Inc",
+      "sic": "4213",
+      "sicDescription": "Trucking (No Local)",
+      "sector": "Trucking (no Local)",
+      "note": null
+    },
+    {
+      "symbol": "ULH",
+      "found": true,
+      "cik": "0001308208",
+      "name": "Universal Logistics Holdings, Inc",
+      "sic": "4213",
+      "sicDescription": "Trucking (No Local)",
+      "sector": "Trucking (no Local)",
+      "note": null
+    },
+    {
+      "symbol": "CVLG",
+      "found": true,
+      "cik": "0000928658",
+      "name": "Covenant Logistics Group, Inc",
+      "sic": "4213",
+      "sicDescription": "Trucking (No Local)",
+      "sector": "Trucking (no Local)",
+      "note": null
+    },
+    {
+      "symbol": "RELL",
+      "found": true,
+      "cik": "0000355948",
+      "name": "Richardson Electronics, Ltd.",
+      "sic": "5065",
+      "sicDescription": "Wholesale-Electronic Parts & Equipment, NEC",
+      "sector": "Wholesale-electronic Parts & Equipment, Nec",
+      "note": null
+    },
+    {
+      "symbol": "BELFB",
+      "found": true,
+      "cik": "0000729580",
+      "name": "Bel Fuse Inc /nj",
+      "sic": "3677",
+      "sicDescription": "Electronic Coils, Transformers & Other Inductors",
+      "sector": "Electronic Coils, Transformers & Other Inductors",
+      "note": null
+    },
+    {
+      "symbol": "BHE",
+      "found": true,
+      "cik": "0000863436",
+      "name": "Benchmark Electronics Inc",
+      "sic": "3672",
+      "sicDescription": "Printed Circuit Boards",
+      "sector": "Printed Circuit Boards",
+      "note": null
+    },
+    {
+      "symbol": "CSPI",
+      "found": true,
+      "cik": "0000356037",
+      "name": "Csp Inc /ma/",
+      "sic": "7373",
+      "sicDescription": "Services-Computer Integrated Systems Design",
+      "sector": "Services-computer Integrated Systems Design",
+      "note": null
+    },
+    {
+      "symbol": "CVI",
+      "found": true,
+      "cik": "0001376139",
+      "name": "Cvr Energy Inc",
+      "sic": "2911",
+      "sicDescription": "Petroleum Refining",
+      "sector": "Petroleum Refining",
+      "note": null
+    },
+    {
+      "symbol": "AE",
+      "found": false,
+      "reason": "not on EDGAR's ticker map — delisted, acquired, or spelt differently there"
+    },
+    {
+      "symbol": "EPM",
+      "found": true,
+      "cik": "0001006655",
+      "name": "Evolution Petroleum Corp",
+      "sic": "1311",
+      "sicDescription": "Crude Petroleum & Natural Gas",
+      "sector": "Crude Petroleum & Natural Gas",
+      "note": null
+    }
+  ],
+  "note": "Small-cap tier seed evidence (decision 14). CIK, name and SIC are EDGAR's; whether Alpha Vantage serves each symbol is discovered by the nightly visit (fetch_log, tickers.status). Education, not advice."
+}

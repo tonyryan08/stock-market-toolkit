@@ -127,7 +127,14 @@ GLW       # Corning
 # the sweep says so — this tier is the experiment. Names are from memory as
 # of mid-2026: a few may have been acquired or suspended their dividend
 # since; the sweep and the screens will say so, which is the point.
+#
+# 19 Oct 2026 — the FMP sweep served NONE of these (0 of 52). They are now
+# the SMALL-CAP TIER on the second data spine (decision 14): Alpha Vantage +
+# SEC EDGAR. `npm run seed-small-caps` reads every symbol below the marker
+# line, looks up its EDGAR CIK, name and SIC sector, and writes the seed.
+# The FMP sweep still skips them (on record as blocked). Keep the marker.
 # ---------------------------------------------------------------------------
+#TIER small
 # Furniture, home, retail
 ETD       # Ethan Allen
 HOFT      # Hooker Furnishings

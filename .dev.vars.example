@@ -7,3 +7,5 @@
 
 ALPHAVANTAGE_API_KEY = "paste-yours-here"
 FMP_API_KEY = "paste-yours-here"
+
+ANTHROPIC_API_KEY=

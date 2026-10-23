@@ -39,11 +39,10 @@
  */
 
 import { fetchFmpDailyAdjusted, type DailyBar } from "../providers";
+import { runSmallCaps, type SmallEnv } from "./smallcaps";
 
-type Env = {
-  ALPHAVANTAGE_API_KEY: string;
+type Env = SmallEnv & {
   FMP_API_KEY: string;
-  DB: D1Database;
 };
 
 /** Free plan ≈ 250 provider calls/day; the cron never spends more than this. */
@@ -63,7 +62,7 @@ const FRESH_HOURS = 6;
 const DELAY_MS = 250;
 const CHUNK = 40;
 
-export type Phase = "prices" | "fundamentals" | "all";
+export type Phase = "prices" | "fundamentals" | "smallcaps" | "all";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -82,6 +81,13 @@ export async function runNightly(env: Env, phase: Phase = "all"): Promise<void> 
       /* if even logging fails (write limit), there is nothing useful left to do */
     }
   };
+
+  // The small-cap tier (decision 14): its own invocation at 23:10 UTC, its own
+  // rations (Alpha Vantage 20 calls, spaced; EDGAR free), the shared fetch budget.
+  if (phase === "smallcaps") {
+    await runSmallCaps(env, runAt, budget);
+    return;
+  }
 
   if (!env.FMP_API_KEY) {
     await log(null, "auth_failed", 0, "FMP_API_KEY not configured — nothing fetched.");
@@ -103,7 +109,7 @@ export async function runNightly(env: Env, phase: Phase = "all"): Promise<void> 
     await env.DB.prepare(
       `SELECT t.symbol, t.last_full_fetch, t.last_price_fetch, MAX(p.date) AS last_date
        FROM tickers t LEFT JOIN daily_prices p ON p.symbol = t.symbol
-       WHERE t.status = 'active'
+       WHERE t.status = 'active' AND t.tier = 'core'
        GROUP BY t.symbol
        ORDER BY t.last_price_fetch IS NOT NULL, t.last_price_fetch, t.symbol`,
     ).all<{ symbol: string; last_full_fetch: string | null; last_price_fetch: string | null; last_date: string | null }>()
@@ -218,9 +224,14 @@ export async function runNightly(env: Env, phase: Phase = "all"): Promise<void> 
     (counts.rate_limited ?? 0) > 0 ||
     writeFailures >= MAX_WRITE_FAILURES;
   let fundamentals = "separate invocation";
+  let smallcaps = "separate invocation";
   if (phase === "all") {
     fundamentals = phaseBlocked ? "skipped" : "ran";
     if (!phaseBlocked) await runFundamentals(env, runAt, budget);
+    // Local doorbell only: the small-cap visit too (slow — Alpha Vantage calls
+    // are 13 s apart). Ring ?cron=10+23+*+*+* to run just this phase.
+    smallcaps = "ran";
+    await runSmallCaps(env, runAt, budget);
   }
 
   await log(null, "run_summary", inserted, JSON.stringify({
@@ -231,6 +242,7 @@ export async function runNightly(env: Env, phase: Phase = "all"): Promise<void> 
     inserts: inserted,
     realigned: [...realignSet],
     fundamentals,
+    smallcaps,
     outcomes: counts,
     ms: Date.now() - started,
   }));
@@ -299,7 +311,7 @@ export async function runFundamentals(
   const due = (
     await env.DB.prepare(
       `SELECT symbol FROM tickers
-       WHERE status = 'active'
+       WHERE status = 'active' AND tier = 'core'
          AND (fundamentals_as_of IS NULL
               OR fundamentals_status IN ('partial', 'error')
               OR fundamentals_as_of < datetime('now', ?1))
@@ -347,8 +359,8 @@ export async function runFundamentals(
         `INSERT INTO fundamentals_annual
            (symbol, fiscal_year, period_end, revenue, net_income, eps_diluted,
             current_assets, current_liabilities, total_assets, total_liabilities,
-            long_term_debt, shareholders_equity, shares_diluted, goodwill_and_intangibles)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)
+            long_term_debt, shareholders_equity, shares_diluted, goodwill_and_intangibles, source, eps_source)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,'fmp','fmp')
          ON CONFLICT (symbol, fiscal_year) DO UPDATE SET
            period_end=excluded.period_end, revenue=excluded.revenue,
            net_income=excluded.net_income, eps_diluted=excluded.eps_diluted,
@@ -356,7 +368,8 @@ export async function runFundamentals(
            total_assets=excluded.total_assets, total_liabilities=excluded.total_liabilities,
            long_term_debt=excluded.long_term_debt, shareholders_equity=excluded.shareholders_equity,
            shares_diluted=excluded.shares_diluted,
-           goodwill_and_intangibles=excluded.goodwill_and_intangibles`,
+           goodwill_and_intangibles=excluded.goodwill_and_intangibles,
+           source=excluded.source, eps_source=excluded.eps_source`,
       );
       try {
         await env.DB.batch(

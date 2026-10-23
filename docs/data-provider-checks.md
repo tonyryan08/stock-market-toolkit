@@ -106,6 +106,26 @@ The cron must tell these apart: **M-1 → back off and resume tomorrow; M-2 → 
 
 **Week-5 criterion adaptation:** ☐ ← VC-07 (≥10 → full Graham; 5 → adapted, footnoted).
 
+
+
+## VC-14 closure — 15 Oct 2026 (small-cap spine: Alpha Vantage as source, EDGAR as audit trail)
+
+Test company ETD; acceptance values from the FY2026 10-K (accn 0001437749-26-029578).
+a ✓ TIME_SERIES_DAILY compact served: 2026-05-22 → 2026-10-14 (~100 days), close 20.06.
+b ✓ BALANCE_SHEET FY2026 matches the 10-K on every line tested. totalShareholderEquity 471,461,000
+  = total incl. NCI (FMP holds parent-only; ETD difference $85k). longTermDebt "None" (no
+  borrowings); AV's shortLongTermDebtTotal 120,373,000 = capitalLeaseObligations — leases, not
+  loans. intangibleAssets = intangibleAssetsExcludingGoodwill = 19,740,000; goodwill 25,388,000.
+c ✓ DIVIDENDS served. Newest: $3.00 special, ex 2026-09-03 (verified: DEFA14A 19 Aug 2026);
+  0.64 on 2026-08-12 = 0.39 regular + 0.25 special (verified: 8-K 29 Jul 2026) — AV merges
+  payments sharing an ex-date.
+d — not executed (URL did not reach AV: form formatting). Repeat.
+e ✓ PaymentsOfDividends (Claude's read; operator attempt failed on a backtick copied from the
+  form): FY2025 50,084,000 (expected ≈50.1m); FY2026 46,283,000.
+f ✓ ProfitLoss read by operator; revenue read pending (same formatting fault).
+Finding: TIME_SERIES_DAILY is unadjusted — the $3.00 special shows as a ~13% one-day drop.
+Form fault (mine): URLs inside backticks get copied with the backtick. Forms now put URLs bare.
+
 ---
 
 *Close-out: commit this record, update decision log #5 (and draft #7) in `docs\syllabus.md`, tick the BUILD-LOG box — and end the session with a push. Then post VC-07's N, the VC-09 verdict, and the VC-06b greens back to Claude: those three unlock week 3.*

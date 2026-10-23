@@ -113,12 +113,23 @@ console.log(
 );
 
 const results = [];
+// Two different stops (fixed 15 Oct 2026, quirk found 14 Oct: a ceiling stop
+// skipped the profile step, so C, CARR and F were seeded with no name or
+// sector and Citigroup was scored as an industrial):
+//   ceilingStop — OUR budget ceiling. Probing stops, but profiles still run
+//                 for the greens found so far, inside a reserved allowance.
+//   aborted     — FMP said stop (limit or bad key). Nothing more is sent.
 let aborted = false;
+let ceilingStop = false;
+// Every green costs one profile call; keep room for those this run finds
+// (and any on record still unnamed) so the ceiling never strands them.
+const unnamedOnRecord = [...recorded.values()].filter((r) => r.verdict === "GREEN" && !r.name).length;
+const greensSoFar = () => results.filter((r) => r.verdict === "GREEN").length;
 
 for (const symbol of toProbe) {
-  if (callsMade + 2 > MAX_CALLS) {
-    console.log(`\nStopping at ${callsMade} calls (--max-calls ${MAX_CALLS}) to leave the nightly robot its ration. Run again tomorrow; it resumes here.`);
-    aborted = true;
+  if (callsMade + 2 + greensSoFar() + unnamedOnRecord > MAX_CALLS) {
+    console.log(`\nStopping probes at ${callsMade} calls (--max-calls ${MAX_CALLS}), keeping room for the profiles. Run again tomorrow; it resumes here.`);
+    ceilingStop = true;
     break;
   }
   const row = { symbol, statements: null, statement_years: 0, history: null, history_from: null, history_days: 0, verdict: "?" };
@@ -164,7 +175,7 @@ const needProfile = [
   ...[...recorded.values()].filter((r) => r.verdict === "GREEN" && !r.name && !newGreens.some((g) => g.symbol === r.symbol)),
 ];
 if (!aborted) {
-  console.log(`\nFetching profiles for ${needProfile.length} greens…`);
+  console.log(`\nFetching profiles for ${needProfile.length} greens${ceilingStop ? " (ceiling reached for probes; profiles run inside the reserve)" : ""}…`);
   for (const g of needProfile) {
     if (callsMade >= MAX_CALLS) {
       console.log(`Call ceiling reached — remaining names/sectors are fetched on the next run.`);
@@ -173,6 +184,10 @@ if (!aborted) {
     const pr = await probe(
       `https://financialmodelingprep.com/stable/profile?symbol=${g.symbol}&apikey=${key}`,
     );
+    if (pr.kind === "rate" || pr.kind === "auth") {
+      console.log(`FMP stopped the profile step at ${g.symbol} (${pr.kind}) — remaining names/sectors are fetched on the next run.`);
+      break;
+    }
     if (pr.kind === "ok" && pr.json[0]) {
       g.name = pr.json[0].companyName ?? null;
       g.sector = pr.json[0].sector ?? null;
@@ -198,7 +213,8 @@ const evidence = {
   candidates: candidates.length,
   probed_this_run: results.length,
   greens: greens.map((g) => g.symbol),
-  aborted_early: aborted,
+  aborted_early: aborted || ceilingStop,
+  stopped_by: aborted ? "fmp" : ceilingStop ? "ceiling" : null,
   results: merged,
   note: "Raw-materials certificate for the course universe. Free-plan coverage is a whitelist (VC-10); this file is the discovery evidence, merged across runs (each result carries its own verified_at). Education, not advice.",
 };
@@ -220,7 +236,7 @@ const seed =
 writeFileSync(join(HERE, "seed-universe.sql"), seed);
 
 console.log(
-  `\n${aborted ? "PARTIAL RUN (stopped early — run again tomorrow; it resumes). " : ""}` +
+  `\n${aborted || ceilingStop ? "PARTIAL RUN (stopped early — run again tomorrow; it resumes). " : ""}` +
     `This run: ${newGreens.length} green / ${results.length} probed, ${callsMade} calls.  On record: ${greens.length} green / ${merged.length}.`,
 );
 console.log("Wrote scripts/universe-verified.json (evidence) and scripts/seed-universe.sql (the universe).");

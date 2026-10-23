@@ -1,6 +1,6 @@
 {
   "name": "stock-market-toolkit",
-  "version": "0.5.3",
+  "version": "0.8.1",
   "private": true,
   "description": "Course toolkit for 'Intro to the Stock Market' — a community-school course in good financial decision-making. Education, not advice.",
   "scripts": {
@@ -10,6 +10,8 @@
     "types": "wrangler types",
     "check": "wrangler types && tsc --noEmit",
     "verify-universe": "node scripts/verify-universe.mjs",
+    "seed-small-caps": "node scripts/seed-small-caps.mjs",
+    "smallcaps": "node scripts/visit-small-caps.mjs",
     "test": "vitest run"
   },
   "dependencies": {

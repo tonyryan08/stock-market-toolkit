@@ -49,3 +49,19 @@ tangible book per share and P/TBV in the ratio engine (ch. 15's price test); fai
 on /screen. Migration 0004. 47 tests. Verified in sandbox: second invocation skips what the
 first fetched (doneTonight: 3, fetches: 2); footer renders; sweep resume/merge tested with a
 stubbed network, including stop-on-limit and carry-on-tomorrow.
+
+15 Oct 2026 — VC-14: AV compact prices, balance sheet and dividends served for ETD and reconciled
+to the FY2026 10-K; EDGAR dividends-paid fallback confirmed. Found: AV debt totals include leases;
+AV merges same-ex-date dividends; AV daily prices unadjusted (ETD's $3 special = a fake 13% drop).
+VC-14d (EPS) to repeat. Small-cap ingestion is unblocked.
+
+## VC-14d closure — 16 Oct 2026
+
+EARNINGS served for ETD, 2018–2026. reportedEPS is NOT GAAP diluted: FY2025 2.04 = the company's
+adjusted diluted EPS (GAAP 2.01; Exhibit 99.1 reconciliation: flood, sale-leaseback gain,
+severance); FY2024 2.48 vs 2.49 GAAP/adjusted; FY2026 1.47 vs 1.56 GAAP; FY2021 matches. Pattern:
+sum of quarterly "reported" figures, rounded. Also a zero placeholder dated 2026-09-30 in the
+annual list. Decision: small-cap EPS from EDGAR EarningsPerShareDiluted, fallback net income ÷
+diluted shares (both EDGAR); AV EARNINGS not used. VC-14 closed.
+
+**Decision 14, EPS rule (16 Oct 2026):** EPS from EDGAR (EarningsPerShareDiluted; fallback net income ÷ weighted diluted shares), never from AV's EARNINGS endpoint, which carries adjusted quarterly figures. Prices, balance sheet, income statement and dividends from AV; EDGAR verifies them.
