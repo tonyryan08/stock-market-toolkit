@@ -43,7 +43,7 @@ describe("selectAnnualFacts", () => {
     const facts = [
       K({ form: "10-KT", start: "2025-10-01", end: "2026-06-30", val: 1.1 }),   // 272 days
       K({ form: "10-K", start: "2025-06-15", end: "2026-06-30", val: 1.2 }),    // 380 days — the edge, in
-      K({ form: "10-K", start: "2025-06-10", end: "2026-06-30", val: 1.3 }),    // 385 days — out
+      K({ form: "10-K", start: "2025-06-10", end: "2026-06-30", val: 1.3, filed: "2026-09-10" }),    // 385 days — out, even though filed last
       K({ form: "10-K", start: "2025-07-25", end: "2026-06-30", val: 1.4, filed: "2026-01-01" }),   // 340 days — the edge, in (older filing)
     ];
     expect(selectAnnualFacts(facts).map((f) => f.val)).toEqual([1.2]); // the newest-filed in-window copy for that end

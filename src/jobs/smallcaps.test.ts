@@ -4,11 +4,21 @@
  * dividends + income + balance); never-visited companies first.
  */
 import { describe, it, expect } from "vitest";
-import { planNight, AV_CALLS_PER_NIGHT, ACCOUNTS_REFRESH_DAYS, DIVIDEND_REFRESH_DAYS, type SmallTicker } from "./smallcaps";
+import { planNight, AV_CALLS_PER_NIGHT, ACCOUNTS_REFRESH_DAYS, DIVIDEND_REFRESH_DAYS, type SmallTicker, AV_SPACING_MS, EDGAR_RETRY_PER_NIGHT } from "./smallcaps";
 
 const now = new Date("2026-10-20T23:10:00Z");
 const t = (symbol: string, over: Partial<SmallTicker> = {}): SmallTicker =>
   ({ symbol, cik: "0000896156", last_price_fetch: null, fundamentals_as_of: null, fundamentals_status: null, dividends_as_of: over.fundamentals_as_of ?? null, ...over });
+
+describe("the cadence constants are the ones the review decided (verification V10)", () => {
+  it("dividends every 100 days, accounts every 400, 20 calls a night 13 s apart, 5 EDGAR retries", () => {
+    expect(DIVIDEND_REFRESH_DAYS).toBe(100);
+    expect(ACCOUNTS_REFRESH_DAYS).toBe(400);
+    expect(AV_CALLS_PER_NIGHT).toBe(20);
+    expect(AV_SPACING_MS).toBe(13_000);
+    expect(EDGAR_RETRY_PER_NIGHT).toBe(5);
+  });
+});
 
 describe("planNight", () => {
   it("a fresh tier: 20 calls buy 5 full visits, alphabetical among the never-visited", () => {

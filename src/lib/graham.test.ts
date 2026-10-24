@@ -172,6 +172,30 @@ describe("screenCompany — hand-checked verdicts", () => {
     expect(outcome(screenCompany(dear), "price_assets")).toBe("fail");
   });
 
+  it("the other five boundaries compare raw figures too (verification V5): debt/WC 1.004, product 22.54, growth 8.96%, enterprising CR 1.496 and debt/WC 110.4%", () => {
+    // defensive debt/WC: WC 100, debt 100.4 → 1.004 displays "1" but is more than 1 → fail
+    const d = survivor({ years: survivor().years.map((y, i) => (i === 0 ? { ...y, currentAssets: 300, currentLiabilities: 200, longTermDebt: 100.4 } : y)) });
+    expect(screenCompany(d).figures.ltDebtToWc).toBe(1);
+    expect(outcome(screenCompany(d), "condition")).toBe("fail");
+    // product: P/E 15.03 × P/B 1.5 = 22.545 displays "22.5" but is more than 22.5 → with P/B above 1.5 too it must fail
+    const avg = 14 / 3;   // avg3 EPS of the survivor fixture (5, 4.6, 4.4)
+    const prod = survivor({ lastClose: 15.03 * avg, years: survivor().years.map((y, i) => (i === 0 ? { ...y, equity: 15.03 * avg * 50 / 1.5 - 0.1 } : y)) });   // P/B 1.50004 — just over, so the product must carry it
+    const pr = screenCompany(prod);
+    expect(pr.figures.peTimesPb).toBeCloseTo(22.5, 1);
+    expect(outcome(pr, "price_assets")).toBe("fail");
+    // growth: +8.975% (4.359 v 4.0) displays "9" but is below the 9.0 hurdle → fail
+    const g = screenCompany(survivor({ years: [yr(2025, 4.359), yr(2024, 4.359), yr(2023, 4.1), yr(2022, 4.0), yr(2021, 4.0)] }));
+    expect(g.figures.epsGrowthPct).toBe(9);
+    expect(outcome(g, "growth")).toBe("fail");
+    // enterprising CR 1.496 displays "1.5" but is below 1.5 → fail; debt 110.4% of WC displays "110%" but is above 110% → fail
+    const e1 = screenEnterprising(smallCo({ years: smallCo().years.map((y, i) => (i === 0 ? { ...y, currentAssets: 299.2, currentLiabilities: 200, longTermDebt: 10 } : y)) }));
+    expect(e1.figures.currentRatio).toBe(1.5);
+    expect(eOutcome(e1, "e_condition")).toBe("fail");
+    const e2 = screenEnterprising(smallCo({ years: smallCo().years.map((y, i) => (i === 0 ? { ...y, currentAssets: 400, currentLiabilities: 200, longTermDebt: 220.8 } : y)) }));
+    expect(e2.figures.ltDebtToWc).toBe(1.1);
+    expect(eOutcome(e2, "e_condition")).toBe("fail");
+  });
+
   it("growth below Graham's pace fails: 4.0 vs 3.9 is +2.6% — and the detail names the fiscal years compared (review N4)", () => {
     const r = screenCompany(survivor({ years: [yr(2025, 4), yr(2024, 4), yr(2023, 4), yr(2022, 4), yr(2021, 3.8)] }));
     expect(r.figures.epsGrowthPct).toBe(2.6);

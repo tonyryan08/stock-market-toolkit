@@ -296,7 +296,7 @@ export function screenCompany(input: ScreenInput): ScreenResult {
     add("condition", "skip",
       "Not applied: Graham's financial-strength test is written for industrial companies; for financial enterprises he applied only the price tests (ch. 14, p. 361). Not counted.");
   } else if (currentRatio === null || ltDebtToWc === null) {
-    add("condition", "na", "Current assets/liabilities or long-term debt not reported.");
+    add("condition", "na", `Current assets/liabilities or long-term debt not reported.${readingNote(latest, /debt/i)}`);
   } else {
     const crOk = crRaw! >= T.minCurrentRatio;
     const dOk = dwRaw! <= T.maxLtDebtToWc;
@@ -529,7 +529,7 @@ export function screenEnterprising(input: ScreenInput): EnterprisingResult {
     add("e_condition", "skip",
       "Not applied: Graham wrote this test \"for industrial companies\" (ch. 15, p. 385). Not counted.");
   } else if (currentRatio === null || ltDebtToWc === null) {
-    add("e_condition", "na", "Current assets/liabilities or long-term debt not reported.");
+    add("e_condition", "na", `Current assets/liabilities or long-term debt not reported.${readingNote(latest, /debt/i)}`);
   } else {
     const crOk = crRaw! >= E.minCurrentRatio;
     const dOk = dwRaw! <= E.maxDebtToWc;

@@ -196,8 +196,8 @@ Executed by:  Tony Ryan        Date:                      Browser:
 <Code>NoSuchKey</Code>
 <Message>The specified key does not exist.</Message>
 <Key>api/xbrl/companyconcept/CIK0000896156/us-gaap/PaymentsOfDividends.json`</Key>
-<RequestId>GJMQSJ8BA31CSCP6</RequestId>
-<HostId>ECDsMXNhy1TizQgbQqEIVMTWHFAu9dkIuS6k82SwWq96jdLK5s6RWQAr7Q/PSEukp/JeDBGBMPjZjsZfz2i658THNlm8//Pw</HostId>
+<RequestId>(elided)</RequestId>
+<HostId>(elided)</HostId>
 </Error>            Tag that worked:neither -second defaulted togooglesearch page 
 > val for start 2024-07-01, end 2025-06-30:            (expected ≈ 50,100,000)
 > val for start 2025-07-01, end 2026-06-30:            (record)

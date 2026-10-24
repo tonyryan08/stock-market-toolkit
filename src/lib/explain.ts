@@ -419,21 +419,54 @@ export type Grounding = {
  */
 const UNIT: Record<string, number> = { bn: 1e9, billion: 1e9, m: 1e6, million: 1e6, k: 1e3, thousand: 1e3 };
 const NUM_UNIT = /(-?)\$?(\d[\d,]*(?:\.\d+)?)\s*(bn|billion|m|million|k|thousand)?\b/gi;
-export function extractNumbers(text: string): number[] {
+const MONTHS = "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?";
+export type NumberHit = { value: number; precision: number; lossWord?: boolean };
+/**
+ * Every figure in a text with the PRECISION it was written at (the unit of
+ * its last digit): "$1.9bn" is 1.9e9 ± 0.5e8, "$1,912m" is 1.912e9 ± 0.5e6
+ * (review V6, 24 Oct 2026: a sheet figure re-expressed to fewer decimals is
+ * the same figure). Dates, page refs and fact ids are not figures.
+ */
+export function extractNumbersWithPrecision(text: string): NumberHit[] {
   const t = text
     .replace(/[−–]\s*(?=\$?\d)/g, "-")                    // Unicode minus / dash before a figure → ASCII minus
     .replace(/\b\d{4}-\d{2}-\d{2}\b/g, " ")               // ISO dates
+    .replace(new RegExp(`\\b(?:${MONTHS})\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+\\d{4})?\\b`, "gi"), " ")   // October 14, 2026
+    .replace(new RegExp(`\\b\\d{1,2}(?:st|nd|rd|th)?\\s+(?:${MONTHS})\\.?(?:\\s+\\d{4})?\\b`, "gi"), " ")       // 14 Oct 2026
+    .replace(/\b(?:FY|fiscal year|in|since|during|for)\s*(?:19|20)\d{2}\b/gi, " ")   // FY2025, in 2024
+    .replace(/\b[FB]\d{1,3}\b/g, " ")                        // fact ids F13, bar ids B2
     .replace(/\b(?:pp?\.|ch\.|chapter|page)\s*\d+(?:[–-]\d+)?/gi, " "); // page and chapter references
-  const out: number[] = [];
+  const out: NumberHit[] = [];
   for (const m of t.matchAll(NUM_UNIT)) {
-    const v = parseFloat(m[2].replace(/,/g, "")) * (m[3] ? UNIT[m[3].toLowerCase()] : 1);
-    if (Number.isFinite(v)) out.push(m[1] === "-" ? -v : v);
+    const raw = m[2].replace(/,/g, "");
+    const unit = m[3] ? UNIT[m[3].toLowerCase()] : 1;
+    const v = parseFloat(raw) * unit;
+    const decimals = raw.includes(".") ? raw.split(".")[1].length : 0;
+    // A bare integer ("80", "37") is exact; a figure with a unit or decimals is rounded to its last digit.
+    const precision = m[3] || decimals ? unit / 10 ** decimals : 0;
+    // "a loss of $52m", "a deficit of 3m": the words carry the sign the digits lack (review F5).
+    const before = t.slice(Math.max(0, (m.index ?? 0) - 40), m.index ?? 0);
+    const lossWord = /\b(?:loss(?:es)?|deficit|negative|shortfall|lost)\b[^.]*$/i.test(before);
+    if (Number.isFinite(v)) out.push({ value: m[1] === "-" ? -v : v, precision, lossWord });
   }
   return out;
 }
-const sameValue = (a: number, b: number) => Math.abs(a - b) <= Math.max(1e-9, 0.005 * Math.abs(b));
-/** Small counts and Graham's own thresholds need no fact behind them. */
-const FREE_VALUES = new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 22.5, 1.5, 1.2, 120, 110, 100, 366, 15]);
+export function extractNumbers(text: string): number[] { return extractNumbersWithPrecision(text).map((h) => h.value); }
+/**
+ * The same figure: within half a unit of either side's last digit, or 0.5%,
+ * and the same sign — where a narrative figure's sign is the minus it carries
+ * OR a loss word before it ("a loss of $52m" is the sheet's "−$52m"; "a loss
+ * of $114m" against a profit of $114m is not — review F5).
+ */
+const sameValue = (a: NumberHit, b: NumberHit) => {
+  if (b.value === 0 || a.value === 0) return Math.abs(a.value) < 1e-9 && Math.abs(b.value) < 1e-9;   // "$0m" matches nothing but zero
+  const signA = a.value < 0 || a.lossWord ? -1 : 1;
+  const signB = b.value < 0 ? -1 : 1;
+  if (signA !== signB) return false;
+  return Math.abs(Math.abs(a.value) - Math.abs(b.value)) <= Math.max(a.precision / 2, b.precision / 2, 0.005 * Math.abs(b.value)) + 1e-9;
+};
+/** Small counts, calendar numbers and Graham's own bars need no fact behind them (a figure equal to one of these cannot be checked — a documented limit). */
+const FREE_VALUES = new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 22.5, 1.5, 1.2, 120, 110, 100, 366]);
 
 /**
  * Advice-shaped language (review S4): the prompt's own forbidden words plus the
@@ -442,22 +475,31 @@ const FREE_VALUES = new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 22.5, 1.5
  * advice, hence the subject list and the lookbehind.
  */
 export const ADVICE_PATTERNS: { family: string; re: RegExp }[] = [
-  { family: "subject should buy/sell", re: /(?<!whether )\b(?:you|investors?|one|we|i|they|readers?|anyone|everyone)\s+(?:should|would|could|ought to|might want to|need to|must)\s+(?:not\s+|also\s+)?(?:buy|sell|hold|invest|avoid|accumulate|add|trim|short|own|get in|get out|steer clear)\b/i },
-  { family: "recommend/advise", re: /\b(?:(?:we|i)(?:'d| would)?\s+(?:recommend|suggest|advise)|recommended (?:buy|sell)|strong (?:buy|sell)|(?:a|the) (?:good |great |clear |screaming )?(?:buy|sell)\b(?! list))/i },
-  { family: "price target", re: /\b(?:price target|target price|fair value|intrinsic value of)\b/i },
-  { family: "forecast", re: /\b(?:will|is going to|likely to|set to|poised to|expected to|bound to|about to|should|could)\s+(?:rise|fall|double|halve|recover|outperform|rally|rebound|climb|drop|crash|re-?rate)\b/i },
+  { family: "subject should buy/sell", re: /(?<!whether )\b(?:you|investors?|one|we|i|they|readers?|anyone|everyone)\s*(?:'d|'ll|\s(?:should|would|could|ought to|might want to|need to|must|will|wouldn'?t|shouldn'?t|won'?t))\s+(?:not\s+|also\s+|probably\s+|want to\s+|do well to\s+)?(?:buy|sell|hold|invest|avoid|accumulate|add(?!\s+(?:\d|two|three|four|five|six|new|more|another|capacity|plants?|stores?|staff|jobs|a |an |the |its |their ))|trim|short|own|get in|get out|get some|pick up|steer clear|stay away|take profits?|add (?:to (?:my|our|your|their|a|the) (?:position|holding|stake)s?|on weakness))\b/i },
+  // An order at the start of a sentence. Not a hyphenated compound: "Short-term borrowings",
+  // "Sell-side analysts", "Hold-to-maturity" are balance-sheet English (review F4).
+  { family: "imperative", re: /(?:^|[.!?:;]\s+|^\s*[-–•]\s*)(?:don'?t (?:sell|buy)|buy|sell|accumulate|avoid|hold(?! on\b)|short|dump(?! trucks?\b)|take profits?|get in|get out|steer clear|stay away|load up|back up the truck|back the truck up|grab some)\b(?!-)(?! list)/im },
+  { family: "recommend/advise", re: /\b(?:(?:we|i)(?:'d| would)?\s+(?:recommend|suggest|advise)|recommended (?:buy|sell)|strong (?:buy|sell)|(?:a|the) (?:good |great |clear |screaming |strong )?(?:buy|sell)\b(?!-)(?! list)|(?:rate|rated|rating|rates)\s+(?:the\s+|these\s+|its\s+)?(?:shares?|stock|it)\s+(?:an?\s+|as\s+)?(?:outperform|underperform|buy|sell|hold|overweight|underweight)|upgraded? to (?:buy|outperform|overweight)|downgraded? to (?:sell|underperform|underweight))/i },
+  { family: "price target", re: /\b(?:price target|target price|fair value|intrinsic value of|worth \$?\d|worth (?:far |much |a lot )?more than|(?:see|hit|reach|touch)\s+\$?\d[\d,.]*\s+(?:by|before|within)\b|should trade at (?:a premium|a discount|\$?\d))/i },
+  // A forecast needs a price-like or earnings-like subject: "Total debt could fall" is accounting, not a tip.
+  { family: "forecast", re: /\b(?:(?:shares?|stock|price|it|they)\s+(?:is|are)?\s*(?:will|is going to|are going to|likely to|set to|poised to|expected to|bound to|about to|should|could|would|may well)\s+(?:easily\s+|probably\s+|soon\s+|comfortably\s+)?(?:rise|fall|double|halve|recover|outperform|rally|rebound|climb|drop|crash|re-?rate|appreciate|gain|surge|soar|jump|plunge|tank|take off|beat the market|go (?:up|down|higher|lower))|(?:prices?|shares?|stock|it) (?:is|are) heading (?:higher|lower|up|down)|(?:earnings|profits?|margins?|revenue|sales|dividend)\s+(?:is|are)?\s*(?:will|is going to|are going to|likely to|set to|poised to|expected to|bound to|about to|should|could|would|may well)\s+(?:rise|fall|double|halve|recover|rebound|climb|drop|increase|decrease|gain|grow|surge|soar|jump|plunge))\b/i },
   { family: "expect the price", re: /\b(?:expect|expects|expecting)\s+(?:the\s+)?(?:price|shares?|stock)\s+to\b/i },
-  { family: "valuation verdict", re: /\b(?:under-?valued|over-?valued|bargain|opportunity|attractive|compelling|entry point|worth buying|worth a look|good value|great value)\b/i },
-  { family: "position words", re: /\b(?:accumulate|overweight|underweight|buy (?:now|the dip|before)|sell (?:now|before|into)|get in before|load up)\b/i },
+  // A verdict on the price: "attractive" and "opportunity" only in a valuation sense (review F4).
+  { family: "valuation verdict", re: /\b(?:under-?valued|over-?valued|under-?priced|over-?priced|bargain|(?:buying|investment|rare|great|real) opportunity|attractive(?:ly)? (?:price[ds]?|valu(?:ed|ation)|entry|level)|attractive entry point|compelling (?:valuation|case|price)|entry point|worth (?:buying|owning|holding|considering|a look|a punt|a bet)|good value|great value|cheap at this price|too expensive to buy|(?:is|are|looks?|seems?|remains?)\s+(?:too\s+|very\s+|still\s+|dirt\s+)?cheap\b|mis-?priced|a steal\b|buying (?:here|now|at these levels) makes sense|make you money|make money here|(?:a|the) (?:stock|share|company|one) to (?:own|buy|hold)|money to be made|missing out|(?:market|street) (?:has|have) (?:got )?(?:this(?: one)?|it|the price) wrong)\b/i },
+  { family: "position words", re: /\b(?:accumulate|overweight|underweight|buy (?:now|the dip|before|on weakness)|sell (?:now|before|into)|get in before|load up|lock in (?:profits?|gains)|piling in(?:to)?|re-?rating|adding on (?:any )?weakness|adding to (?:my|our|your|their|a|the) (?:position|holding|stake)s?|tak(?:e|ing) a position|core holding|(?:a )?place in (?:your|any|every|the) portfolio|due (?:a|for a) (?:catch-?up|re-?rat(?:e|ing)))\b/i },
+  // A stance held by the writer, not an adjective on a noun ("its bullish customers").
+  { family: "stance", re: /\b(?:(?:i'?m|i am|we'?re|we are|remain|stay|turn(?:ed|ing)?|is|are|am)\s+(?:very\s+|still\s+|quite\s+)?(?:bullish|bearish)|top pick|(?:my|our) pick|safe bet|no-?brainer|must-?own|must-?have|room to run|(?:big|plenty of|significant|limited|clear|substantial) (?:upside|downside)|upside potential|time to buy|time to sell|time to (?:get in|get involved|invest)|get in now|act now|don't miss|smart money|no-?lose|can'?t go wrong|(?:upside|downside) is (?:limited|significant|substantial|big|huge|enormous|small)|skewed to the (?:upside|downside)|anywhere but up|(?:ten|multi)-?bagger|(?:i'?d be|i am|i'?m|we'?re|we are) a (?:buyer|seller)|(?:investors?|shareholders?|holders?|patience|patient money) will be rewarded)\b/i },
 ];
-export function findAdvice(text: string): string[] {
-  const hits: string[] = [];
-  for (const { re } of ADVICE_PATTERNS) {
+export type AdviceHit = { family: string; match: string };
+export function findAdviceDetailed(text: string): AdviceHit[] {
+  const hits: AdviceHit[] = [];
+  for (const { family, re } of ADVICE_PATTERNS) {
     const m = text.match(re);
-    if (m) hits.push(m[0]);
+    if (m) hits.push({ family, match: m[0].trim() });
   }
   return hits;
 }
+export function findAdvice(text: string): string[] { return findAdviceDetailed(text).map((h) => h.match); }
 
 export function checkGrounding(n: Narrative, sheet: FactSheet): Grounding {
   const byId = new Map(sheet.facts.map((f) => [f.id, f.text]));
@@ -469,11 +511,11 @@ export function checkGrounding(n: Narrative, sheet: FactSheet): Grounding {
     if (unknown.length) unknownFacts.push({ paragraph: i + 1, ids: unknown });
     // Numbers are checked as values against the whole sheet (a fact id may be
     // cited loosely; a number from nowhere is the real fault).
-    const sheetValues = extractNumbers(sheet.facts.map((f) => f.text).join(" "));
-    const bad = extractNumbers(p.text)
-      .filter((v) => !FREE_VALUES.has(v))
+    const sheetValues = extractNumbersWithPrecision(sheet.facts.map((f) => f.text).join(" "));
+    const bad = extractNumbersWithPrecision(p.text)
+      .filter((v) => !FREE_VALUES.has(v.value))
       .filter((v) => !sheetValues.some((f) => sameValue(v, f)))
-      .map((v) => String(v));
+      .map((v) => String(v.value));
     if (bad.length) unsupportedNumbers.push({ paragraph: i + 1, numbers: [...new Set(bad)] });
     recommendationLanguage.push(...findAdvice(p.text));
   });

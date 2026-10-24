@@ -45,6 +45,7 @@
 
 import { fetchFmpDailyAdjusted, type DailyBar } from "../providers";
 import { runSmallCaps, type SmallEnv } from "./smallcaps";
+import { runSignals } from "./signals";
 
 type Env = SmallEnv & {
   FMP_API_KEY: string;
@@ -67,7 +68,16 @@ const FRESH_HOURS = 6;
 const DELAY_MS = 250;
 const CHUNK = 40;
 
-export type Phase = "prices" | "fundamentals" | "smallcaps" | "all";
+export type Phase = "prices" | "fundamentals" | "smallcaps" | "signals" | "all";
+
+/** The signal pass, fenced: whatever it throws becomes a receipt, never a lost phase. */
+async function safeSignals(env: Env, runAt: string, log: (symbol: string | null, outcome: string, rows: number, detail: string) => Promise<void>): Promise<void> {
+  try {
+    await runSignals(env, runAt);
+  } catch (err) {
+    await log(null, "signals_error", 0, `the signal pass threw: ${String((err as Error).message ?? err).slice(0, 200)}`);
+  }
+}
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -91,6 +101,15 @@ export async function runNightly(env: Env, phase: Phase = "all"): Promise<void> 
   // rations (Alpha Vantage 20 calls, spaced; EDGAR free), the shared fetch budget.
   if (phase === "smallcaps") {
     await runSmallCaps(env, runAt, budget);
+    return;
+  }
+
+  // Week 7: the signal engine reads the stored closes and writes one row per
+  // instrument — D1 only, no provider calls, no ration. Its own cron line
+  // (0 23 UTC, after the 22:30/22:40 price runs and the 22:50 accounts) and
+  // its own budget; a fault in it can never cost another phase (review F1/F3).
+  if (phase === "signals") {
+    await safeSignals(env, runAt, log);
     return;
   }
 
@@ -231,6 +250,7 @@ export async function runNightly(env: Env, phase: Phase = "all"): Promise<void> 
   let fundamentals = "separate invocation";
   let smallcaps = "separate invocation";
   if (phase === "all") {
+    await safeSignals(env, runAt, log);
     fundamentals = phaseBlocked ? "skipped" : "ran";
     if (!phaseBlocked) await runFundamentals(env, runAt, budget);
     // Local doorbell only: the small-cap visit too (slow — Alpha Vantage calls

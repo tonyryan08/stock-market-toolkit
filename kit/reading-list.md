@@ -10,6 +10,14 @@ Nothing here is required in week 1. Assigned chapters are announced in the week 
 - **Benjamin Graham & David Dodd, *Security Analysis*** — the professional companion, and the older, heavier book (1934). Not assigned: nobody needs 700 pages of Depression-era prose to pass this course. But it is where the *reasoning* beneath the checklist lives — why book value matters, why earnings must be examined over a full cycle, what a margin of safety is actually protecting you from. Recommended for anyone who finishes week 5 wanting to argue with the criteria rather than just apply them.
 - **Robert Carver, *Leveraged Trading*** — the Starter System chapters, assigned across weeks 7–9. We use his rules on ordinary shares with no leverage; the system's discipline is the point, not the leverage.
 
+## Rules, the Carver way (Phase 3, weeks 7–9)
+
+- **Robert Carver, *Systematic Trading*** (2015) — the fuller book behind the Starter System: chapter 1 on the flawed human brain, chapter 3 on fooling yourself by fitting rules to the past, chapter 7 on forecasts (the rule the toolkit runs, and why the scalar is 3.75). Optional; the tutor's course copy is this one.
+- **pysystemtrade** — Carver's own open-source trading system (github.com/robcarver17/pysystemtrade, GPL). The toolkit's constants were checked against it; you can read the same rule in his hand. For the curious, not required.
+- **Brad Barber & Terrance Odean, "Trading Is Hazardous to Your Wealth"** — *Journal of Finance* 55(2), 2000. The 66,000-household study behind week 7's first slide. Free versions on the authors' pages.
+- **Terrance Odean, "Are Investors Reluctant to Realize Their Losses?"** — *Journal of Finance* 53(5), 1998. The disposition effect, measured.
+- **Brian Hurst, Yao Hua Ooi & Lasse Pedersen, "A Century of Evidence on Trend-Following Investing"** — *Journal of Portfolio Management* 44(1), 2017. Trend rules like ours, 1880–2016, 67 markets: modest returns, long drawdowns. Free on AQR's site. The honest answer to "does this actually make money?".
+
 ## On luck, skill, and judging decisions (the week-1 theme)
 
 - **Annie Duke, *Thinking in Bets*** — where "resulting" comes from; short and readable.

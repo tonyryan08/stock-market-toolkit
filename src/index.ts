@@ -22,6 +22,7 @@ import {
   CRITERIA, T as GT, requiredGrowthPct, rankScreen, screenCompany, type ScreenResult, type ScreenInput,
   ENTERPRISING, E as ET, screenEnterprising, type EnterprisingResult, type CriterionDef, type CriterionResult, type Verdict,
 } from "./lib/graham";
+import { computeSignals, describeSignal, HISTORY_LIMIT, RULE as SIGNAL_RULE, type SignalSeries, type SignalPoint } from "./lib/signals";
 
 type Env = {
   ALPHAVANTAGE_API_KEY: string;
@@ -112,22 +113,44 @@ app.get("/api/quote/:ticker", async (c) => {
   // key the small-cap tier runs on, so it is rationed — QUOTE_DAILY_CAP live
   // calls in any 24 hours, counted in fetch_log, the rest answered from the
   // nightly cache with the reason. The tutor's "858 ms vs 9 ms" demo survives.
-  const cap = Math.max(0, parseInt(c.env.QUOTE_DAILY_CAP ?? "", 10) || QUOTE_DAILY_CAP_DEFAULT);
+  // "0" switches the demo off; an unset or unparseable value means the default (OI-24).
+  const capRaw = (c.env.QUOTE_DAILY_CAP ?? "").trim();
+  const cap = capRaw === "" || !/^\d+$/.test(capRaw) ? QUOTE_DAILY_CAP_DEFAULT : parseInt(capRaw, 10);
   const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-  const used = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM fetch_log WHERE outcome = 'quote_demo' AND run_at >= ?1").bind(since).first<{ n: number }>();
-  if ((used?.n ?? 0) >= cap) {
+  // The receipt is written FIRST and the count taken after it, so requests in
+  // flight together cannot all read the same count (verification V8): the
+  // n-th receipt beyond the cap is removed again and answered from the cache.
+  const runAt = new Date().toISOString();
+  // Over the cap until proven otherwise: a demo switched off, or a receipt that
+  // cannot be written (D1 in trouble), never spends a live call (review F6).
+  let used = cap + 1;
+  let receiptWritten = false;
+  if (cap > 0) {
+    try {
+      await c.env.DB.prepare("INSERT INTO fetch_log (run_at, symbol, outcome, rows_written, detail) VALUES (?1, ?2, 'quote_demo', 0, ?3)")
+        .bind(runAt, ticker, "live demo call").run();
+      receiptWritten = true;
+      used = (await c.env.DB.prepare("SELECT COUNT(*) AS n FROM fetch_log WHERE outcome = 'quote_demo' AND run_at >= ?1").bind(since).first<{ n: number }>())?.n ?? cap + 1;
+    } catch { used = cap + 1; }
+  }
+  if (used > cap) {
+    if (receiptWritten) {
+      try {
+        await c.env.DB.prepare("DELETE FROM fetch_log WHERE id = (SELECT MAX(id) FROM fetch_log WHERE outcome = 'quote_demo' AND run_at = ?1 AND symbol = ?2)").bind(runAt, ticker).run();
+      } catch { /* leave it: it only makes the ration stricter */ }
+    }
     const cached = await c.env.DB.prepare("SELECT date, adj_close FROM daily_prices WHERE symbol = ?1 ORDER BY date DESC LIMIT 1").bind(ticker).first<{ date: string; adj_close: number }>();
     return c.json({
       ticker,
-      error: `The live demo is rationed to ${cap} calls a day (the free Alpha Vantage key serves the small-cap tier too); today's are spent.`,
+      error: cap === 0 ? "The live demo is switched off on this instance." : `The live demo is rationed to ${cap} calls a day (the free Alpha Vantage key serves the small-cap tier too); today's are spent.`,
       cached_close: cached ?? null,
       hint: "Everything students use is served from the nightly cache: /prices/:ticker, /fundamentals/:ticker, /screen.",
     }, 429, { "cache-control": "no-store" });
   }
   try {
-    await c.env.DB.prepare("INSERT INTO fetch_log (run_at, symbol, outcome, rows_written, detail) VALUES (?1, ?2, 'quote_demo', 0, ?3)")
-      .bind(new Date().toISOString(), ticker, `live demo call ${(used?.n ?? 0) + 1} of ${cap} today`).run();
-  } catch { /* the receipt is a convenience */ }
+    await c.env.DB.prepare("UPDATE fetch_log SET detail = ?3 WHERE id = (SELECT MAX(id) FROM fetch_log WHERE outcome = 'quote_demo' AND run_at = ?1 AND symbol = ?2)")
+      .bind(runAt, ticker, `live demo call ${used} of ${cap} today`).run();
+  } catch { /* cosmetic */ }
 
   const [av, fmp] = await Promise.all([
     fetchAlphaVantageQuote(ticker, avKey),
@@ -155,7 +178,7 @@ app.get("/api/quote/:ticker", async (c) => {
           price: "Alpha Vantage (free tier: ~25 requests/day, 5/min)",
           company: "Financial Modeling Prep (free plan: ~250 requests/day)",
         },
-        demo_calls_today: `${(used?.n ?? 0) + 1} of ${cap}`,
+        demo_calls_today: `${used} of ${cap}`,
         warnings,
         note: "Education, not advice.",
       },
@@ -210,13 +233,14 @@ app.get("/api/prices/:ticker", async (c) => {
   const t0 = Date.now();
   const rows = (
     await c.env.DB.prepare(
-      `SELECT date, adj_open, adj_high, adj_low, adj_close, volume
+      `SELECT date, close, adj_open, adj_high, adj_low, adj_close, volume
        FROM daily_prices WHERE symbol = ?1
        ORDER BY date DESC LIMIT ?2`,
     )
       .bind(ticker, days)
       .all<{
         date: string;
+        close: number | null;       // as traded — stored for the small tier (v0.8.0); NULL for FMP rows
         adj_open: number | null;
         adj_high: number | null;
         adj_low: number | null;
@@ -250,6 +274,18 @@ app.get("/api/prices/:ticker", async (c) => {
     .first<{ run_at: string }>();
   const tierRow = await c.env.DB.prepare("SELECT tier FROM tickers WHERE symbol = ?1").bind(ticker).first<{ tier: string | null }>();
   const small = tierRow?.tier === "small";
+
+  // Week 7: ?csv=1 — the same rows as a spreadsheet can open, for the
+  // lesson's exit check (re-implement the rule in Excel and reconcile).
+  if (c.req.query("csv") === "1") {
+    const head = "date,close,adj_open,adj_high,adj_low,adj_close,volume";
+    const lines = rows.map((r) => [r.date, r.close ?? "", r.adj_open ?? "", r.adj_high ?? "", r.adj_low ?? "", r.adj_close, r.volume ?? ""].join(","));
+    return c.text(`${head}\n${lines.join("\n")}\n`, 200, {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": `attachment; filename="${ticker}-prices.csv"`,
+      "cache-control": "no-store",
+    });
+  }
 
   return c.json({
     ticker,
@@ -360,7 +396,7 @@ function describeSources(tier: string, years: { fiscalYear: string; source: stri
     accounts: "Alpha Vantage income statement and balance sheet; dividend record from Alpha Vantage",
     eps: newest
       ? `SEC EDGAR — ${newest.epsSource!.replace(/^edgar:/, "")}${missing.length ? ` (no EDGAR figure for FY ${missing.join(", ")})` : ""}`
-      : "not available — EDGAR had no usable figure for these periods (or EDGAR_USER_AGENT is not set)",
+      : "not available — EDGAR's company-concept API returned no EPS and no diluted-share count for these periods. The usual reason is a filer with more than one class of shares (Bel Fuse, Ford): those facts are reported per class and the API omits per-class facts, so the toolkit shows \"?\" on the earnings tests rather than guess (decision 14). A missing EDGAR_USER_AGENT secret looks the same; the fetch_log receipt says which.",
   };
 }
 
@@ -425,19 +461,23 @@ app.get("/prices/:ticker", async (c) => {
   const days = Math.min(Math.max(parseInt(c.req.query("days") ?? "365", 10) || 365, 20), 1900);
 
   const t0 = Date.now();
-  const rows = (
+  // Week 7: the whole stored history feeds the rule (the slow EWMA needs the
+  // past); the picture shows the window asked for.
+  const all = (
     await c.env.DB.prepare(
-      `SELECT date, adj_close FROM daily_prices WHERE symbol = ?1 ORDER BY date DESC LIMIT ?2`,
+      `SELECT date, adj_close FROM daily_prices WHERE symbol = ?1 ORDER BY date DESC LIMIT ${HISTORY_LIMIT}`,
     )
-      .bind(ticker, days)
+      .bind(ticker)
       .all<{ date: string; adj_close: number }>()
   ).results.reverse();
+  const rows = all.slice(-days);
+  const sig = all.length ? computeSignals(all.map((r) => ({ date: r.date, close: r.adj_close }))) : null;
 
   const name = await c.env.DB.prepare("SELECT name, status, tier FROM tickers WHERE symbol = ?1")
     .bind(ticker)
     .first<{ name: string | null; status: string; tier: string | null }>();
 
-  return c.html(chartPage(ticker, name?.name ?? null, name?.status ?? null, rows, days, Date.now() - t0, name?.tier ?? "core"));
+  return c.html(chartPage(ticker, name?.name ?? null, name?.status ?? null, rows, days, Date.now() - t0, name?.tier ?? "core", sig));
 });
 
 // ---------------------------------------------------------------------------
@@ -586,6 +626,166 @@ app.get("/screen/enterprising", async (c) => {
 });
 
 app.get("/card", (c) => c.html(cardPage()));
+
+// ---------------------------------------------------------------------------
+// Week 7: the signal engine (decision 17). Nightly rows from the cron; the
+// per-instrument series computed on request from the stored closes.
+// ---------------------------------------------------------------------------
+type SignalRow = {
+  symbol: string; name: string | null; tier: string | null; date: string; close: number;
+  ewma_fast: number; ewma_slow: number; instrument_risk: number | null; forecast: number | null;
+  state: string; state_since: string | null; days: number; computed_at: string;
+};
+
+async function loadSignals(env: Env): Promise<SignalRow[]> {
+  return (await env.DB.prepare(
+    `SELECT s.symbol, t.name, t.tier, s.date, s.close, s.ewma_fast, s.ewma_slow, s.instrument_risk, s.forecast,
+            s.state, s.state_since, s.days, s.computed_at
+     FROM signals s
+     JOIN (SELECT symbol, MAX(date) AS date FROM signals GROUP BY symbol) m ON m.symbol = s.symbol AND m.date = s.date
+     JOIN tickers t ON t.symbol = s.symbol
+     WHERE t.status = 'active'
+     ORDER BY CASE s.state WHEN 'long' THEN 0 WHEN 'flat' THEN 1 ELSE 2 END, s.forecast DESC, s.symbol`,
+  ).all<SignalRow>()).results;
+}
+
+const RULE_META = {
+  rule: "EWMAC 16/64 (Carver), long-only",
+  fast_span: SIGNAL_RULE.fastSpan, slow_span: SIGNAL_RULE.slowSpan, vol_span: SIGNAL_RULE.volSpan,
+  forecast_scalar: SIGNAL_RULE.forecastScalar, forecast_cap: SIGNAL_RULE.forecastCap,
+  business_days: SIGNAL_RULE.businessDays, min_mature_days: SIGNAL_RULE.minMatureDays,
+  basis: "adjusted close (total-return series); daily σ annualised × 16; state long when the forecast is above zero, flat otherwise (no shorts, no leverage)",
+  reference: "Carver, Leveraged Trading (2019) — the Starter System's opening rule; Systematic Trading (2015) ch. 7 — the forecast scalar; constants checked against pysystemtrade (GPL) on 24 Oct 2026",
+  note: "Education, not advice. A signal is what a rule says about a price series, not a recommendation to buy or sell anything.",
+};
+
+app.get("/api/signals", async (c) => {
+  const t0 = Date.now();
+  const rows = await loadSignals(c.env);
+  const asOf = rows.reduce<string | null>((m, r) => (m === null || r.date > m ? r.date : m), null);
+  return c.json({
+    as_of_close: asOf,
+    counts: { long: rows.filter((r) => r.state === "long").length, flat: rows.filter((r) => r.state === "flat").length, warming: rows.filter((r) => r.state === "warming").length },
+    signals: rows,
+    meta: { source: "d1-cache (nightly signals table)", ...RULE_META, served_in_ms: Date.now() - t0 },
+  });
+});
+
+app.get("/api/signals/:ticker", async (c) => {
+  const ticker = c.req.param("ticker").trim().toUpperCase();
+  if (!TICKER.test(ticker)) return c.json({ error: "That doesn't look like a ticker symbol." }, 400);
+  const t0 = Date.now();
+  const all = (await c.env.DB.prepare(`SELECT date, adj_close AS close FROM daily_prices WHERE symbol = ?1 ORDER BY date DESC LIMIT ${HISTORY_LIMIT}`)
+    .bind(ticker).all<{ date: string; close: number }>()).results;
+  if (all.length === 0) {
+    const t = await c.env.DB.prepare("SELECT status, notes FROM tickers WHERE symbol = ?1").bind(ticker).first<{ status: string; notes: string | null }>();
+    return c.json({
+      ticker,
+      error: t
+        ? t.status === "blocked"
+          ? `"${ticker}" is in the universe but outside the free data plan — no history is cached, so the rule has nothing to read. (${t.notes ?? "see verification record"})`
+          : `"${ticker}" is in the universe but has no cached history yet — the nightly refresh (or the small-cap visit) hasn't reached it.`
+        : `"${ticker}" is not in the course universe. The universe is the verified list at /api/universe.`,
+      hint: "Universe: /api/universe · all signals: /api/signals",
+    }, 404);
+  }
+  const sig = computeSignals(all);
+  const days = Math.min(Math.max(parseInt(c.req.query("days") ?? "365", 10) || 365, 20), 1900);
+  const stored = await c.env.DB.prepare("SELECT date, forecast, state, computed_at FROM signals WHERE symbol = ?1 ORDER BY date DESC LIMIT 1")
+    .bind(ticker).first<{ date: string; forecast: number | null; state: string; computed_at: string }>();
+  return c.json({
+    ticker,
+    latest: sig.latest,
+    summary: { days: sig.days, mature: sig.mature, state_since: sig.stateSince, flips: sig.flips, time_long: sig.timeLong, reading: describeSignal(sig) },
+    nightly_row: stored ?? null,
+    series: sig.points.slice(-days).map((p) => ({ date: p.date, close: p.close, fast: p.fast, slow: p.slow, sigma_px: p.sigmaPx, instrument_risk: p.instrumentRisk, forecast: p.forecast, state: p.state })),
+    meta: { source: "computed on request from the cached closes", ...RULE_META, closes_read: all.length, served_in_ms: Date.now() - t0 },
+  });
+});
+
+app.get("/signals", async (c) => {
+  const t0 = Date.now();
+  const rows = await loadSignals(c.env);
+  const universe = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM tickers WHERE status = 'active'").first<{ n: number }>();
+  return c.html(signalsPage(rows, universe?.n ?? 0, Date.now() - t0));
+});
+
+function signalsPage(rows: SignalRow[], universe: number, ms: number): string {
+  const asOf = rows.reduce<string | null>((m, r) => (m === null || r.date > m ? r.date : m), null);
+  const n = (st: string) => rows.filter((r) => r.state === st).length;
+  const bar = (f: number | null) => {
+    if (f === null) return `<span class="bar"><span class="axis"></span></span>`;
+    const w = Math.min(Math.abs(f), SIGNAL_RULE.forecastCap) / SIGNAL_RULE.forecastCap * 50; // half-width in %
+    const left = f >= 0 ? 50 : 50 - w;
+    return `<span class="bar" title="forecast ${f > 0 ? "+" : ""}${f} on ±${SIGNAL_RULE.forecastCap}"><span class="axis"></span><span class="fill ${f > 0 ? "pos" : "neg"}" style="left:${left}%;width:${w}%"></span></span>`;
+  };
+  const stateTag = (st: string) => st === "long" ? `<span class="tag long">LONG</span>` : st === "flat" ? `<span class="tag flat">FLAT</span>` : `<span class="tag warming">WARMING UP</span>`;
+  const dateOf = (d: string | null) => d ?? "—";
+  const body = rows.map((r) => `<tr class="${r.state}">
+      <th scope="row"><a href="/prices/${esc(r.symbol)}">${esc(r.symbol)}</a>${r.tier === "small" ? `<span class="st" title="Small-cap tier: as-traded prices, dividend-adjusted by the toolkit, NOT split-adjusted — a split reads as a false flip; the rule needs ${SIGNAL_RULE.minMatureDays} closes">s</span>` : ""}<span class="nm">${esc(r.name ?? "")}</span></th>
+      <td class="s">${stateTag(r.state)}</td>
+      <td class="f">${bar(r.forecast)}<span class="fv">${r.forecast === null ? "—" : `${r.forecast > 0 ? "+" : ""}${r.forecast.toFixed(1)}`}</span></td>
+      <td class="r">${r.instrument_risk === null ? "—" : `${r.instrument_risk.toFixed(0)}%`}</td>
+      <td class="d">${r.state === "warming" ? `${r.days} of ${SIGNAL_RULE.minMatureDays} closes` : dateOf(r.state_since)}</td>
+      <td class="c">${r.close >= 100 ? r.close.toFixed(0) : r.close.toFixed(2)}</td>
+    </tr>`).join("");
+
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signals — Carver's rule, nightly</title>
+${FONTS_HTML}
+<style>
+${PAGE_CSS}
+  main { max-width: 52rem; }
+  .lede { color:var(--faint); font-size:.95rem; margin:.3rem 0 1rem; }
+  .tally { display:flex; gap:1.2rem; flex-wrap:wrap; margin:.6rem 0 1rem; font-family:"IBM Plex Mono",monospace; font-size:.85rem; }
+  .tally b { font-size:1.3rem; display:block; }
+  table { width:100%; border-collapse:collapse; font-size:.85rem; }
+  th, td { padding:.4rem .5rem; border-bottom:1px solid var(--rule); text-align:left; vertical-align:middle; }
+  thead th { color:var(--faint); font-weight:400; font-size:.75rem; letter-spacing:.04em; text-transform:uppercase; }
+  tbody th { font-weight:500; white-space:nowrap; }
+  .nm { display:block; color:var(--faint); font-weight:400; font-size:.75rem; white-space:normal; }
+  .st { font-family:"IBM Plex Mono",monospace; font-size:.65rem; color:var(--faint); margin-left:.3rem; vertical-align:super; }
+  .tag { font-family:"IBM Plex Mono",monospace; font-size:.7rem; padding:.1rem .4rem; border-radius:3px; letter-spacing:.04em; }
+  .tag.long { background:#3E6B54; color:#fff; } .tag.flat { background:#E3E8E4; color:#3b4a42; } .tag.warming { background:#F1EBD6; color:#6b5d2a; }
+  .bar { position:relative; display:inline-block; width:120px; height:10px; background:#EEF1EC; border-radius:2px; vertical-align:middle; }
+  .axis { position:absolute; left:50%; top:0; width:1px; height:100%; background:var(--faint); }
+  .fill { position:absolute; top:1px; height:8px; border-radius:2px; } .fill.pos { background:#3E6B54; } .fill.neg { background:#B7C0BA; }
+  .fv { font-family:"IBM Plex Mono",monospace; font-size:.8rem; margin-left:.5rem; }
+  td.r, td.c { font-family:"IBM Plex Mono",monospace; }
+  tr.flat th a, tr.flat td { color:var(--faint); } tr.flat th a { color:var(--entry); }
+  .rule { background:rgba(255,255,255,.5); border:1px solid var(--rule); border-radius:6px; padding:.8rem 1rem; font-size:.85rem; margin:1rem 0; }
+  .rule code { font-family:"IBM Plex Mono",monospace; font-size:.8rem; }
+  .argue { margin:1rem 0; font-size:.9rem; }
+  .wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  @media (max-width: 640px) { .nm { display:none; } .bar { width:70px; } td.c { display:none; } thead th:last-child { display:none; } td.d { white-space:nowrap; } }
+</style></head>
+<body><main>
+  <p class="back"><a href="/">&larr; the twelve-week ledger</a></p>
+  <p class="eyebrow">Phase 3 · week 7 · why systems beat gut feel</p>
+  <h1>Signals</h1>
+  <p class="lede">One rule, run the same way over every company every night: Robert Carver's 16-day / 64-day moving-average crossover, long-only. ${asOf ? `As of the ${esc(asOf)} close` : "No signals computed yet — the nightly job writes them at 22:50 UTC"}, ${rows.length} of ${universe} instruments.</p>
+  <div class="tally">
+    <span><b>${n("long")}</b> long — the fast average is above the slow</span>
+    <span><b>${n("flat")}</b> flat — below (no position; the rule never goes short)</span>
+    <span><b>${n("warming")}</b> warming up — fewer than ${SIGNAL_RULE.minMatureDays} closes</span>
+  </div>
+  <div class="wrap"><table>
+    <thead><tr><th>Instrument</th><th>State</th><th>Forecast (±${SIGNAL_RULE.forecastCap})</th><th title="Annualised volatility: EW σ of daily returns × 16">Instr. risk</th><th>Since</th><th>Close</th></tr></thead>
+    <tbody>${body || `<tr><td colspan="6">Nothing yet.</td></tr>`}</tbody>
+  </table></div>
+  <div class="rule">
+    <strong>The rule, in full</strong> (the same numbers run the nightly job, this page and the chart overlay — <a href="/api/signals">raw JSON</a>):<br>
+    <code>fast = EWMA(close, ${SIGNAL_RULE.fastSpan})</code> · <code>slow = EWMA(close, ${SIGNAL_RULE.slowSpan})</code> · <code>σ = EW standard deviation of daily price changes, span ${SIGNAL_RULE.volSpan}</code><br>
+    <code>forecast = ${SIGNAL_RULE.forecastScalar} × (fast − slow) ÷ σ</code>, capped at ±${SIGNAL_RULE.forecastCap} · <code>state = forecast &gt; 0 ? LONG : FLAT</code> · <code>instrument risk = σ% × 16</code> (a year).<br>
+    EWMA weight λ = 2 ÷ (span + 1). The forecast scalar is Carver's (average |forecast| ≈ 10 over his data); the spans, the volatility lookback and the cap are his open-source defaults. Long-only is the course's adaptation: a negative forecast means no position, never a short. The rule reads the adjusted close — dividends are inside the price.
+  </div>
+  <p class="argue"><strong>Tonight's exercise:</strong> before you looked at this page you wrote three names you believed were "going up". How many are long here? The rule has no opinion about the company, the news or you — it has read 64 days of closes and divided by the noise. Where you and the rule disagree, write down why. Next week: how much a rule like this would let you hold, and where it would make you stop.</p>
+  <p class="caption">Served in ${ms} ms · <a href="/screen">the Graham screen</a> · <a href="/screen/enterprising">enterprising</a> · <a href="/card">the cards</a></p>
+  <footer><p class="notice">Education, not advice. A signal is what a rule says about a price series — a long is not a recommendation to buy, a flat is not a recommendation to sell. No sizing, no stops, no tickets yet: that is week 8.</p></footer>
+</main></body></html>`;
+}
+
 
 // ---------------------------------------------------------------------------
 // Week 5 pages
@@ -1152,12 +1352,12 @@ function fundamentalsPage(
           : "Can it pay this year's bills? Current assets ÷ current liabilities.",
         chip: financial
           ? `<span class="chip na">not applied to financials</span>`
-          : verdict(r.raw.currentRatio === null ? null : r.raw.currentRatio >= 2, "Graham bar: ≥ 2"),
+          : verdict(r.raw.currentRatio === null ? null : r.raw.currentRatio >= GT.minCurrentRatio, `Graham bar: ≥ ${GT.minCurrentRatio}`),
       },
       {
         k: "P/E (3-yr avg)", v: fmt(r.pe3),
         gloss: `Years of average recent earnings you pay for the share — Graham's basis. On the latest year alone: ${fmt(r.pe)}.`,
-        chip: verdict(r.raw.pe3 === null ? null : r.raw.pe3 <= 15, "Graham bar: ≤ 15"),
+        chip: verdict(r.raw.pe3 === null ? null : r.raw.pe3 <= GT.maxPe, `Graham bar: ≤ ${GT.maxPe}`),
       },
       {
         k: "P/B", v: r.bookValuePerShare !== null && r.bookValuePerShare <= 0 ? "neg. book" : fmt(r.pb),
@@ -1166,14 +1366,14 @@ function fundamentalsPage(
           : "Price against the book value behind each share.",
         chip: r.bookValuePerShare !== null && r.bookValuePerShare <= 0
           ? verdict(false, "Graham bar: ≤ 1.5")
-          : verdict(r.raw.pb === null ? null : r.raw.pb <= 1.5, "Graham bar: ≤ 1.5"),
+          : verdict(r.raw.pb === null ? null : r.raw.pb <= GT.maxPb, `Graham bar: ≤ ${GT.maxPb}`),
       },
       {
         k: "P/E × P/B", v: fmt(r.peTimesPb),
-        gloss: r.raw.pb !== null && r.raw.pb <= 1.5
+        gloss: r.raw.pb !== null && r.raw.pb <= GT.maxPb
           ? "Graham's combined test, on the 3-year P/E. Only needed when P/B is above 1.5 — this company's P/B already meets his bar, so test 7 passes either way."
           : "Graham's combined test, on the 3-year P/E. Test 7 passes if P/B ≤ 1.5 OR this product ≤ 22.5.",
-        chip: verdict(r.raw.peTimesPb === null ? null : r.raw.peTimesPb <= 22.5, "Graham bar: ≤ 22.5"),
+        chip: verdict(r.raw.peTimesPb === null ? null : r.raw.peTimesPb <= GT.maxPeTimesPb, `Graham bar: ≤ ${GT.maxPeTimesPb}`),
       },
     ];
     const cardHtml = cards
@@ -1265,6 +1465,22 @@ ${PAGE_CSS}
 // ---------------------------------------------------------------------------
 // Week 3 chart page (unchanged except shared chrome)
 // ---------------------------------------------------------------------------
+/** The rule's state under the chart: a band per run of long / flat / warming days. */
+function stripRects(sp: (SignalPoint | null)[], x: (i: number) => number, yTop: number, n: number): string {
+  if (!sp.some(Boolean)) return "";
+  const out: string[] = [];
+  let i = 0;
+  while (i < n) {
+    const st = sp[i]?.state ?? "warming";
+    let j = i;
+    while (j + 1 < n && (sp[j + 1]?.state ?? "warming") === st) j++;
+    const x0 = x(i), x1 = j + 1 < n ? x(j + 1) : x(j) + 1;
+    out.push(`<rect x="${x0.toFixed(1)}" y="${yTop}" width="${Math.max(x1 - x0, 1).toFixed(1)}" height="6" class="strip ${st}"><title>${st} ${sp[i]?.date ?? ""} → ${sp[j]?.date ?? ""}</title></rect>`);
+    i = j + 1;
+  }
+  return out.join("");
+}
+
 function chartPage(
   ticker: string,
   name: string | null,
@@ -1273,6 +1489,7 @@ function chartPage(
   days: number,
   queryMs: number,
   tier: string = "core",
+  sig: SignalSeries | null = null,
 ): string {
   const T = esc(ticker);
 
@@ -1288,7 +1505,11 @@ function chartPage(
   } else {
     const W = 720, H = 260, PAD_L = 14, PAD_R = 64, PAD_T = 18, PAD_B = 30;
     const closes = rows.map((r) => r.adj_close);
-    const min = Math.min(...closes), max = Math.max(...closes);
+    // Week 7: Carver's two averages over the window, and the rule's state under it.
+    const byDate = new Map((sig?.points ?? []).map((p) => [p.date, p] as const));
+    const sp = rows.map((r) => byDate.get(r.date) ?? null);
+    const overlayVals = sp.flatMap((p) => (p ? [p.fast, p.slow] : []));
+    const min = Math.min(...closes, ...overlayVals), max = Math.max(...closes, ...overlayVals);
     const span = max - min || 1;
     const x = (i: number) => PAD_L + (i / Math.max(rows.length - 1, 1)) * (W - PAD_L - PAD_R);
     const y = (v: number) => PAD_T + (1 - (v - min) / span) * (H - PAD_T - PAD_B);
@@ -1308,8 +1529,11 @@ function chartPage(
   <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Adjusted close of ${T}, ${first.date} to ${last.date}" id="chart">
     <line x1="${PAD_L}" y1="${y(min)}" x2="${W - PAD_R}" y2="${y(min)}" class="grid"/>
     <line x1="${PAD_L}" y1="${y(max)}" x2="${W - PAD_R}" y2="${y(max)}" class="grid"/>
+    ${sp.some(Boolean) ? `<polyline points="${sp.map((p, i) => (p ? `${x(i).toFixed(1)},${y(p.slow).toFixed(1)}` : "")).filter(Boolean).join(" ")}" class="ewma slow"/>
+    <polyline points="${sp.map((p, i) => (p ? `${x(i).toFixed(1)},${y(p.fast).toFixed(1)}` : "")).filter(Boolean).join(" ")}" class="ewma fast"/>` : ""}
     <polyline points="${pts}" class="series"/>
     <circle cx="${x(rows.length - 1)}" cy="${y(last.adj_close)}" r="3.5" class="dot"/>
+    ${stripRects(sp, x, H - PAD_B + 6, rows.length)}
     <text x="${W - PAD_R + 6}" y="${y(max) + 4}" class="lbl">${fmt(max)}</text>
     <text x="${W - PAD_R + 6}" y="${y(min) + 4}" class="lbl">${fmt(min)}</text>
     <text x="${W - PAD_R + 6}" y="${y(last.adj_close) + 4}" class="lbl last">${fmt(last.adj_close)}</text>
@@ -1320,6 +1544,7 @@ function chartPage(
   </svg>
   <div id="tip" class="tip" hidden></div>
   <p class="caption">${first.date} → ${last.date} · ${tier === "small" ? "as traded (Alpha Vantage), dividend-adjusted by the toolkit; not adjusted for splits" : "adjusted for splits &amp; dividends"} · served from the nightly cache in ${queryMs}&nbsp;ms</p>
+  ${sig ? `<p class="signal"><span class="swatch fast"></span>16-day average <span class="swatch slow"></span>64-day average · <strong>${esc(describeSignal(sig))}</strong> · <a href="/signals">all signals</a> · <a href="/api/signals/${T}">the series</a>. Education, not advice: a signal is what a rule says, not what you should do.</p>` : ""}
   <p class="ranges">Range:
     <a href="/prices/${T}?days=90">3m</a> · <a href="/prices/${T}?days=365">1y</a> ·
     <a href="/prices/${T}?days=1900">max</a> · <a href="/fundamentals/${T}">the books</a> · <a href="/api/prices/${T}?days=${days}">raw JSON</a></p>
@@ -1368,6 +1593,12 @@ ${PAGE_CSS}
   .chg { color:var(--faint); font-size:.9rem; margin-left:.4rem; }
   svg { width:100%; height:auto; display:block; background:rgba(255,255,255,.45); border:1px solid var(--rule); border-radius:6px; }
   .series { fill:none; stroke:var(--entry); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
+  .ewma { fill:none; stroke-width:1.4; stroke-linejoin:round; }
+  .ewma.fast { stroke:#1F5FA8; } .ewma.slow { stroke:#B4382E; stroke-dasharray:4 3; }
+  .strip.long { fill:#3E6B54; opacity:.55; } .strip.flat { fill:#9AA5A0; opacity:.45; } .strip.warming { fill:#D9D9D9; opacity:.6; }
+  .signal { font-size:.85rem; margin-top:.5rem; }
+  .swatch { display:inline-block; width:14px; height:3px; vertical-align:middle; margin:0 .3rem 0 .1rem; }
+  .swatch.fast { background:#1F5FA8; } .swatch.slow { background:#B4382E; }
   .grid { stroke:var(--rule); stroke-width:1; stroke-dasharray:2 4; }
   .lbl { font-family:"IBM Plex Mono",monospace; font-size:11px; fill:var(--faint); }
   .lbl.last { fill:var(--ink); font-weight:500; }
@@ -1407,7 +1638,8 @@ export default {
     // each; a later run skips what an earlier one fetched tonight). 22:50 is
     // accounts. Anything else (the local doorbell's "* * * * *") runs both.
     const phase: Phase =
-      controller.cron === "50 22 * * *" ? "fundamentals"
+      controller.cron === "50 22 * * *" ? "fundamentals"   // accounts
+      : controller.cron === "0 23 * * *" ? "signals"        // week 7: the signal pass, its own invocation (D1 only, no calls)
       : controller.cron === "10 23 * * *" ? "smallcaps"     // decision 14: the small-cap tier, Alpha Vantage + EDGAR
       : /^\d{1,2} 22 \* \* \*$/.test(controller.cron) ? "prices"
       : "all";

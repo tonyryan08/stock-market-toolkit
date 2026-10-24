@@ -242,6 +242,11 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
         }
       } else {
         divOutcome = `dividends ${div.kind}: ${div.detail.slice(0, 80)}`;
+        // "Not served" is an answer (a non-payer, or a symbol Alpha Vantage has no
+        // record for): stamp it so the call is not repeated every visit (OI-29).
+        if (div.kind === "not_served") {
+          await env.DB.prepare("UPDATE tickers SET dividends_as_of = ?2 WHERE symbol = ?1").bind(sym, runAt).run();
+        }
       }
     }
 
@@ -280,12 +285,19 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
       }
     }
 
-    // 4) accounts, when due
+    // 4) accounts, when due. A halt here (the ration met mid-visit) leaves the
+    //    prices written but the accounts undone; clearing last_price_fetch puts
+    //    the company FIRST in the next run's queue at the cost of one repeated
+    //    price call (OI-34, 24 Oct 2026: BSET sat behind 43 never-fetched names).
+    const haltMidVisit = async (r: AvResult<unknown>) => {
+      await haltLog(r);
+      await env.DB.prepare("UPDATE tickers SET last_price_fetch = NULL WHERE symbol = ?1").bind(sym).run();
+    };
     if (visit.accounts) {
       const inc = await av(() => fetchAvIncomeAnnual(sym, env.ALPHAVANTAGE_API_KEY, avOpts));
-      if (halts(inc, "income")) { await haltLog(inc); break; }
+      if (halts(inc, "income")) { await haltMidVisit(inc); break; }
       const bal = await av(() => fetchAvBalanceAnnual(sym, env.ALPHAVANTAGE_API_KEY, avOpts));
-      if (halts(bal, "balance")) { await haltLog(bal); break; }
+      if (halts(bal, "balance")) { await haltMidVisit(bal); break; }
 
       const parts: string[] = [divOutcome];
       let rows = 0;

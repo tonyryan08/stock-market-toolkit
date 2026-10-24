@@ -148,8 +148,8 @@ if (!summary) {
 // --- 4) the receipt ------------------------------------------------------------
 const receipt = d1(`SELECT symbol, outcome, rows_written, substr(detail,1,170) AS d FROM fetch_log WHERE run_at = '${summary.run_at}' ORDER BY id`) ?? [];
 console.log(`\nReceipt for the run at ${summary.run_at}:`);
-for (const r of receipt) console.log(`  ${String(r.symbol ?? "—").padEnd(6)} ${String(r.outcome).padEnd(14)} ${String(r.rows_written).padStart(4)}  ${r.d}`);
+for (const r of receipt) console.log(`  ${String(r.symbol ?? "—").padEnd(6)} ${String(r.outcome).padEnd(17)} ${String(r.rows_written).padStart(4)}  ${r.d}`);
 const s = JSON.parse(summary.detail);
 console.log(`\nVisited ${s.planned} (${s.withAccounts} with accounts) · Alpha Vantage calls ${s.avCalls} · EDGAR calls ${s.edgarCalls} · outcomes ${JSON.stringify(s.outcomes)}`);
-if (s.outcomes?.rate_limited) console.log("Stopped by the limit — the rest is first in the queue next time.");
+if (s.outcomes?.rate_limited || s.outcomes?.premium || s.outcomes?.auth_failed) console.log("Stopped by the limit — the company it stopped on is first in the queue next time (its accounts are still due); the rest follow.");
 console.log("Done. The live site shows these companies now; run again tomorrow (or in a week — accounts keep for a year, prices for 100 days).");

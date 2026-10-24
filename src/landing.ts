@@ -3,6 +3,7 @@
  * Week 4: the books open; week 4's row gets its stamp.
  * v0.6.0: the enterprising screen joins week 5's row.
  * v0.7.0: week 6 shipped — explain this stock.
+ * v0.9.0: week 7 shipped — the signal engine (Phase 3 begins).
  */
 
 export const LANDING_PAGE = /* html */ `<!doctype html>
@@ -207,9 +208,10 @@ export const LANDING_PAGE = /* html */ `<!doctype html>
 
     <div class="phase">
       <p class="phase-name">Phase 3 &middot; Rules, the Carver way</p>
-      <div class="row pending">
+      <div class="row shipped">
         <span class="wk">Wk 7</span>
-        <span><span class="lesson">Why systems beat gut feel</span><br><span class="feature">Trend signals &amp; instrument risk</span></span>
+        <span><span class="lesson">Why systems beat gut feel</span><br><span class="feature">Carver's rule, run nightly &mdash; <a href="/signals">trend signals &amp; instrument risk</a> for every company, and <a href="/prices/AAPL">the two averages on every chart</a></span></span>
+        <span class="stamp">SHIPPED</span>
       </div>
       <div class="row pending">
         <span class="wk">Wk 8</span>

@@ -1,6 +1,6 @@
 {
   "name": "stock-market-toolkit",
-  "version": "0.8.3",
+  "version": "0.9.0",
   "private": true,
   "description": "Course toolkit for 'Intro to the Stock Market' — a community-school course in good financial decision-making. Education, not advice.",
   "scripts": {
@@ -20,7 +20,10 @@
   "devDependencies": {
     "typescript": "^5",
     "vitest": "^5.0.5",
-    "wrangler": "^4"
+    "wrangler": "^4.152.0"
+  },
+  "overrides": {
+    "undici": "^7.30.1"
   },
   "engines": {
     "node": ">=20"
