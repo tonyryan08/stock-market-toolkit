@@ -20,6 +20,23 @@ describe("adjustmentFactors", () => {
     expect(f.get("2026-08-07")).toBe(1);
     expect(f.get("2026-08-08")).toBe(1);
   });
+  it("a DECLARED dividend with an ex-date after the newest close adjusts nothing until a close on or after it exists (v0.8.2 verification review, V2)", () => {
+    const series = pts([["2026-10-21", 90], ["2026-10-22", 90.5], ["2026-10-23", 90]]);
+    const declared = [{ exDate: "2026-11-06", amount: 0.07 }];
+    const before = adjustmentFactors(series, declared);
+    expect([...before.values()]).toEqual([1, 1, 1]);            // not 0.99922 on every row
+    // the ex-date IS the newest close: the earlier closes are adjusted, that one is not
+    const onTheDay = adjustmentFactors(pts([["2026-11-04", 90], ["2026-11-05", 91], ["2026-11-06", 90.9]]), declared);
+    expect(onTheDay.get("2026-11-05")).toBeCloseTo(1 - 0.07 / 91, 9);
+    expect(onTheDay.get("2026-11-06")).toBe(1);
+    // a later visit brings closes past the ex-date: now it applies, with the right divisor
+    const after = adjustmentFactors(pts([["2026-10-23", 90], ["2026-11-05", 91], ["2026-11-10", 90.8]]), declared);
+    expect(after.get("2026-10-23")).toBeCloseTo(1 - 0.07 / 91, 9);
+    expect(after.get("2026-11-10")).toBe(1);
+    // adjustBars follows the same rule
+    const bars = adjustBars(series.map((p) => ({ ...p, open: p.close, high: p.close, low: p.close, volume: 1 })), declared);
+    expect(bars.map((b) => b.adjClose)).toEqual([90, 90.5, 90]);
+  });
   it("factors compound across dividends, and a dividend with no earlier close adjusts nothing", () => {
     const f = adjustmentFactors(
       pts([["2026-01-02", 100], ["2026-02-02", 100], ["2026-03-02", 100]]),

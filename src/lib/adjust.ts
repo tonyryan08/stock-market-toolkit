@@ -24,8 +24,14 @@ export type DividendEvent = { exDate: string; amount: number | null };
 export function adjustmentFactors(points: PricePoint[], dividends: DividendEvent[]): Map<string, number> {
   const sorted = [...points].filter((p) => Number.isFinite(p.close) && p.close > 0).sort((a, b) => a.date.localeCompare(b.date));
   const factors = new Map<string, number>(sorted.map((p) => [p.date, 1]));
+  const newest = sorted.length ? sorted[sorted.length - 1].date : null;
   const divs = dividends
     .filter((d) => typeof d.amount === "number" && Number.isFinite(d.amount) && (d.amount as number) > 0)
+    // A DECLARED dividend whose ex-date is after the newest close has not gone
+    // ex yet: nothing is adjusted until a close on or after that date exists.
+    // Without this, "the last close before the ex-date" is the newest close and
+    // the whole series is scaled by D/P tonight (v0.8.2 verification review, V2).
+    .filter((d) => newest === null || d.exDate <= newest)
     .sort((a, b) => a.exDate.localeCompare(b.exDate));
   for (const d of divs) {
     // last close strictly before the ex-date

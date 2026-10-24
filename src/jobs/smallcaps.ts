@@ -390,10 +390,14 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
       await log(sym, "dividends", 0, divOutcome);
     }
 
-    // 5) a new ex-date changes every earlier adjusted close: re-do the stored series
-    if (newExDates > 0 && px.kind === "ok") {
+    // 5) re-do the stored series after every price write, not only on a new
+    //    ex-date: a declared dividend already in the record takes effect only
+    //    once a close on or after its ex-date exists (v0.8.3), and the rows
+    //    older than tonight's window must follow. One SELECT per visit; only
+    //    rows whose factor changed are written (N7: none on a first visit).
+    if (px.kind === "ok") {
       const n = await realignSymbol(env.DB, sym);
-      if (n > 0) await log(sym, "realigned", n, `${newExDates} new ex-date(s): ${n} stored closes re-adjusted`);
+      if (n > 0) await log(sym, "realigned", n, `${newExDates > 0 ? `${newExDates} new ex-date(s)` : "re-aligned to the dividend record (a declared ex-date passed, or an earlier adjustment corrected)"}: ${n} stored closes re-adjusted`);
     }
   }
 
