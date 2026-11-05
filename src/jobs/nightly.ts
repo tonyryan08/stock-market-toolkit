@@ -46,6 +46,7 @@
 import { fetchFmpDailyAdjusted, type DailyBar } from "../providers";
 import { runSmallCaps, type SmallEnv } from "./smallcaps";
 import { runSignals } from "./signals";
+import { runStops } from "./stops";
 
 type Env = SmallEnv & {
   FMP_API_KEY: string;
@@ -68,7 +69,21 @@ const FRESH_HOURS = 6;
 const DELAY_MS = 250;
 const CHUNK = 40;
 
+/** A receipt's detail is cut at this many characters; a run_summary carries JSON and gets more
+ *  (with the ration fields the small-cap summary passes 300 and would be cut mid-JSON — OI-53). */
+const RECEIPT_CHARS = 300;
+const RECEIPT_SUMMARY_CHARS = 1500;
+
 export type Phase = "prices" | "fundamentals" | "smallcaps" | "signals" | "all";
+
+/** Week 8: the stop tracker, fenced the same way, after the signal pass in the 23:00 invocation. */
+async function safeStops(env: Env, runAt: string, log: (symbol: string | null, outcome: string, rows: number, detail: string) => Promise<void>): Promise<void> {
+  try {
+    await runStops(env, runAt);
+  } catch (err) {
+    await log(null, "stops_error", 0, `the stop tracker threw: ${String((err as Error).message ?? err).slice(0, 200)}`);
+  }
+}
 
 /** The signal pass, fenced: whatever it throws becomes a receipt, never a lost phase. */
 async function safeSignals(env: Env, runAt: string, log: (symbol: string | null, outcome: string, rows: number, detail: string) => Promise<void>): Promise<void> {
@@ -91,7 +106,7 @@ export async function runNightly(env: Env, phase: Phase = "all"): Promise<void> 
     try {
       await env.DB.prepare(
         "INSERT INTO fetch_log (run_at, symbol, outcome, rows_written, detail) VALUES (?1, ?2, ?3, ?4, ?5)",
-      ).bind(runAt, symbol, outcome, rows, detail.slice(0, 300)).run();
+      ).bind(runAt, symbol, outcome, rows, detail.slice(0, outcome === "run_summary" ? RECEIPT_SUMMARY_CHARS : RECEIPT_CHARS)).run();
     } catch {
       /* if even logging fails (write limit), there is nothing useful left to do */
     }
@@ -100,7 +115,12 @@ export async function runNightly(env: Env, phase: Phase = "all"): Promise<void> 
   // The small-cap tier (decision 14): its own invocation at 23:10 UTC, its own
   // rations (Alpha Vantage 20 calls, spaced; EDGAR free), the shared fetch budget.
   if (phase === "smallcaps") {
-    await runSmallCaps(env, runAt, budget);
+    // Fenced like the other phases (review F4): a throw leaves a receipt, never a silent night.
+    try {
+      await runSmallCaps(env, runAt, budget);
+    } catch (err) {
+      await log(null, "smallcaps_error", 0, `the small-cap visit threw: ${String((err as Error).message ?? err).slice(0, 200)}`);
+    }
     return;
   }
 
@@ -110,6 +130,7 @@ export async function runNightly(env: Env, phase: Phase = "all"): Promise<void> 
   // its own budget; a fault in it can never cost another phase (review F1/F3).
   if (phase === "signals") {
     await safeSignals(env, runAt, log);
+    await safeStops(env, runAt, log);     // week 8: the paper positions' stops, from tonight's closes
     return;
   }
 
@@ -251,6 +272,7 @@ export async function runNightly(env: Env, phase: Phase = "all"): Promise<void> 
   let smallcaps = "separate invocation";
   if (phase === "all") {
     await safeSignals(env, runAt, log);
+    await safeStops(env, runAt, log);
     fundamentals = phaseBlocked ? "skipped" : "ran";
     if (!phaseBlocked) await runFundamentals(env, runAt, budget);
     // Local doorbell only: the small-cap visit too (slow — Alpha Vantage calls
@@ -329,7 +351,7 @@ export async function runFundamentals(
     try {
       await env.DB.prepare(
         "INSERT INTO fetch_log (run_at, symbol, outcome, rows_written, detail) VALUES (?1, ?2, ?3, ?4, ?5)",
-      ).bind(runAt, symbol, outcome, rows, detail.slice(0, 300)).run();
+      ).bind(runAt, symbol, outcome, rows, detail.slice(0, outcome === "run_summary" ? RECEIPT_SUMMARY_CHARS : RECEIPT_CHARS)).run();
     } catch { /* write limit — nothing left to do */ }
   };
 

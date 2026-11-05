@@ -82,7 +82,7 @@ describe("R3 /api/signals and /signals with no rows, warming rows, a blocked tic
     expect(html).toContain("WARMING UP");
     expect(html).toMatch(/class="tag flat"/);
     expect(html).toContain("—");                       // null risk / forecast print as a dash
-    expect(html).toContain("NOT split-adjusted — a split reads as a false flip");   // the small-cap `s` marker (review N8)
+    expect(html).toContain("split-adjusted only for the splits in the toolkit's table");   // the small-cap `s` marker (v0.9.0 N8, v0.10.0 N4)
     const sql = db.ran("FROM signals s")[0].sql;
     expect(sql).toContain("t.status = 'active'");
     expect(sql).toContain("SELECT symbol, MAX(date) AS date FROM signals GROUP BY symbol");   // one MAX per symbol, joined (review N5)
@@ -190,11 +190,11 @@ describe("R7 the scheduled handler: cron → phase (the reviewer's X2)", () => {
     await Promise.all(waits);
     return db;
   };
-  it("'0 23 * * *' runs the signal pass alone: one signals write, one receipt, no price or accounts query (review F3)", async () => {
+  it("'0 23 * * *' runs the signal pass and the stop tracker, nothing else: one signals write, two receipts, no price or accounts query (review F3)", async () => {
     const db = await run("0 23 * * *");
     expect(db.ran("INSERT INTO signals").length).toBe(1);
-    expect(db.ran("INSERT INTO fetch_log").map((r) => r.binds[2])).toEqual(["run_summary"]);
-    expect(JSON.parse(String(db.ran("INSERT INTO fetch_log")[0].binds[4])).phase).toBe("signals");
+    expect(db.ran("INSERT INTO fetch_log").map((r) => r.binds[2])).toEqual(["run_summary", "run_summary"]);   // signals, then the stop tracker (week 8)
+    expect(db.ran("INSERT INTO fetch_log").map((r) => JSON.parse(String(r.binds[4])).phase)).toEqual(["signals", "stops"]);
     expect(db.ran("LEFT JOIN daily_prices").length).toBe(0);
     expect(db.ran("fundamentals_as_of IS NULL").length).toBe(0);
   });

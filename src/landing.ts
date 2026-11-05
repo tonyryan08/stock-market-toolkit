@@ -4,6 +4,7 @@
  * v0.6.0: the enterprising screen joins week 5's row.
  * v0.7.0: week 6 shipped — explain this stock.
  * v0.9.0: week 7 shipped — the signal engine (Phase 3 begins).
+ * v0.10.0: week 8 shipped — sizing, stops, tickets.
  */
 
 export const LANDING_PAGE = /* html */ `<!doctype html>
@@ -213,9 +214,10 @@ export const LANDING_PAGE = /* html */ `<!doctype html>
         <span><span class="lesson">Why systems beat gut feel</span><br><span class="feature">Carver's rule, run nightly &mdash; <a href="/signals">trend signals &amp; instrument risk</a> for every company, and <a href="/prices/AAPL">the two averages on every chart</a></span></span>
         <span class="stamp">SHIPPED</span>
       </div>
-      <div class="row pending">
+      <div class="row shipped">
         <span class="wk">Wk 8</span>
-        <span><span class="lesson">How much to bet</span><br><span class="feature">Position sizing &amp; paper trade tickets</span></span>
+        <span><span class="lesson">How much to bet</span><br><span class="feature">Carver's sizing and stop &mdash; <a href="/size">the position-size calculator</a>, paper tickets with a decision journal, the stop tracked nightly</span></span>
+        <span class="stamp">SHIPPED</span>
       </div>
       <div class="row pending">
         <span class="wk">Wk 9</span>

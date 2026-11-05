@@ -24,6 +24,11 @@
 
 import { computeSignals, HISTORY_LIMIT, RULE } from "../lib/signals";
 
+/** A receipt's detail is cut at this many characters; a run_summary carries JSON and gets more
+ *  (with the ration fields the small-cap summary passes 300 and would be cut mid-JSON — OI-53). */
+const RECEIPT_CHARS = 300;
+const RECEIPT_SUMMARY_CHARS = 1500;
+
 export type SignalsEnv = { DB: D1Database };
 
 /** Closes read per instrument — one window for the job and the API (review N1). */
@@ -47,7 +52,7 @@ export async function runSignals(env: SignalsEnv, runAt: string): Promise<Signal
   const log = async (symbol: string | null, outcome: string, rows: number, detail: string) => {
     try {
       await env.DB.prepare("INSERT INTO fetch_log (run_at, symbol, outcome, rows_written, detail) VALUES (?1, ?2, ?3, ?4, ?5)")
-        .bind(runAt, symbol, outcome, rows, detail.slice(0, 300)).run();
+        .bind(runAt, symbol, outcome, rows, detail.slice(0, outcome === "run_summary" ? RECEIPT_SUMMARY_CHARS : RECEIPT_CHARS)).run();
     } catch { /* logging is a convenience */ }
   };
 

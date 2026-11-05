@@ -83,3 +83,47 @@ describe("adjustBars and the jump check", () => {
     expect(suspiciousJumps(b)).toEqual([{ date: "2026-08-09", ratio: 0.498 }]);
   });
 });
+
+describe("splits (week 8, OI-52)", () => {
+  // Mueller Industries, two-for-one on 2026-07-01: the 31 Oct visit flagged ×0.467 on that date.
+  const raw = [
+    { date: "2026-06-29", open: 160, high: 162, low: 158, close: 160.0, volume: 100 },
+    { date: "2026-06-30", open: 161, high: 163, low: 159, close: 162.0, volume: 100 },
+    { date: "2026-07-01", open: 80, high: 81, low: 74, close: 75.6, volume: 300 },   // halved, and down 6.7% on the day
+    { date: "2026-07-02", open: 76, high: 77, low: 75, close: 76.0, volume: 100 },
+  ];
+  const split = [{ date: "2026-07-01", factor: 2 }];
+  it("every close before the split date is divided by the factor; the split day and after are untouched", () => {
+    const f = adjustmentFactors(raw.map((r) => ({ date: r.date, close: r.close })), [], split);
+    expect(f.get("2026-06-29")).toBe(0.5);
+    expect(f.get("2026-06-30")).toBe(0.5);
+    expect(f.get("2026-07-01")).toBe(1);
+    expect(f.get("2026-07-02")).toBe(1);
+    const b = adjustBars(raw, [], split);
+    expect(b[1].adjClose).toBe(81);
+    expect(b[1].adjHigh).toBe(81.5);
+    expect(b[1].close).toBe(162);          // as traded, kept
+  });
+  it("with the split known, the jump check sees the day's real move (−6.7%), not the halving", () => {
+    expect(suspiciousJumps(adjustBars(raw, []), 0.4)).toEqual([{ date: "2026-07-01", ratio: 0.467 }]);  // what the visit saw
+    expect(suspiciousJumps(adjustBars(raw, [], split), 0.4)).toEqual([]);
+    expect(suspiciousJumps(adjustBars(raw, [], split), 0.05)).toEqual([{ date: "2026-07-01", ratio: 0.933 }]);
+  });
+  it("compounds with a dividend: the dividend's factor is computed on the as-traded close of its time, then halved", () => {
+    const f = adjustmentFactors(raw.map((r) => ({ date: r.date, close: r.close })), [{ exDate: "2026-06-30", amount: 1.62 }], split);
+    expect(f.get("2026-06-29")).toBeCloseTo(0.5 * (1 - 1.62 / 160), 12);   // the dividend takes 1.01% off June 29, then the split halves it
+    expect(f.get("2026-06-30")).toBe(0.5);
+  });
+  it("a split dated after the newest close, a factor of 1, or nothing positive changes nothing", () => {
+    const pts = raw.slice(0, 2).map((r) => ({ date: r.date, close: r.close }));
+    expect([...adjustmentFactors(pts, [], split).values()]).toEqual([1, 1]);
+    expect([...adjustmentFactors(raw.map((r) => ({ date: r.date, close: r.close })), [], [{ date: "2026-07-01", factor: 1 }]).values()]).toEqual([1, 1, 1, 1]);
+    expect([...adjustmentFactors(raw.map((r) => ({ date: r.date, close: r.close })), [], [{ date: "2026-07-01", factor: 0 }, { date: "2026-07-01", factor: NaN }]).values()]).toEqual([1, 1, 1, 1]);
+  });
+  it("a reverse split (1-for-10 = factor 0.1) multiplies every earlier close by ten (review F12)", () => {
+    const f = adjustmentFactors(raw.map((r) => ({ date: r.date, close: r.close })), [], [{ date: "2026-07-01", factor: 0.1 }]);
+    expect(f.get("2026-06-29")).toBeCloseTo(10, 12);
+    expect(f.get("2026-07-01")).toBe(1);
+  });
+});
+

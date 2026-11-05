@@ -7,7 +7,7 @@
  * sandbox runs recorded in BUILD-LOG.
  */
 export type FakeRow = Record<string, unknown>;
-export type Handler = (binds: unknown[]) => { results?: FakeRow[]; error?: string } | void;
+export type Handler = (binds: unknown[]) => { results?: FakeRow[]; error?: string; changes?: number } | void;
 
 export class FakeD1 {
   public log: { sql: string; binds: unknown[] }[] = [];
@@ -18,11 +18,13 @@ export class FakeD1 {
 
   ran(match: string): { sql: string; binds: unknown[] }[] { return this.log.filter((l) => l.sql.includes(match)); }
 
+  private last: { changes?: number } = {};
   private exec(sql: string, binds: unknown[]) {
     this.log.push({ sql, binds });
     const h = this.handlers.find((x) => sql.includes(x.match));
     const out = h ? h.fn(binds) : undefined;
     if (out && out.error) throw new Error(out.error);
+    this.last = { changes: out?.changes };
     return out?.results ?? [];
   }
 
@@ -40,11 +42,13 @@ export class FakeD1 {
     return make([]);
   }
 
+  /** A handler may answer `{ changes: 0 }` to play a conditional write that did not land (review F8). */
   async batch<T = unknown>(stmts: D1PreparedStatement[]): Promise<D1Result<T>[]> {
     return stmts.map((s) => {
       const x = s as unknown as { __sql: string; __binds: unknown[] };
       this.exec(x.__sql, x.__binds);
-      return { results: [] as T[], success: true, meta: {} } as unknown as D1Result<T>;
+      const changes = this.last.changes;
+      return { results: [] as T[], success: true, meta: typeof changes === "number" ? { changes } : {} } as unknown as D1Result<T>;
     });
   }
 

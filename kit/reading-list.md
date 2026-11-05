@@ -12,7 +12,8 @@ Nothing here is required in week 1. Assigned chapters are announced in the week 
 
 ## Rules, the Carver way (Phase 3, weeks 7–9)
 
-- **Robert Carver, *Systematic Trading*** (2015) — the fuller book behind the Starter System: chapter 1 on the flawed human brain, chapter 3 on fooling yourself by fitting rules to the past, chapter 7 on forecasts (the rule the toolkit runs, and why the scalar is 3.75). Optional; the tutor's course copy is this one.
+- **Robert Carver, *Systematic Trading*** (2015) — the fuller book behind the Starter System: chapter 1 on the flawed human brain, chapter 3 on fooling yourself by fitting rules to the past, chapter 7 on forecasts (the rule the toolkit runs, and why the scalar is 3.75), chapters 9–10 on volatility targeting and position sizing (where the method behind week 8's 12% comes from (half the expected reward per unit of risk; the figure itself is the Starter System's)). Optional; the tutor's course copy is this one.
+- **The Starter System rules card** — `kit/starter-system-rules-card.md`: the opening rule, the risk target, the sizing formula, the stop, the costs and the weekly routine on one page, with the course's own numbers marked.
 - **pysystemtrade** — Carver's own open-source trading system (github.com/robcarver17/pysystemtrade, GPL). The toolkit's constants were checked against it; you can read the same rule in his hand. For the curious, not required.
 - **Brad Barber & Terrance Odean, "Trading Is Hazardous to Your Wealth"** — *Journal of Finance* 55(2), 2000. The 66,000-household study behind week 7's first slide. Free versions on the authors' pages.
 - **Terrance Odean, "Are Investors Reluctant to Realize Their Losses?"** — *Journal of Finance* 53(5), 1998. The disposition effect, measured.

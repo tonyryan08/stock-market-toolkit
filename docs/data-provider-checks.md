@@ -272,4 +272,11 @@ prices stamped and behind the never-fetched in the queue. Calls: 19 (23 Oct) + 1
 
 *Housekeeping, 24 Oct 2026 (v0.9.0 shipment): the VC-18 closure had been pasted three times (a blank template and two fills); the three were replaced by the one complete block above. Nothing else was changed.*
 
-*Close-out (24 Oct 2026): this record is appended, never rewritten — a new finding is a new dated section at the bottom. Next: Phase 3's own checks (VC-19 onward).*
+## VC-19 closure — 30 Oct – 2 Nov 2026 (v0.9.0 — the signal engine reconciled with a spreadsheet)
+Executed by Tony Ryan; the sheets kept as `VC-19-results.xlsx` (the builder's copy) and the three `<ticker>-prices.csv.xlsx` workbooks.
+a–c for AAPL (last row 2026-10-29, 1,274 closes), KO (2026-10-30, 1,275), MSFT (2026-10-29, 1,274): each sheet built from `/api/prices/<ticker>?days=1900&csv=1` with the fourteen recipe formulas (H–Q); the last row against the API's point for the same date — fast and slow to six decimals, σ to six, forecast and instrument risk to two, state — **agree on all three ✓** (largest difference: 4.5 × 10⁻⁷ on an average, 0.0034 on a two-decimal field — rounding of the API's printed figures). The builder read Excel's computed cells from the workbooks and recomputed the series independently from column F; same figures.
+AAPL: fast 343.157205 · slow 330.215962 · σ 3.779497 · forecast 12.84 · risk 18.18 · long. KO: 91.891956 · 88.554140 · 1.203391 · 10.40 · 21.11 · long. MSFT: 528.531084 · 500.048867 · 6.934108 · 15.40 · 22.55 · long.
+Nightly receipt (24 Oct 2026, the first run): `{"phase":"signals","instruments":86,"written":46,"warming":8,"skipped":40,"errors":0,"long":18,"flat":20,"ms":8279}` ✓. Live `/signals` (2 Nov): as of the 2026-10-30 close, 74 of 86 instruments — 18 long, 20 flat, 36 warming up ✓ (the 38 core tier plus the small caps past 20 closes). Chart overlay and strip on the live `/prices/AAPL`: the two averages drawn, the strip's hover gives the state and its dates ✓ (2 Nov).
+Findings: none in the arithmetic. Two operational items raised by the daily visits in the same week, carried in the register: OI-51 (the visit script should plan within the rolling 24-hour ration itself; two runs were cut short by an early start) and OI-52 (MLI's two-for-one split of 1 Jul 2026 in the as-traded small-cap series — a false signal until a splits table exists; the `s` marker warns meanwhile).
+
+*Close-out (2 Nov 2026): this record is appended, never rewritten — a new finding is a new dated section at the bottom. Next: Week 8's checks.*

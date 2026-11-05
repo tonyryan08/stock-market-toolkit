@@ -23,7 +23,12 @@
 
 import { fetchAvDailyCompact, fetchAvDividends, fetchAvIncomeAnnual, fetchAvBalanceAnnual, type AvResult, type AvBalanceYear } from "../providers-av";
 import { edgarEpsForPeriods } from "../providers-edgar";
-import { adjustBars, adjustmentFactors, suspiciousJumps } from "../lib/adjust";
+import { adjustBars, adjustmentFactors, suspiciousJumps, type SplitEvent } from "../lib/adjust";
+
+/** A receipt's detail is cut at this many characters; a run_summary carries JSON and gets more
+ *  (with the ration fields the small-cap summary passes 300 and would be cut mid-JSON — OI-53). */
+const RECEIPT_CHARS = 300;
+const RECEIPT_SUMMARY_CHARS = 1500;
 
 export type SmallEnv = {
   ALPHAVANTAGE_API_KEY: string;
@@ -38,6 +43,10 @@ export type SmallEnv = {
 };
 
 export const AV_CALLS_PER_NIGHT = 20;
+/** Alpha Vantage's free ration: 25 calls in any rolling 24 hours, counted by key AND by sender address (OI-35). */
+export const AV_RATION_PER_24H = 25;
+/** Kept back from every visit for the live quote demo (its own cap of 3 a day) and a probe. */
+export const AV_RESERVE = 3;
 /** 5 a minute → 12 s; 13 keeps a margin. */
 export const AV_SPACING_MS = 13_000;
 /** Accounts are refreshed when older than this (annual reports: once a year is the truth). */
@@ -107,7 +116,7 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
     try {
       await env.DB.prepare(
         "INSERT INTO fetch_log (run_at, symbol, outcome, rows_written, detail) VALUES (?1, ?2, ?3, ?4, ?5)",
-      ).bind(runAt, symbol, outcome, rows, detail.slice(0, 300)).run();
+      ).bind(runAt, symbol, outcome, rows, detail.slice(0, outcome === "run_summary" ? RECEIPT_SUMMARY_CHARS : RECEIPT_CHARS)).run();
     } catch { /* write limit — nothing left to do */ }
   };
 
@@ -126,7 +135,33 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
     return;
   }
 
-  const avPerNight = Math.max(0, parseInt(env.SMALLCAP_AV_CALLS ?? "", 10) || AV_CALLS_PER_NIGHT);
+  // The ration is rolling, not daily (OI-35/OI-51): count the calls of the
+  // last 24 hours from the receipts — every visit's run_summary carries its
+  // avCalls, every live quote its own row — and plan within what is left.
+  // --calls (SMALLCAP_AV_CALLS) is a ceiling, not a promise; the clock no
+  // longer matters. Two runs were cut short before this existed (27 Oct, 1 Nov).
+  const requested = Math.max(0, parseInt(env.SMALLCAP_AV_CALLS ?? "", 10) || AV_CALLS_PER_NIGHT);
+  let ration: Ration;
+  try {
+    ration = await rationLeft(env.DB, runAt);
+  } catch (err) {
+    // The receipts could not be read (review F4): say so and plan the ceiling, as v0.9.0
+    // did — the provider's refusal is the backstop, as before.
+    await log(null, "ration_error", 0, `the ration could not be read from the receipts: ${String((err as Error).message ?? err).slice(0, 200)} — planning the ceiling of ${requested}`);
+    ration = { visits: 0, quotes: 0, used: 0, reserve: AV_RESERVE, available: requested, nextAt: null, unknown: true };
+  }
+  const avPerNight = Math.min(requested, ration.available);
+  if (avPerNight < 4) {
+    // Not even one full visit (price + dividends + income + balance) fits: say so
+    // and spend nothing. The receipt names the time the oldest calls roll off.
+    await log(null, "run_summary", 0, JSON.stringify({
+      phase: "smallcaps", tickers: tickers.length, planned: 0, withAccounts: 0, dividendsOnly: 0, avCalls: 0, edgarCalls: 0,
+      ration: { ...ration, requested, planned: 0 },
+      note: `ration spent: ${ration.used} of ${AV_RATION_PER_24H} calls used in the last 24 hours (${ration.visits} by visits, ${ration.quotes} by live quotes), ${AV_RESERVE} kept back — nothing fetched; the oldest calls roll off at ${ration.nextAt ?? "—"}`,
+      ms: Date.now() - started,
+    }));
+    return;
+  }
   const plan = planNight(tickers, avPerNight, new Date());
   const avOpts = { apiUrl: env.ALPHAVANTAGE_API_URL || undefined };
   const edgarOpts = { apiUrl: env.EDGAR_API_URL || undefined };
@@ -256,7 +291,8 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
       await log(sym, "error", 0, px.detail);
     } else {
       const divs = (await env.DB.prepare("SELECT ex_date, amount FROM dividends WHERE symbol = ?1").bind(sym).all<{ ex_date: string; amount: number | null }>()).results;
-      const bars = adjustBars(px.data, divs.map((d) => ({ exDate: d.ex_date, amount: d.amount })));
+      const splits = await loadSplits(env.DB, sym);
+      const bars = adjustBars(px.data, divs.map((d) => ({ exDate: d.ex_date, amount: d.amount })), splits);
       try {
         const stmt = env.DB.prepare(
           `INSERT INTO daily_prices (symbol, date, close, adj_open, adj_high, adj_low, adj_close, volume)
@@ -271,13 +307,14 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
         inserted += bars.length;
         await env.DB.prepare("UPDATE tickers SET last_price_fetch = ?2 WHERE symbol = ?1").bind(sym, runAt).run();
         bump("ok");
-        const applied = adjustmentFactors(px.data.map((b) => ({ date: b.date, close: b.close })), divs.map((d) => ({ exDate: d.ex_date, amount: d.amount })));
+        const applied = adjustmentFactors(px.data.map((b) => ({ date: b.date, close: b.close })), divs.map((d) => ({ exDate: d.ex_date, amount: d.amount })), splits);
         const adjustedDays = [...applied.values()].filter((f) => f !== 1).length;
-        await log(sym, "ok", bars.length, `av compact ${bars.length} days ${bars[0].date}→${bars[bars.length - 1].date}, as traded; ${adjustedDays} days dividend-adjusted by the toolkit`);
+        const splitNote = splits.filter((sp) => sp.date >= bars[0].date).map((sp) => `${sp.factor}-for-1 on ${sp.date}`).join(", ");
+        await log(sym, "ok", bars.length, `av compact ${bars.length} days ${bars[0].date}→${bars[bars.length - 1].date}, as traded; ${adjustedDays} days dividend-adjusted by the toolkit${splitNote ? `, split-adjusted (${splitNote})` : ""}`);
         const jumps = suspiciousJumps(bars);
         if (jumps.length) {
           bump("av_jump");
-          await log(sym, "av_jump", 0, `adjusted close moved ×${jumps.map((j) => `${j.ratio} on ${j.date}`).join(", ")} — a split the toolkit does not know, or news; prices are as traded`);
+          await log(sym, "av_jump", 0, `adjusted close moved ×${jumps.map((j) => `${j.ratio} on ${j.date}`).join(", ")} — a split the toolkit does not know (add it to the splits table), or news; prices are as traded`);
         }
       } catch (err) {
         bump("write_error");
@@ -409,7 +446,7 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
     //    rows whose factor changed are written (N7: none on a first visit).
     if (px.kind === "ok") {
       const n = await realignSymbol(env.DB, sym);
-      if (n > 0) await log(sym, "realigned", n, `${newExDates > 0 ? `${newExDates} new ex-date(s)` : "re-aligned to the dividend record (a declared ex-date passed, or an earlier adjustment corrected)"}: ${n} stored closes re-adjusted`);
+      if (n > 0) await log(sym, "realigned", n, `${newExDates > 0 ? `${newExDates} new ex-date(s)` : "re-aligned to the dividend and split records (a declared ex-date passed, a split was added, or an earlier adjustment corrected)"}: ${n} stored closes re-adjusted`);
     }
   }
 
@@ -417,17 +454,67 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
   await log(null, "run_summary", inserted, JSON.stringify({
     phase: "smallcaps", tickers: tickers.length, planned: plan.visits.length, withAccounts: plan.visits.filter((v) => v.accounts).length,
     dividendsOnly: plan.visits.filter((v) => v.dividends && !v.accounts).length, edgarRetried,
-    skippedFresh: plan.skippedFresh, skippedBlocked: plan.skippedBlocked, avCalls, edgarCalls, fetches: budget.fetches, inserts: inserted, outcomes: counts, ms: Date.now() - started,
+    skippedFresh: plan.skippedFresh, skippedBlocked: plan.skippedBlocked, avCalls, edgarCalls, fetches: budget.fetches, inserts: inserted, outcomes: counts,
+    ration: { ...ration, requested, planned: avPerNight }, ms: Date.now() - started,
   }));
 }
 
-/** Recompute adj_* for every stored as-traded row of a symbol from its dividend record. Returns rows changed. */
+export type Ration = {
+  /** Alpha Vantage calls in the window before `now`: by visits (run_summary.avCalls) and by the live quote demo. */
+  visits: number; quotes: number; used: number;
+  /** AV_RESERVE, kept back. */
+  reserve: number;
+  /** max(0, 25 − used − reserve). */
+  available: number;
+  /** When the oldest counted call leaves the window (ISO), if any are counted. */
+  nextAt: string | null;
+  /** True when the receipts could not be read and the ceiling was planned instead (review F4). */
+  unknown?: boolean;
+};
+
+/**
+ * The window is 24 hours plus a margin (review F7): a receipt's `run_at` is the run's START and its
+ * calls are made over the following minutes (18 calls, 13 s apart, EDGAR calls between ≈ 4 minutes),
+ * so a window measured from the start would miss most of yesterday's calls for a run started at
+ * the same hour. Ten minutes covers any run the script allows (25 calls ≈ 6 minutes).
+ */
+export const RATION_WINDOW_MS = 24 * 3600 * 1000 + 10 * 60 * 1000;
+
+/**
+ * What the rolling 24-hour ration has left, from the receipts (OI-51). A receipt the fake D1 does
+ * not answer counts as zero. Receipts that are not JSON — every run_summary v0.9.0 cut at 300
+ * characters (OI-53) — are skipped by `json_valid`, inside a CASE so that SQLite never reaches
+ * `json_extract` on them (review F4: without the guard the whole SELECT raised "malformed JSON").
+ */
+export async function rationLeft(db: D1Database, now: string): Promise<Ration> {
+  const since = new Date(Date.parse(now) - RATION_WINDOW_MS).toISOString();
+  const v = await db.prepare(
+    "SELECT COALESCE(SUM(CASE WHEN json_valid(detail) THEN json_extract(detail, '$.avCalls') END), 0) AS n, MIN(run_at) AS oldest FROM fetch_log WHERE outcome = 'run_summary' AND run_at >= ?1 AND (CASE WHEN json_valid(detail) THEN json_extract(detail, '$.phase') END) = 'smallcaps'",
+  ).bind(since).first<{ n: number | null; oldest: string | null }>();
+  const q = await db.prepare("SELECT COUNT(*) AS n, MIN(run_at) AS oldest FROM fetch_log WHERE outcome = 'quote_demo' AND run_at >= ?1").bind(since)
+    .first<{ n: number | null; oldest: string | null }>();
+  const visits = Number(v?.n ?? 0) || 0;
+  const quotes = Number(q?.n ?? 0) || 0;
+  const used = visits + quotes;
+  const oldest = [v?.oldest, q?.oldest].filter((x): x is string => typeof x === "string" && x.length > 0).sort()[0] ?? null;
+  const nextAt = oldest ? new Date(Date.parse(oldest) + RATION_WINDOW_MS).toISOString() : null;
+  return { visits, quotes, used, reserve: AV_RESERVE, available: Math.max(0, AV_RATION_PER_24H - used - AV_RESERVE), nextAt };
+}
+
+/** The splits table (migration 0009): the tier's known splits for a symbol, oldest first. */
+export async function loadSplits(db: D1Database, symbol: string): Promise<SplitEvent[]> {
+  const rows = (await db.prepare("SELECT date, factor FROM splits WHERE symbol = ?1 ORDER BY date").bind(symbol).all<{ date: string; factor: number }>()).results;
+  return rows.map((r) => ({ date: r.date, factor: r.factor }));
+}
+
+/** Recompute adj_* for every stored as-traded row of a symbol from its dividend and split records. Returns rows changed. */
 export async function realignSymbol(db: D1Database, symbol: string): Promise<number> {
   const rows = (await db.prepare("SELECT date, close, adj_close FROM daily_prices WHERE symbol = ?1 AND close IS NOT NULL ORDER BY date").bind(symbol)
     .all<{ date: string; close: number; adj_close: number }>()).results;
   if (rows.length === 0) return 0;
   const divs = (await db.prepare("SELECT ex_date, amount FROM dividends WHERE symbol = ?1").bind(symbol).all<{ ex_date: string; amount: number | null }>()).results;
-  const factors = adjustmentFactors(rows.map((r) => ({ date: r.date, close: r.close })), divs.map((d) => ({ exDate: d.ex_date, amount: d.amount })));
+  const splits = await loadSplits(db, symbol);
+  const factors = adjustmentFactors(rows.map((r) => ({ date: r.date, close: r.close })), divs.map((d) => ({ exDate: d.ex_date, amount: d.amount })), splits);
   const stmt = db.prepare(
     `UPDATE daily_prices SET adj_close = ROUND(close * ?3, 6), adj_open = ROUND(adj_open / NULLIF(adj_close, 0) * close * ?3, 6),
        adj_high = ROUND(adj_high / NULLIF(adj_close, 0) * close * ?3, 6), adj_low = ROUND(adj_low / NULLIF(adj_close, 0) * close * ?3, 6)

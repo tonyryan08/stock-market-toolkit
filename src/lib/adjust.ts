@@ -15,13 +15,22 @@
  * as-traded close is kept beside the adjusted one, so the arithmetic can be
  * checked from the row itself. Students can do this on a calculator; that is
  * the point of writing it down here.
+ *
+ * Splits (week 8, OI-52): a split of F new shares per old share on date X
+ * divides every close BEFORE X by F — Mueller Industries' two-for-one of
+ * 1 Jul 2026 halves June's closes. The split factor compounds with the
+ * dividend factors; dividend amounts before a split are the amounts declared
+ * at the time, on the as-traded prices of the time, so their factors are
+ * computed on the as-traded closes and the split is applied on top.
  */
 
 export type PricePoint = { date: string; close: number };
 export type DividendEvent = { exDate: string; amount: number | null };
+/** A split: `factor` new shares per old share, from `date` (the first day at the new count). */
+export type SplitEvent = { date: string; factor: number };
 
 /** Multiplicative factor per date (1 = unadjusted), for the dates given. */
-export function adjustmentFactors(points: PricePoint[], dividends: DividendEvent[]): Map<string, number> {
+export function adjustmentFactors(points: PricePoint[], dividends: DividendEvent[], splits: SplitEvent[] = []): Map<string, number> {
   const sorted = [...points].filter((p) => Number.isFinite(p.close) && p.close > 0).sort((a, b) => a.date.localeCompare(b.date));
   const factors = new Map<string, number>(sorted.map((p) => [p.date, 1]));
   const newest = sorted.length ? sorted[sorted.length - 1].date : null;
@@ -49,6 +58,18 @@ export function adjustmentFactors(points: PricePoint[], dividends: DividendEvent
       else break;
     }
   }
+  // Splits: every close before the split date is divided by the factor — new
+  // shares per old share, so a 2-for-1 is 2 and a 1-for-10 reverse split is 0.1
+  // (review F12: a reverse split is the same division). A factor of 1, nothing
+  // positive, or a split dated after the newest close changes nothing.
+  for (const sp of splits) {
+    if (!(Number.isFinite(sp.factor) && sp.factor > 0 && sp.factor !== 1)) continue;
+    if (newest !== null && sp.date > newest) continue;
+    for (const p of sorted) {
+      if (p.date < sp.date) factors.set(p.date, (factors.get(p.date) ?? 1) / sp.factor);
+      else break;
+    }
+  }
   return factors;
 }
 
@@ -66,8 +87,9 @@ export type AdjustedBar = {
 export function adjustBars(
   bars: { date: string; close: number; open: number | null; high: number | null; low: number | null; volume: number | null }[],
   dividends: DividendEvent[],
+  splits: SplitEvent[] = [],
 ): AdjustedBar[] {
-  const factors = adjustmentFactors(bars.map((b) => ({ date: b.date, close: b.close })), dividends);
+  const factors = adjustmentFactors(bars.map((b) => ({ date: b.date, close: b.close })), dividends, splits);
   const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
   return bars.map((b) => {
     const f = factors.get(b.date) ?? 1;

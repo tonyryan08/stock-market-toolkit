@@ -11,12 +11,16 @@
  * "remote": true), rings the small-cap doorbell once, waits for the receipt,
  * prints it, and stops the server.
  *
- * Run:   npm run smallcaps                 (20 Alpha Vantage calls, ~5 minutes)
- *        npm run smallcaps -- --calls 12   (fewer, when the day's ration is partly spent)
+ * Run:   npm run smallcaps                 (up to 20 Alpha Vantage calls, ~5 minutes)
+ *        npm run smallcaps -- --calls 18   (the usual; the Worker plans within the
+ *                                           rolling 24-hour ration it reads from the
+ *                                           receipts, so --calls is a ceiling — OI-51)
+ *        An unknown or malformed argument stops the script before it rings (OI-50).
  * Needs: _wrangler.smallcaps.jsonc (your copy of the example), .dev.vars with
  *        ALPHAVANTAGE_API_KEY and EDGAR_USER_AGENT, `npx wrangler login` done.
  * Don't: run it twice in six hours (the second run skips everything as
- *        "fresh"), or on a day you have spent the ration on probes.
+ *        "fresh"). A run on a spent ration spends nothing: the receipt says
+ *        when the window frees.
  */
 
 import { spawn, execFileSync } from "node:child_process";
@@ -27,9 +31,26 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
 const argv = process.argv.slice(2);
-const argOf = (flag, dflt) => { const i = argv.indexOf(flag); return i > -1 && argv[i + 1] ? argv[i + 1] : dflt; };
-const CALLS = Math.max(1, Math.min(25, parseInt(argOf("--calls", "20"), 10) || 20));
-const PORT = parseInt(argOf("--port", "8790"), 10) || 8790;
+// Strict arguments (OI-50): a script that spends a ration must not guess. Two
+// runs took their default of 20 calls because a slip (`-- -- 18`, `--call 18`)
+// was silently ignored. Anything unknown stops the script before it rings.
+const USAGE = "usage: npm run smallcaps -- --calls N [--port N] [--config FILE]   (N = Alpha Vantage calls to allow, 1–25; --calls=N works too; the rolling ration caps it anyway)";
+const KNOWN = { "--calls": "int", "--port": "int", "--config": "str" };
+const args = {};
+for (let i = 0; i < argv.length; i++) {
+  // `--calls 18` and `--calls=18` are both accepted (review N13).
+  const eq = argv[i].indexOf("=");
+  const flag = eq > -1 ? argv[i].slice(0, eq) : argv[i];
+  if (!(flag in KNOWN)) { console.error(`Unknown argument: ${argv[i]}\n${USAGE}`); process.exit(2); }
+  const val = eq > -1 ? argv[i].slice(eq + 1) : argv[i + 1];
+  if (val === undefined || val === "" || val.startsWith("--")) { console.error(`${flag} needs a value\n${USAGE}`); process.exit(2); }
+  if (KNOWN[flag] === "int" && !/^\d+$/.test(val)) { console.error(`${flag} must be a whole number, got "${val}"\n${USAGE}`); process.exit(2); }
+  args[flag] = val; if (eq === -1) i++;
+}
+const argOf = (flag, dflt) => (flag in args ? args[flag] : dflt);
+const CALLS = parseInt(argOf("--calls", "20"), 10);
+if (CALLS < 1 || CALLS > 25) { console.error(`--calls must be between 1 and 25, got ${CALLS}\n${USAGE}`); process.exit(2); }
+const PORT = parseInt(argOf("--port", "8790"), 10);
 /** Sandbox self-test only: local database, stub servers, no spacing. Never set on your machine. */
 const LOCAL_TEST = process.env.SMALLCAP_VISIT_LOCAL === "1";
 const CONFIG = argOf("--config", LOCAL_TEST ? "wrangler.jsonc" : "_wrangler.smallcaps.jsonc");
@@ -76,7 +97,7 @@ const d1 = (sql) => {
 };
 
 const startedAt = new Date().toISOString();
-console.log(`Small-cap visit from this computer — ${CALLS} Alpha Vantage calls, 13 s apart (about ${Math.ceil((CALLS * 13) / 60) + 1} minutes). Started ${startedAt}.`);
+console.log(`Small-cap visit from this computer — up to ${CALLS} Alpha Vantage calls, 13 s apart (about ${Math.ceil((CALLS * 13) / 60) + 1} minutes at most; the Worker plans within the rolling ration). Started ${startedAt}.`);
 
 // --- 1) the local server, live database -------------------------------------
 const child = spawn(process.execPath, [WRANGLER, "dev", "-c", CONFIG, "--test-scheduled", "--port", String(PORT), "--var", `SMALLCAP_AV_CALLS:${CALLS}`], {
@@ -150,6 +171,11 @@ const receipt = d1(`SELECT symbol, outcome, rows_written, substr(detail,1,170) A
 console.log(`\nReceipt for the run at ${summary.run_at}:`);
 for (const r of receipt) console.log(`  ${String(r.symbol ?? "—").padEnd(6)} ${String(r.outcome).padEnd(17)} ${String(r.rows_written).padStart(4)}  ${r.d}`);
 const s = JSON.parse(summary.detail);
-console.log(`\nVisited ${s.planned} (${s.withAccounts} with accounts) · Alpha Vantage calls ${s.avCalls} · EDGAR calls ${s.edgarCalls} · outcomes ${JSON.stringify(s.outcomes)}`);
+if (s.ration) {
+  const r = s.ration;
+  console.log(`\nRation: ${r.used} of 25 calls used in the 24 hours before this run (${r.visits} by visits, ${r.quotes} by live quotes), ${r.reserve} kept back → ${r.available} available; asked ${r.requested}, planned ${r.planned}.${r.nextAt ? ` The oldest counted calls roll off at ${r.nextAt}.` : ""}`);
+}
+if (s.planned === 0 && s.note) { console.log(`Nothing fetched: ${s.note}`); }
+console.log(`${s.ration ? "" : "\n"}Visited ${s.planned} (${s.withAccounts} with accounts) · Alpha Vantage calls ${s.avCalls} · EDGAR calls ${s.edgarCalls ?? 0} · outcomes ${JSON.stringify(s.outcomes ?? {})}`);
 if (s.outcomes?.rate_limited || s.outcomes?.premium || s.outcomes?.auth_failed) console.log("Stopped by the limit — the company it stopped on is first in the queue next time (its accounts are still due); the rest follow.");
 console.log("Done. The live site shows these companies now; run again tomorrow (or in a week — accounts keep for a year, prices for 100 days).");

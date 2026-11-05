@@ -23,6 +23,8 @@ import {
   ENTERPRISING, E as ET, screenEnterprising, type EnterprisingResult, type CriterionDef, type CriterionResult, type Verdict,
 } from "./lib/graham";
 import { computeSignals, describeSignal, HISTORY_LIMIT, RULE as SIGNAL_RULE, type SignalSeries, type SignalPoint } from "./lib/signals";
+import { PAGE_CSS, FONTS_HTML, esc } from "./page";
+import { portfolio } from "./portfolio";
 
 type Env = {
   ALPHAVANTAGE_API_KEY: string;
@@ -53,6 +55,9 @@ type Env = {
 const QUOTE_DAILY_CAP_DEFAULT = 3;
 
 const app = new Hono<{ Bindings: Env }>();
+
+// Week 8: the calculator, the tickets and the student pages live in their own module.
+app.route("/", portfolio);
 
 app.get("/", (c) => c.html(LANDING_PAGE));
 
@@ -294,7 +299,7 @@ app.get("/api/prices/:ticker", async (c) => {
       source: "d1-cache",
       tier: small ? "small" : "core",
       adjusted: small
-        ? "as traded (Alpha Vantage), dividend-adjusted by the toolkit from the dividend record; NOT split-adjusted (review S11)"
+        ? "as traded (Alpha Vantage), dividend-adjusted by the toolkit from the dividend record; split-adjusted only for splits in the toolkit's splits table (review S11, OI-52)"
         : "split- and dividend-adjusted by the provider (lesson 2: charts longer than a season use adjusted prices)",
       count: rows.length,
       first_date: rows[0].date,
@@ -722,7 +727,7 @@ function signalsPage(rows: SignalRow[], universe: number, ms: number): string {
   const stateTag = (st: string) => st === "long" ? `<span class="tag long">LONG</span>` : st === "flat" ? `<span class="tag flat">FLAT</span>` : `<span class="tag warming">WARMING UP</span>`;
   const dateOf = (d: string | null) => d ?? "—";
   const body = rows.map((r) => `<tr class="${r.state}">
-      <th scope="row"><a href="/prices/${esc(r.symbol)}">${esc(r.symbol)}</a>${r.tier === "small" ? `<span class="st" title="Small-cap tier: as-traded prices, dividend-adjusted by the toolkit, NOT split-adjusted — a split reads as a false flip; the rule needs ${SIGNAL_RULE.minMatureDays} closes">s</span>` : ""}<span class="nm">${esc(r.name ?? "")}</span></th>
+      <th scope="row"><a href="/prices/${esc(r.symbol)}">${esc(r.symbol)}</a>${r.tier === "small" ? `<span class="st" title="Small-cap tier: as-traded prices, dividend-adjusted by the toolkit, split-adjusted only for the splits in the toolkit's table (an av_jump receipt names a new one — until it is added, a split reads as a false flip); the rule needs ${SIGNAL_RULE.minMatureDays} closes">s</span>` : ""}<span class="nm">${esc(r.name ?? "")}</span></th>
       <td class="s">${stateTag(r.state)}</td>
       <td class="f">${bar(r.forecast)}<span class="fv">${r.forecast === null ? "—" : `${r.forecast > 0 ? "+" : ""}${r.forecast.toFixed(1)}`}</span></td>
       <td class="r">${r.instrument_risk === null ? "—" : `${r.instrument_risk.toFixed(0)}%`}</td>
@@ -782,7 +787,7 @@ ${PAGE_CSS}
   </div>
   <p class="argue"><strong>Tonight's exercise:</strong> before you looked at this page you wrote three names you believed were "going up". How many are long here? The rule has no opinion about the company, the news or you — it has read 64 days of closes and divided by the noise. Where you and the rule disagree, write down why. Next week: how much a rule like this would let you hold, and where it would make you stop.</p>
   <p class="caption">Served in ${ms} ms · <a href="/screen">the Graham screen</a> · <a href="/screen/enterprising">enterprising</a> · <a href="/card">the cards</a></p>
-  <footer><p class="notice">Education, not advice. A signal is what a rule says about a price series — a long is not a recommendation to buy, a flat is not a recommendation to sell. No sizing, no stops, no tickets yet: that is week 8.</p></footer>
+  <footer><p class="notice">Education, not advice. A signal is what a rule says about a price series — a long is not a recommendation to buy, a flat is not a recommendation to sell. Sizing and stops: <a href="/size">the calculator</a> (week 8); tickets are written on a student's own page.</p></footer>
 </main></body></html>`;
 }
 
@@ -1281,23 +1286,6 @@ app.notFound((c) =>
 // ---------------------------------------------------------------------------
 // Shared page chrome (ledger identity)
 // ---------------------------------------------------------------------------
-const PAGE_CSS = `
-  :root { --paper:#EEF2E9; --ink:#182620; --rule:#B7C6D4; --entry:#3E6B54; --stamp:#B4382E; --faint:#6B7A72; }
-  * { box-sizing: border-box; margin: 0; }
-  body { background: var(--paper); color: var(--ink); font-family: "IBM Plex Sans", system-ui, sans-serif; line-height: 1.55; padding: 2.5rem 1.25rem 4rem; }
-  main { max-width: 46rem; margin: 0 auto; position: relative; }
-  .eyebrow { font-family:"IBM Plex Mono",monospace; font-size:.75rem; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); }
-  h1 { font-family:"Libre Caslon Text",serif; font-weight:700; font-size:clamp(1.6rem,5vw,2.4rem); line-height:1.1; margin:.4rem 0 .2rem; }
-  .back { font-size:.85rem; margin-bottom:1rem; }
-  .back a, a { color: var(--entry); }
-  footer { margin-top:2.5rem; padding-top:1rem; border-top:2px solid var(--ink); font-size:.8rem; color:var(--faint); }
-  footer .notice { color:var(--stamp); font-weight:600; }
-  a:focus-visible { outline:2px solid var(--entry); outline-offset:2px; }
-`;
-const FONTS_HTML = `<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Text:wght@400;700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">`;
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 // ---------------------------------------------------------------------------
 // Week 4 page
