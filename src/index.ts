@@ -640,12 +640,14 @@ type SignalRow = {
   symbol: string; name: string | null; tier: string | null; date: string; close: number;
   ewma_fast: number; ewma_slow: number; instrument_risk: number | null; forecast: number | null;
   state: string; state_since: string | null; days: number; computed_at: string;
+  /** Week 9 (OI-08): the small-tier quarantine reason, or null — an unexplained jump keeps the symbol out of tickets. */
+  quarantined?: string | null;
 };
 
 async function loadSignals(env: Env): Promise<SignalRow[]> {
   return (await env.DB.prepare(
     `SELECT s.symbol, t.name, t.tier, s.date, s.close, s.ewma_fast, s.ewma_slow, s.instrument_risk, s.forecast,
-            s.state, s.state_since, s.days, s.computed_at
+            s.state, s.state_since, s.days, s.computed_at, s.quarantined
      FROM signals s
      JOIN (SELECT symbol, MAX(date) AS date FROM signals GROUP BY symbol) m ON m.symbol = s.symbol AND m.date = s.date
      JOIN tickers t ON t.symbol = s.symbol
@@ -670,7 +672,7 @@ app.get("/api/signals", async (c) => {
   const asOf = rows.reduce<string | null>((m, r) => (m === null || r.date > m ? r.date : m), null);
   return c.json({
     as_of_close: asOf,
-    counts: { long: rows.filter((r) => r.state === "long").length, flat: rows.filter((r) => r.state === "flat").length, warming: rows.filter((r) => r.state === "warming").length },
+    counts: { long: rows.filter((r) => r.state === "long").length, flat: rows.filter((r) => r.state === "flat").length, warming: rows.filter((r) => r.state === "warming").length, quarantined: rows.filter((r) => !!r.quarantined).length },
     signals: rows,
     meta: { source: "d1-cache (nightly signals table)", ...RULE_META, served_in_ms: Date.now() - t0 },
   });
@@ -727,7 +729,7 @@ function signalsPage(rows: SignalRow[], universe: number, ms: number): string {
   const stateTag = (st: string) => st === "long" ? `<span class="tag long">LONG</span>` : st === "flat" ? `<span class="tag flat">FLAT</span>` : `<span class="tag warming">WARMING UP</span>`;
   const dateOf = (d: string | null) => d ?? "—";
   const body = rows.map((r) => `<tr class="${r.state}">
-      <th scope="row"><a href="/prices/${esc(r.symbol)}">${esc(r.symbol)}</a>${r.tier === "small" ? `<span class="st" title="Small-cap tier: as-traded prices, dividend-adjusted by the toolkit, split-adjusted only for the splits in the toolkit's table (an av_jump receipt names a new one — until it is added, a split reads as a false flip); the rule needs ${SIGNAL_RULE.minMatureDays} closes">s</span>` : ""}<span class="nm">${esc(r.name ?? "")}</span></th>
+      <th scope="row"><a href="/prices/${esc(r.symbol)}">${esc(r.symbol)}</a>${r.tier === "small" ? `<span class="st" title="Small-cap tier: as-traded prices, dividend-adjusted by the toolkit, split-adjusted only for the splits in the toolkit's table (an av_jump receipt names a new one — until it is added, a split reads as a false flip); the rule needs ${SIGNAL_RULE.minMatureDays} closes">s</span>` : ""}${r.quarantined ? `<span class="st q" title="Quarantined (week 9, OI-08): ${esc(r.quarantined)} The row is informational; the ticket route refuses the symbol until a splits row explains the jump.">Q</span>` : ""}<span class="nm">${esc(r.name ?? "")}</span></th>
       <td class="s">${stateTag(r.state)}</td>
       <td class="f">${bar(r.forecast)}<span class="fv">${r.forecast === null ? "—" : `${r.forecast > 0 ? "+" : ""}${r.forecast.toFixed(1)}`}</span></td>
       <td class="r">${r.instrument_risk === null ? "—" : `${r.instrument_risk.toFixed(0)}%`}</td>
@@ -751,6 +753,7 @@ ${PAGE_CSS}
   tbody th { font-weight:500; white-space:nowrap; }
   .nm { display:block; color:var(--faint); font-weight:400; font-size:.75rem; white-space:normal; }
   .st { font-family:"IBM Plex Mono",monospace; font-size:.65rem; color:var(--faint); margin-left:.3rem; vertical-align:super; }
+  .st.q { color:var(--stamp); font-weight:600; cursor:help; }
   .tag { font-family:"IBM Plex Mono",monospace; font-size:.7rem; padding:.1rem .4rem; border-radius:3px; letter-spacing:.04em; }
   .tag.long { background:#3E6B54; color:#fff; } .tag.flat { background:#E3E8E4; color:#3b4a42; } .tag.warming { background:#F1EBD6; color:#6b5d2a; }
   .bar { position:relative; display:inline-block; width:120px; height:10px; background:#EEF1EC; border-radius:2px; vertical-align:middle; }
@@ -769,11 +772,12 @@ ${PAGE_CSS}
   <p class="back"><a href="/">&larr; the twelve-week ledger</a></p>
   <p class="eyebrow">Phase 3 · week 7 · why systems beat gut feel</p>
   <h1>Signals</h1>
-  <p class="lede">One rule, run the same way over every company every night: Robert Carver's 16-day / 64-day moving-average crossover, long-only. ${asOf ? `As of the ${esc(asOf)} close` : "No signals computed yet — the nightly job writes them at 22:50 UTC"}, ${rows.length} of ${universe} instruments.</p>
+  <p class="lede">One rule, run the same way over every company every night: Robert Carver's 16-day / 64-day moving-average crossover, long-only. ${asOf ? `As of the ${esc(asOf)} close` : "No signals computed yet — the nightly job writes them at 23:00 UTC"}, ${rows.length} of ${universe} instruments.</p>
   <div class="tally">
     <span><b>${n("long")}</b> long — the fast average is above the slow</span>
     <span><b>${n("flat")}</b> flat — below (no position; the rule never goes short)</span>
-    <span><b>${n("warming")}</b> warming up — fewer than ${SIGNAL_RULE.minMatureDays} closes</span>
+    <span><b>${n("warming")}</b> warming up — fewer than ${SIGNAL_RULE.minMatureDays} closes</span>${rows.some((r) => r.quarantined) ? `
+    <span><b>${rows.filter((r) => r.quarantined).length}</b> quarantined <span class="st q">Q</span> — a jump in the series no splits row explains; no tickets until it does</span>` : ""}
   </div>
   <div class="wrap"><table>
     <thead><tr><th>Instrument</th><th>State</th><th>Forecast (±${SIGNAL_RULE.forecastCap})</th><th title="Annualised volatility: EW σ of daily returns × 16">Instr. risk</th><th>Since</th><th>Close</th></tr></thead>

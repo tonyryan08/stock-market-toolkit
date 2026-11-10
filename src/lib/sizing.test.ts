@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { SIZING, sizePosition, minimumCapital, tradeCost, stopLevel, stopHit, describeSizing, SizeInputError } from "./sizing";
+import { SIZING, sizePosition, minimumCapital, tradeCost, stopLevel, stopHit, describeSizing, SizeInputError, targetFor, fmtPct } from "./sizing";
 
 describe("the sizing constants are the ones the course decided (decisions 18 and 19)", () => {
   it("12% target · leverage 1 · stop at half the annual risk · $2 + 0.25% a trade · 1% round-trip limit · whole shares", () => {
@@ -126,5 +126,31 @@ describe("describeSizing", () => {
     expect(t).toMatch(/18\.18% instrument risk and a 12% target/);   // two decimals: the arithmetic used 18.18 (review F3)
     expect(t).toMatch(/\$10,000\.00 supports \$6,600\.66 of AAPL: 18 shares at \$348\.91 = \$6,280\.38/);
     expect(t).toMatch(/The stop starts \$31\.72 below the entry, at \$317\.19/);
+  });
+});
+
+describe("week 9 — the target shared between N instruments (decision 20)", () => {
+  it("targetFor: 12 ÷ N for 1–4, clamped at 4, and 12 for anything that is not a whole number of instruments", () => {
+    expect([1, 2, 3, 4].map(targetFor)).toEqual([12, 6, 4, 3]);
+    expect(targetFor(5)).toBe(3);                                   // maxInstruments
+    expect([0, -1, 2.5, NaN].map(targetFor)).toEqual([12, 12, 12, 12]);
+    expect([12, 6, 4, 3].map(fmtPct)).toEqual(["12", "6", "4", "3"]);
+    expect(SIZING.maxInstruments).toBe(4);
+    expect(SIZING.budgetTolerancePct).toBe(1);
+    expect(SIZING.drawdownNotePct).toBe(10);
+  });
+  it("the lesson's slide-8 figures: a $10,000 account with two instruments, Apple on the 3 Nov 2026 close ($331.90, 19.04%) → $3,151.26 → 9 shares; 18 would carry 11.4% (review F9 ii)", () => {
+    const s = sizePosition({ capital: 10_000, price: 331.9, instrumentRiskPct: 19.04, targetPct: targetFor(2) });
+    expect(s.ok).toBe(true);
+    expect(s.targetExposure).toBe(3151.26);                         // 10,000 × 6 ÷ 19.04
+    expect(s.units).toBe(9);                                        // ⌊3,151.26 ÷ 331.90⌋
+    expect(s.exposure).toBe(2987.1);
+    expect(s.achievedRiskPct).toBe(5.69);                           // 29.871% × 19.04
+    // what 18 shares would carry — the "You asked for 18" clause of the Oversized sentence
+    expect(Math.round(((18 * 331.9) / 10_000) * 19.04 * 10) / 10).toBe(11.4);
+    expect(describeSizing(s, "AAPL")).toMatch(/19\.04% instrument risk and a 6% target \(12% ÷ 2 instruments\), \$10,000\.00 supports \$3,151\.26 of AAPL: 9 shares at \$331\.90/);
+    // the per-instrument target makes the minimum account larger: four instruments at 3% each
+    expect(minimumCapital(331.9, 19.04, 3)).toBeGreaterThan(minimumCapital(331.9, 19.04, 12));
+    expect(() => sizePosition({ capital: 10_000, price: 331.9, instrumentRiskPct: 19.04, targetPct: 13 })).toThrow(SizeInputError);
   });
 });

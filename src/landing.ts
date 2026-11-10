@@ -5,6 +5,7 @@
  * v0.7.0: week 6 shipped — explain this stock.
  * v0.9.0: week 7 shipped — the signal engine (Phase 3 begins).
  * v0.10.0: week 8 shipped — sizing, stops, tickets.
+ * v0.11.0: week 9 shipped — the paper portfolio marked to market and the nightly risk report (Phase 3 complete).
  */
 
 export const LANDING_PAGE = /* html */ `<!doctype html>
@@ -219,9 +220,10 @@ export const LANDING_PAGE = /* html */ `<!doctype html>
         <span><span class="lesson">How much to bet</span><br><span class="feature">Carver's sizing and stop &mdash; <a href="/size">the position-size calculator</a>, paper tickets with a decision journal, the stop tracked nightly</span></span>
         <span class="stamp">SHIPPED</span>
       </div>
-      <div class="row pending">
+      <div class="row shipped">
         <span class="wk">Wk 9</span>
-        <span><span class="lesson">Your paper portfolio</span><br><span class="feature">Portfolios &amp; the risk report</span></span>
+        <span><span class="lesson">Your paper portfolio</span><br><span class="feature">The account marked to market every night &mdash; cash, open P&amp;L, the high-water mark and the drawdown, the risk the positions carry against the 12% budget &mdash; on each student's page, with the pre-trade checks (size, concentration, budget) that refuse a ticket in a sentence</span></span>
+        <span class="stamp">SHIPPED</span>
       </div>
     </div>
 

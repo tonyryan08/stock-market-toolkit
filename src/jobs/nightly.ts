@@ -47,6 +47,7 @@ import { fetchFmpDailyAdjusted, type DailyBar } from "../providers";
 import { runSmallCaps, type SmallEnv } from "./smallcaps";
 import { runSignals } from "./signals";
 import { runStops } from "./stops";
+import { runRisk } from "./risk";
 
 type Env = SmallEnv & {
   FMP_API_KEY: string;
@@ -82,6 +83,15 @@ async function safeStops(env: Env, runAt: string, log: (symbol: string | null, o
     await runStops(env, runAt);
   } catch (err) {
     await log(null, "stops_error", 0, `the stop tracker threw: ${String((err as Error).message ?? err).slice(0, 200)}`);
+  }
+}
+
+/** Week 9: the nightly risk report, fenced, after the stop tracker. */
+async function safeRisk(env: Env, runAt: string, log: (symbol: string | null, outcome: string, rows: number, detail: string) => Promise<void>): Promise<void> {
+  try {
+    await runRisk(env, runAt);
+  } catch (err) {
+    await log(null, "risk_error", 0, `the risk report threw: ${String((err as Error).message ?? err).slice(0, 200)}`);
   }
 }
 
@@ -131,6 +141,7 @@ export async function runNightly(env: Env, phase: Phase = "all"): Promise<void> 
   if (phase === "signals") {
     await safeSignals(env, runAt, log);
     await safeStops(env, runAt, log);     // week 8: the paper positions' stops, from tonight's closes
+    await safeRisk(env, runAt, log);      // week 9: every student's account marked and reported
     return;
   }
 
@@ -273,6 +284,7 @@ export async function runNightly(env: Env, phase: Phase = "all"): Promise<void> 
   if (phase === "all") {
     await safeSignals(env, runAt, log);
     await safeStops(env, runAt, log);
+    await safeRisk(env, runAt, log);
     fundamentals = phaseBlocked ? "skipped" : "ran";
     if (!phaseBlocked) await runFundamentals(env, runAt, budget);
     // Local doorbell only: the small-cap visit too (slow — Alpha Vantage calls

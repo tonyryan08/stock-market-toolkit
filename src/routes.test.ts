@@ -61,7 +61,7 @@ describe("R3 /api/signals and /signals with no rows, warming rows, a blocked tic
     const db = fakeD1().on("FROM signals s", () => ({ results: [] })).on("SELECT COUNT(*) AS n FROM tickers", () => ({ results: [{ n: 38 }] }));
     const j = await (await get(db, "/api/signals")).json() as any;
     expect(j.as_of_close).toBeNull();
-    expect(j.counts).toEqual({ long: 0, flat: 0, warming: 0 });
+    expect(j.counts).toEqual({ long: 0, flat: 0, warming: 0, quarantined: 0 });
     expect(j.meta.rule).toMatch(/EWMAC 16\/64/);
     const html = await (await get(db, "/signals")).text();
     expect(html).toContain("No signals computed yet");
@@ -183,18 +183,18 @@ describe("R6 the quote cap (OI-24) on the fake D1", () => {
 describe("R7 the scheduled handler: cron → phase (the reviewer's X2)", () => {
   const run = async (cron: string) => {
     const db = fakeD1()
-      .on("SELECT symbol FROM tickers WHERE status = 'active' ORDER BY symbol", () => ({ results: [{ symbol: "AAA" }] }))
+      .on("SELECT symbol, tier FROM tickers WHERE status = 'active' ORDER BY symbol", () => ({ results: [{ symbol: "AAA" }] }))
       .on("FROM daily_prices", () => ({ results: closesDesc(300).map((r) => ({ date: r.date, close: r.close })) }));
     const waits: Promise<unknown>[] = [];
     await worker.scheduled!({ cron, scheduledTime: Date.now(), noRetry() {} } as any, env(db), { waitUntil: (p: Promise<unknown>) => waits.push(p), passThroughOnException() {} } as any);
     await Promise.all(waits);
     return db;
   };
-  it("'0 23 * * *' runs the signal pass and the stop tracker, nothing else: one signals write, two receipts, no price or accounts query (review F3)", async () => {
+  it("'0 23 * * *' runs the signal pass, the stop tracker and the risk report, nothing else: one signals write, no price or accounts query (review F3)", async () => {
     const db = await run("0 23 * * *");
     expect(db.ran("INSERT INTO signals").length).toBe(1);
-    expect(db.ran("INSERT INTO fetch_log").map((r) => r.binds[2])).toEqual(["run_summary", "run_summary"]);   // signals, then the stop tracker (week 8)
-    expect(db.ran("INSERT INTO fetch_log").map((r) => JSON.parse(String(r.binds[4])).phase)).toEqual(["signals", "stops"]);
+    expect(db.ran("INSERT INTO fetch_log").map((r) => r.binds[2])).toEqual(["run_summary", "run_summary", "risk_skipped", "run_summary"]);   // signals, the stop tracker (week 8), the risk report (week 9: no signal date on this fake → skipped)
+    expect(db.ran("INSERT INTO fetch_log").filter((r) => r.binds[2] === "run_summary").map((r) => JSON.parse(String(r.binds[4])).phase)).toEqual(["signals", "stops", "risk"]);
     expect(db.ran("LEFT JOIN daily_prices").length).toBe(0);
     expect(db.ran("fundamentals_as_of IS NULL").length).toBe(0);
   });

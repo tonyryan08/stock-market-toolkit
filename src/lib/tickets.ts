@@ -11,19 +11,25 @@
  *   - it must fit the cash you have;
  *   - the journal entry is the ticket: a blank one is refused;
  *   - a close is the whole position;
- *   - core tier only until week 9 (small caps are not split-adjusted and still warming up).
+ *   - small caps from week 9 (decision 20): a small-tier symbol is ticketable once its rule is
+ *     mature (128 closes) and it is not quarantined — an unexplained jump in its as-traded
+ *     series keeps it out until a splits row explains it;
+ *   - week 9 (decision 20): the size is taken on the account's CURRENT value (cash plus the
+ *     open positions at the latest close), at the target split between the instruments the
+ *     student runs (12% ÷ N); no more open positions than instruments ("concentration"); and
+ *     the account's risk after the ticket within the budget plus a point of tolerance.
  *
  * Education, not advice: the checks say whether a ticket follows the rules
  * the student chose to follow, not whether the trade is a good idea.
  */
-import { SIZING, sizePosition, tradeCost, type Sizing } from "./sizing";
+import { SIZING, sizePosition, targetFor, tradeCost, fmtPct, type Sizing } from "./sizing";
 
 export const CODE = /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/;
 export const JOURNAL_MIN = 20;
 export const JOURNAL_MAX = 1000;
 
-export type Student = { code: string; name: string; capital: number };
-export type SignalFact = { date: string; close: number; instrument_risk: number | null; state: string; state_since: string | null; days?: number | null };
+export type Student = { code: string; name: string; capital: number; instruments: number };
+export type SignalFact = { date: string; close: number; instrument_risk: number | null; state: string; state_since: string | null; days?: number | null; quarantined?: string | null };
 export type PositionRow = {
   id: number; code: string; symbol: string; status: "open" | "closed"; opened_on: string; entry_price: number; units: number; exposure: number;
   stop_gap: number; high_since: number; stop_level: number; stop_hit_on: string | null; instrument_risk: number; realign_date?: string | null; closed_on: string | null;
@@ -97,7 +103,85 @@ export type Facts = {
   signal: SignalFact | null;      // the latest nightly row for the symbol
   positions: PositionRow[];       // the student's, all symbols
   tickets: TicketRow[];           // the student's, all symbols
+  /** Week 9: the latest signal row per open-position symbol, to mark the account to market. */
+  latest?: Record<string, SignalFact>;
 };
+
+export type Latest = Record<string, SignalFact>;
+
+export type Marked = {
+  /** The ledger: capital + realised − invested − open costs. */
+  cash: number;
+  /** Σ units × latest close over the open positions (entry price where no close is stored). */
+  marketValue: number;
+  /** Σ (latest close − entry) × units. */
+  openPnl: number;
+  /** Σ pnl of the closed positions. */
+  realised: number;
+  /** cash + marketValue — the account's current value, the capital the rule sizes on. */
+  value: number;
+  /** The latest close date among the open positions, or null with none open. */
+  date: string | null;
+  /** Open positions valued at entry because no close is stored for them. */
+  missing: string[];
+  /**
+   * Per open position: the risk it carries, percent of the account a year, at the latest close and the latest
+   * instrument risk — or at the ENTRY instrument risk when the latest row carries none (`riskAtEntry`; review F4 of
+   * v0.11.0: the ticket's budget check and the report count the same thing, and the sentence says which).
+   * `date` is the close the position is valued at (null when none is stored).
+   */
+  contributions: { symbol: string; units: number; close: number; date: string | null; weightPct: number; instrumentRisk: number | null; riskAtEntry: boolean; riskPct: number | null; stopDistancePct: number | null; stopHit: boolean }[];
+  /** Σ contributions, percent a year — summed unrounded, rounded once (review F4). */
+  riskUsedPct: number;
+};
+
+const r2 = (v: number) => Math.round(v * 100) / 100;
+
+/**
+ * The account at the latest closes the toolkit holds (week 9, decision 20) — the ONE arithmetic behind the ticket's
+ * checks, the page's strip, the report and the nightly row (review F4 of v0.11.0: two copies disagreed on a position
+ * with no instrument risk tonight — the page said 0.0% used while the budget check saw 11.6%).
+ */
+export function markToMarket(student: Student, positions: PositionRow[], tickets: TicketRow[], latest: Latest): Marked {
+  const ledger = accountOf(student.capital, positions, tickets);
+  const open = positions.filter((p) => p.status === "open");
+  const missing: string[] = [];
+  let marketValue = 0;
+  let openPnl = 0;
+  let date: string | null = null;
+  const rows = open.map((p) => {
+    const l = latest[p.symbol];
+    const close = l?.close ?? null;
+    if (close === null) missing.push(p.symbol);
+    const px = close ?? p.entry_price;
+    marketValue += p.units * px;
+    openPnl += (px - p.entry_price) * p.units;
+    if (l && (!date || l.date > date)) date = l.date;
+    return { p, l, px };
+  });
+  const value = r2(ledger.cash + marketValue);
+  let risk = 0;
+  const contributions = rows.map(({ p, l, px }) => {
+    const weight = value > 0 ? (p.units * px) / value : 0;
+    const latestRisk = l?.instrument_risk && l.instrument_risk > 0 ? l.instrument_risk : null;
+    const ir = latestRisk ?? (p.instrument_risk > 0 ? p.instrument_risk : null);
+    const riskPct = ir === null ? null : weight * ir;
+    if (riskPct !== null) risk += riskPct;
+    return {
+      symbol: p.symbol, units: p.units, close: px, date: l?.date ?? null, weightPct: r2(weight * 100), instrumentRisk: ir, riskAtEntry: latestRisk === null && ir !== null,
+      riskPct: riskPct === null ? null : r2(riskPct),
+      stopDistancePct: px > 0 ? r2(((px - p.stop_level) / px) * 100) : null,
+      stopHit: p.stop_hit_on !== null,
+    };
+  });
+  return { cash: ledger.cash, marketValue: r2(marketValue), openPnl: r2(openPnl), realised: ledger.realised, value, date, missing, contributions, riskUsedPct: r2(risk) };
+}
+
+/** The account's current value for the ticket's checks — a projection of `markToMarket`, never a second arithmetic. */
+export function currentValue(f: Facts): { value: number; cash: number; marketValue: number; riskUsedPct: number } {
+  const m = markToMarket(f.student, f.positions, f.tickets, f.latest ?? {});
+  return { value: m.value, cash: m.cash, marketValue: m.marketValue, riskUsedPct: m.riskUsedPct };
+}
 
 /** Judge a parsed request against the facts. */
 export function decideTicket(req: TicketRequest, f: Facts): Decision {
@@ -105,10 +189,14 @@ export function decideTicket(req: TicketRequest, f: Facts): Decision {
   const sym = req.symbol;
   if (f.tier === null || f.tickerStatus === null) return { ok: false, reasons: [{ code: "universe", message: `${sym} is not in the course universe (the verified list at /api/universe).` }] };
   if (f.tickerStatus !== "active") return { ok: false, reasons: [{ code: "universe", message: `${sym} is in the universe but outside the free data plan — no prices, no signal, no ticket.` }] };
-  if (f.tier !== "core") return { ok: false, reasons: [{ code: "tier", message: `${sym} is in the small-cap tier: no tickets until week 9 — the tier is still warming up and is not yet split-adjusted.` }] };
   if (!f.signal) return { ok: false, reasons: [{ code: "signal", message: `No signal row for ${sym} yet — the nightly pass has not reached it. Try after 23:00 UTC.` }] };
   const sig = f.signal;
   const open = f.positions.find((p) => p.symbol === sym && p.status === "open") ?? null;
+  // Week 9: the small tier is ticketable once the rule is mature and nothing in the series is unexplained (decision 20).
+  if (f.tier !== "core" && req.side === "open") {
+    if (sig.quarantined) return { ok: false, reasons: [{ code: "quarantined", message: `${sym} is quarantined: ${sig.quarantined} No opening ticket until a splits row explains the jump (a split, or factor 1 for news); the tutor adds it.` }] };
+    if (sig.state === "warming") return { ok: false, reasons: [{ code: "tier", message: `${sym} is in the small-cap tier and its rule is still warming up (${sig.days ?? "fewer than 128"} closes stored of the 128 the rule needs): no opening ticket yet.` }] };
+  }
 
   if (req.side === "open") {
     if (sig.state !== "long") {
@@ -128,13 +216,23 @@ export function decideTicket(req: TicketRequest, f: Facts): Decision {
       reasons.push({ code: "risk", message: `No instrument risk for ${sym} on ${sig.date}: the position cannot be sized.` });
     }
 
+    // Week 9 (decision 20): the account's current value is the capital; the target is split between
+    // the instruments the student runs; no more open positions than instruments.
+    const instruments = Math.max(1, Math.min(SIZING.maxInstruments, f.student.instruments || 1));
+    const target = targetFor(instruments);
+    const cur = currentValue(f);
+    const openCount = f.positions.filter((p) => p.status === "open").length;
+    if (!open && openCount >= instruments) {
+      reasons.push({ code: "concentration", message: `Concentration: your account runs ${instruments} instrument${instruments === 1 ? "" : "s"} and ${openCount} position${openCount === 1 ? " is" : "s are"} open (${f.positions.filter((p) => p.status === "open").map((p) => p.symbol).join(", ")}). Close one first, or ask the tutor to set more instruments — each position is then sized at ${SIZING.riskTargetPct}% ÷ N, so adding a name halves, or cuts by a third, the others' size next time they are opened.` });
+    }
+
     // The size is judged whenever it can be, even when another rule already refuses (review F2): the
     // "Oversized" sentence is the week's exit check and must be readable by a student who already holds
     // the position and tries twice the size on purpose.
     let sizing: Sizing | null = null;
     let units = req.units ?? 0;
-    if (sig.state === "long" && hasRisk) {
-      sizing = sizePosition({ capital: f.student.capital, price: sig.close, instrumentRiskPct: sig.instrument_risk as number });
+    if (sig.state === "long" && hasRisk && cur.value > 0) {
+      sizing = sizePosition({ capital: cur.value, price: sig.close, instrumentRiskPct: sig.instrument_risk as number, targetPct: target });
       if (!sizing.ok) {
         // The cost check is "not checked" when no share fits — a non-reason, not shown (review N3).
         reasons.push(...sizing.checks.filter((c) => !c.ok && !(c.code === "cost" && !sizing!.checks[0].ok)).map((c) => ({ code: `size_${c.code}`, message: c.message })));
@@ -142,7 +240,17 @@ export function decideTicket(req: TicketRequest, f: Facts): Decision {
         units = req.units ?? sizing.units;
         if (units > sizing.units) {
           const risk = sig.instrument_risk as number;
-          reasons.push({ code: "oversized", message: `Oversized. At ${risk.toFixed(2)}% instrument risk and the ${SIZING.riskTargetPct}% target, a ${money(f.student.capital)} account supports ${money(sizing.targetExposure)} of ${sym} — ${sizing.units} shares at ${money(sig.close)}. You asked for ${units} (${money(units * sig.close)}, ${((units * sig.close) / f.student.capital * 100).toFixed(0)}% of the account, carrying ${((units * sig.close) / f.student.capital * risk).toFixed(1)}% a year). The rule's size is the most you can hold; fewer is allowed.` });
+          const share = instruments > 1 ? ` (${SIZING.riskTargetPct}% ÷ ${instruments} instruments)` : "";
+          reasons.push({ code: "oversized", message: `Oversized. At ${risk.toFixed(2)}% instrument risk and the ${fmtPct(target)}% target${share}, an account worth ${money(cur.value)} supports ${money(sizing.targetExposure)} of ${sym} — ${sizing.units} shares at ${money(sig.close)}. You asked for ${units} (${money(units * sig.close)}, ${((units * sig.close) / cur.value * 100).toFixed(0)}% of the account, carrying ${((units * sig.close) / cur.value * risk).toFixed(1)}% a year). The rule's size is the most you can hold; fewer is allowed.` });
+        } else if (!reasons.some((r) => r.code === "held" || r.code === "concentration")) {
+          // The budget after this ticket: what the open positions carry tonight plus this one, against the whole target
+          // (plus the tolerance for whole shares). Not judged when "held" or "concentration" already refuses: its remedy
+          // ("fewer shares") would cure neither (review F5 of v0.11.0); "oversized" above is still shown with them (F2).
+          const adding = ((units * sig.close) / cur.value) * (sig.instrument_risk as number);
+          const after = cur.riskUsedPct + adding;
+          if (after > SIZING.riskTargetPct + SIZING.budgetTolerancePct + 1e-9) {
+            reasons.push({ code: "budget", message: `Over the risk budget: the open positions carry ${cur.riskUsedPct.toFixed(1)}% a year tonight and ${units} share${units === 1 ? "" : "s"} of ${sym} would add ${adding.toFixed(1)}% — ${after.toFixed(1)}% against the ${SIZING.riskTargetPct}% target (tolerance ${SIZING.budgetTolerancePct} point). Fewer shares, or wait for a stop to do its work.` });
+          }
         }
       }
     }
@@ -150,9 +258,12 @@ export function decideTicket(req: TicketRequest, f: Facts): Decision {
     if (!sizing || !sizing.ok) return { ok: false, reasons: [{ code: "risk", message: `No instrument risk for ${sym} on ${sig.date}: the position cannot be sized.` }] };
     const exposure = units * sig.close;
     const cost = tradeCost(exposure);
-    const account = accountOf(f.student.capital, f.positions, f.tickets);
-    if (exposure + cost > account.cash + 1e-9) {
-      return { ok: false, reasons: [{ code: "cash", message: `Not enough cash: ${money(account.cash)} available (${money(account.invested)} in ${f.positions.filter((p) => p.status === "open").length} open position(s)); ${units} shares of ${sym} at ${money(sig.close)} plus the ${money(cost)} cost is ${money(exposure + cost)}.` }] };
+    if (exposure + cost > cur.cash + 1e-9) {
+      // How many would fit, cost included (review N3 of v0.11.0: the capped case — a share below 12% ÷ N a year — sizes
+      // to the whole account, which the fee then exceeds by a few dollars; the sentence says what does fit).
+      let fit = Math.min(units, Math.floor(cur.cash / sig.close));
+      while (fit > 0 && fit * sig.close + tradeCost(fit * sig.close) > cur.cash + 1e-9) fit--;
+      return { ok: false, reasons: [{ code: "cash", message: `Not enough cash: ${money(cur.cash)} available (${money(cur.marketValue)} in ${openCount} open position(s) at the latest close); ${units} shares of ${sym} at ${money(sig.close)} plus the ${money(cost)} cost is ${money(exposure + cost)}.${fit > 0 ? ` ${fit} share${fit === 1 ? "" : "s"} would fit, cost included.` : ""}` }] };
     }
     return { ok: true, side: "open", units, fillDate: sig.date, fillPrice: sig.close, cost: Math.round(cost * 100) / 100, sizing, underSized: units < sizing.units, signalState: sig.state };
   }

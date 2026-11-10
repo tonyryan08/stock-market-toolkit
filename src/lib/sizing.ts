@@ -28,6 +28,15 @@
  * Carver's principle (costs must stay a small fraction of the return the
  * rule can earn), the course's threshold.
  *
+ * Week 9 (decision 20): a student may run N instruments; each position is
+ * then sized at (risk target ÷ N) — Carver's equal instrument weights with
+ * the diversification multiplier left at 1 (the conservative choice: it
+ * assumes the shares move together), so the account carries the 12% whatever
+ * N is. `targetPct` on the input carries that share; the default is the whole
+ * target, the Starter System's one instrument. Capital is the account's
+ * current value (cash plus the open positions at the latest close), not the
+ * amount enrolled.
+ *
  * Education, not advice: the calculator says what the rule would hold; it
  * does not say whether to hold anything.
  */
@@ -47,6 +56,12 @@ export const SIZING = {
   maxRoundTripCostPct: 1,
   /** Whole shares only; fewer than this and the position cannot be sized. */
   minUnits: 1,
+  /** Week 9: the most instruments a student may run; each is sized at riskTargetPct ÷ N (decision 20). */
+  maxInstruments: 4,
+  /** Week 9: the account's risk may exceed the target by this much (percentage points) before the report flags "over budget" — whole shares and a volatility that rose since entry. */
+  budgetTolerancePct: 1,
+  /** Week 9: the drawdown (percent from the high-water mark) at which the report says so in words — a statement, not an alarm. */
+  drawdownNotePct: 10,
   /** The paper account's currency: the shares' own. */
   currency: "USD",
 } as const;
@@ -58,6 +73,8 @@ export type SizeInput = {
   price: number;
   /** Annualised volatility, percent (the signals page's "instrument risk"). */
   instrumentRiskPct: number;
+  /** The risk this position may carry, percent of the account a year: the whole target (default), or target ÷ instruments (week 9). */
+  targetPct?: number;
 };
 
 export type SizeCheck = { code: "one_share" | "cost"; ok: boolean; message: string };
@@ -94,6 +111,13 @@ function check(input: SizeInput): void {
   if (!Number.isFinite(input.price) || input.price <= 0) throw bad("price must be a positive number");
   if (!Number.isFinite(input.instrumentRiskPct) || input.instrumentRiskPct <= 0) throw bad("instrument risk must be a positive percentage");
   if (input.capital > 1e9) throw bad("capital must be below $1,000,000,000");
+  if (input.targetPct !== undefined && !(Number.isFinite(input.targetPct) && input.targetPct > 0 && input.targetPct <= SIZING.riskTargetPct)) throw bad(`targetPct must be between 0 and ${SIZING.riskTargetPct}`);
+}
+
+/** The risk one position may carry when the account runs `instruments` of them: the target split equally (decision 20). */
+export function targetFor(instruments: number): number {
+  const n = Number.isInteger(instruments) && instruments >= 1 ? Math.min(instruments, SIZING.maxInstruments) : 1;
+  return SIZING.riskTargetPct / n;
 }
 
 /** Cost of one trade of `value` dollars: the flat fee plus the conversion. */
@@ -111,20 +135,21 @@ export function tradeCost(value: number): number {
  * price did not divide $800). The result is minimal to the dollar: one
  * dollar less sizes one share fewer, which fails one of the two checks.
  */
-export function minimumCapital(price: number, instrumentRiskPct: number): number {
+export function minimumCapital(price: number, instrumentRiskPct: number, targetPct: number = SIZING.riskTargetPct): number {
   const maxPct = SIZING.maxRoundTripCostPct / 100;
   const fx = SIZING.fxPct / 100;
   const costFloor = maxPct > 2 * fx ? (2 * SIZING.costPerTrade) / (maxPct - 2 * fx) : Infinity;
   const sharesNeeded = Math.max(SIZING.minUnits, Math.ceil(costFloor / price - 1e-9));
   const exposureFloor = sharesNeeded * price;
-  const ratio = Math.max(1 / SIZING.leverageFactor, instrumentRiskPct / SIZING.riskTargetPct);
+  const ratio = Math.max(1 / SIZING.leverageFactor, instrumentRiskPct / targetPct);
   return Math.ceil(exposureFloor * ratio - 1e-9);
 }
 
 export function sizePosition(input: SizeInput): Sizing {
   check(input);
   const { capital, price, instrumentRiskPct: sigma } = input;
-  const uncapped = (capital * SIZING.riskTargetPct) / sigma;
+  const target = input.targetPct ?? SIZING.riskTargetPct;
+  const uncapped = (capital * target) / sigma;
   const cap = capital * SIZING.leverageFactor;
   const capped = uncapped > cap;
   const targetExposure = capped ? cap : uncapped;
@@ -138,7 +163,7 @@ export function sizePosition(input: SizeInput): Sizing {
   const close = tradeCost(exposure);
   const roundTrip = open + close;
   const roundTripPct = exposure > 0 ? (roundTrip / exposure) * 100 : Infinity;
-  const minCap = minimumCapital(price, sigma);
+  const minCap = minimumCapital(price, sigma, target);
 
   const checks: SizeCheck[] = [];
   const oneShare = units >= SIZING.minUnits;
@@ -190,8 +215,13 @@ export function stopHit(adjClose: number, level: number): boolean {
 /** The sizing in words, for the calculator page and the ticket. */
 export function describeSizing(s: Sizing, symbol: string): string {
   const { capital, price, instrumentRiskPct: sigma } = s.input;
+  const target = s.input.targetPct ?? SIZING.riskTargetPct;
+  const share = target < SIZING.riskTargetPct ? ` (${SIZING.riskTargetPct}% ÷ ${Math.round(SIZING.riskTargetPct / target)} instruments)` : "";
   const cap = s.capped
-    ? ` ${symbol} moves less than the ${SIZING.riskTargetPct}% target, so without leverage the whole account is the most it can hold — the achieved risk is ${s.achievedRiskPct.toFixed(1)}%, under target.`
+    ? ` ${symbol} moves less than the ${fmtPct(target)}% target, so without leverage the whole account is the most it can hold — the achieved risk is ${s.achievedRiskPct.toFixed(1)}%, under target.`
     : "";
-  return `At ${sigma.toFixed(2)}% instrument risk and a ${SIZING.riskTargetPct}% target, ${money(capital)} supports ${money(s.targetExposure)} of ${symbol}: ${s.units} shares at ${money(price)} = ${money(s.exposure)} (${s.weightPct.toFixed(0)}% of the account, carrying ${s.achievedRiskPct.toFixed(1)}% a year).${cap} The stop starts ${money(s.stopGap)} below the entry, at ${money(s.stopLevel)}, and follows the high.`;
+  return `At ${sigma.toFixed(2)}% instrument risk and a ${fmtPct(target)}% target${share}, ${money(capital)} supports ${money(s.targetExposure)} of ${symbol}: ${s.units} shares at ${money(price)} = ${money(s.exposure)} (${s.weightPct.toFixed(0)}% of the account, carrying ${s.achievedRiskPct.toFixed(1)}% a year).${cap} The stop starts ${money(s.stopGap)} below the entry, at ${money(s.stopLevel)}, and follows the high.`;
 }
+
+/** 12 → "12", 6 → "6", 4 → "4", 3 → "3"; a third of 12 is exactly 4, a quarter 3 — the shares print cleanly. */
+export const fmtPct = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/\.?0+$/, ""));

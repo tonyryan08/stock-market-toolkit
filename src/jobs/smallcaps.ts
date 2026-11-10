@@ -23,7 +23,7 @@
 
 import { fetchAvDailyCompact, fetchAvDividends, fetchAvIncomeAnnual, fetchAvBalanceAnnual, type AvResult, type AvBalanceYear } from "../providers-av";
 import { edgarEpsForPeriods } from "../providers-edgar";
-import { adjustBars, adjustmentFactors, suspiciousJumps, type SplitEvent } from "../lib/adjust";
+import { adjustBars, adjustmentFactors, suspiciousJumps, jumpReceipt, type SplitEvent } from "../lib/adjust";
 
 /** A receipt's detail is cut at this many characters; a run_summary carries JSON and gets more
  *  (with the ration fields the small-cap summary passes 300 and would be cut mid-JSON — OI-53). */
@@ -111,7 +111,9 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget, opts: { spacingMs?: number } = {}): Promise<void> {
   const started = Date.now();
-  const spacing = opts.spacingMs ?? (parseInt(env.SMALLCAP_AV_SPACING_MS ?? "", 10) || AV_SPACING_MS);
+  // "0" is a value (the stub-server tests): only an unset or unparseable hook falls back to the 13 s.
+  const envSpacing = parseInt(env.SMALLCAP_AV_SPACING_MS ?? "", 10);
+  const spacing = opts.spacingMs ?? (Number.isFinite(envSpacing) && envSpacing >= 0 ? envSpacing : AV_SPACING_MS);
   const log = async (symbol: string | null, outcome: string, rows: number, detail: string) => {
     try {
       await env.DB.prepare(
@@ -162,7 +164,10 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
     }));
     return;
   }
-  const plan = planNight(tickers, avPerNight, new Date());
+  // The plan is made as of `runAt`, the same instant the receipts and the ration use — not the wall clock
+  // (found at the v0.11.0 apply: a test fixture one hour "fresh" on 5 Nov was four days stale on the tutor's PC
+  // on 9 Nov, because this line read the clock; live, runAt and the clock are the same minute).
+  const plan = planNight(tickers, avPerNight, new Date(runAt));
   const avOpts = { apiUrl: env.ALPHAVANTAGE_API_URL || undefined };
   const edgarOpts = { apiUrl: env.EDGAR_API_URL || undefined };
   const counts: Record<string, number> = {};
@@ -314,7 +319,7 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
         const jumps = suspiciousJumps(bars);
         if (jumps.length) {
           bump("av_jump");
-          await log(sym, "av_jump", 0, `adjusted close moved ×${jumps.map((j) => `${j.ratio} on ${j.date}`).join(", ")} — a split the toolkit does not know (add it to the splits table), or news; prices are as traded`);
+          await log(sym, "av_jump", 0, jumpReceipt(jumps));
         }
       } catch (err) {
         bump("write_error");

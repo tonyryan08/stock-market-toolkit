@@ -16,17 +16,18 @@ const postForm = (db: FakeD1, path: string, fields: Record<string, string>) =>
   worker.fetch(new Request(`http://localhost${path}`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(fields).toString() }), env(db), ctx);
 
 const AAPL = { date: "2026-10-29", close: 348.91, instrument_risk: 18.18, state: "long", state_since: "2026-05-08" };
-const STUDENT = { code: "K7PM-4R2X", name: "Test Student", capital: 10000 };
+const STUDENT = { code: "K7PM-4R2X", name: "Test Student", capital: 10000, instruments: 1 };
 const JOURNAL = "The rule is long since May; the stop starts at 317.19; if it is hit I close on the Monday.";
 
 /** A database with AAPL long, one enrolled student, no positions. */
 const base = () => fakeD1()
-  .on("SELECT tier, status, name FROM tickers WHERE symbol", (b) => ({ results: b[0] === "AAPL" ? [{ tier: "core", status: "active", name: "Apple" }] : b[0] === "SML" ? [{ tier: "small", status: "active", name: "Small Co" }] : b[0] === "BLK" ? [{ tier: "core", status: "blocked", name: "Blocked" }] : b[0] === "WRM" ? [{ tier: "core", status: "active", name: "Warming Co" }] : [] }))
-  .on("FROM signals WHERE symbol = ?1 ORDER BY date DESC LIMIT 1", (b) => ({ results: b[0] === "AAPL" ? [AAPL] : b[0] === "WRM" ? [{ ...AAPL, instrument_risk: null, state: "warming" }] : [] }))
+  .on("SELECT tier, status, name FROM tickers WHERE symbol", (b) => ({ results: b[0] === "AAPL" ? [{ tier: "core", status: "active", name: "Apple" }] : b[0] === "SML" ? [{ tier: "small", status: "active", name: "Small Co" }] : b[0] === "QRN" ? [{ tier: "small", status: "active", name: "Quarantined Co" }] : b[0] === "BLK" ? [{ tier: "core", status: "blocked", name: "Blocked" }] : b[0] === "WRM" ? [{ tier: "core", status: "active", name: "Warming Co" }] : [] }))
+  .on("FROM signals WHERE symbol = ?1 ORDER BY date DESC LIMIT 1", (b) => ({ results: b[0] === "AAPL" ? [AAPL] : b[0] === "WRM" ? [{ ...AAPL, instrument_risk: null, state: "warming" }] : b[0] === "SML" ? [{ ...AAPL, state: "warming", days: 70, instrument_risk: 40 }] : b[0] === "QRN" ? [{ ...AAPL, instrument_risk: 40, quarantined: "the adjusted close moved ×0.467 on 2026-07-01 with no splits row to explain it." }] : [] }))
   .on("FROM students WHERE code", (b) => ({ results: b[0] === STUDENT.code ? [STUDENT] : [] }))
   .on("FROM positions WHERE code", () => ({ results: [] }))
   .on("FROM tickets WHERE code", () => ({ results: [] }))
-  .on("SELECT symbol FROM tickers WHERE status = 'active' AND tier = 'core'", () => ({ results: [{ symbol: "AAPL" }, { symbol: "KO" }] }));
+  .on("SELECT symbol FROM tickers WHERE status = 'active' AND tier = 'core'", () => ({ results: [{ symbol: "AAPL" }, { symbol: "KO" }] }))
+  .on("SELECT MAX(date) AS d FROM signals", () => ({ results: [{ d: "2026-10-29" }] }));
 
 describe("POST /api/position-size", () => {
   it("validates the body before any SQL: not JSON, a bad ticker, a bad capital", async () => {
@@ -47,6 +48,22 @@ describe("POST /api/position-size", () => {
     expect(j.rules.riskTargetPct).toBe(12);
     expect(j.note).toMatch(/Education, not advice/);
   });
+  it("week 9 — instruments on the calculator (review F7): N = 2 sizes at 6%, the How column and the rule box say ÷ N, a bad N is refused", async () => {
+    const two = (await (await postJson(base(), "/api/position-size", { ticker: "AAPL", capital: 10000, instruments: 2 })).json()) as any;
+    expect(two).toMatchObject({ instruments: 2, per_instrument_target_pct: 6, units: 9 });                 // 10,000 × 6 ÷ 18.18 = 3,300.33 → ⌊÷ 348.91⌋ = 9
+    expect(two.sizing.targetExposure).toBe(3300.33);
+    expect(two.reading).toMatch(/6% target \(12% ÷ 2 instruments\)/);
+    const one = (await (await postJson(base(), "/api/position-size", { ticker: "AAPL", capital: 10000 })).json()) as any;
+    expect(one).toMatchObject({ instruments: 1, per_instrument_target_pct: 12, units: 18 });               // blank = 1, as before
+    expect((await postJson(base(), "/api/position-size", { ticker: "AAPL", capital: 10000, instruments: 5 })).status).toBe(400);
+    expect((await postJson(base(), "/api/position-size", { ticker: "AAPL", capital: 10000, instruments: "two" })).status).toBe(400);
+    const page = await (await get(base(), "/size?ticker=AAPL&capital=10000&instruments=2")).text();
+    expect(page).toContain("$10,000.00 × 6 (12% ÷ 2 instruments) ÷ 18.18");
+    expect(page).toContain("<td class=\"v\">9</td>");
+    expect(page).toContain("Target exposure = account value × (12% ÷ N instruments) ÷ instrument risk");
+    expect(page).toContain('name="instruments"');
+    expect(await (await get(base(), "/size?ticker=AAPL&capital=10000&instruments=9")).text()).toContain("Instruments must be a whole number from 1 to 4.");
+  });
   it("the three-way 404 and the warming 422", async () => {
     const db = base();
     expect((await postJson(db, "/api/position-size", { ticker: "ZZZ", capital: 1000 })).status).toBe(404);
@@ -57,7 +74,10 @@ describe("POST /api/position-size", () => {
   it("the calculator keeps to the core tier and names a warming instrument (review F13)", async () => {
     const small = await postJson(base(), "/api/position-size", { ticker: "SML", capital: 10000 });
     expect(small.status).toBe(422);
-    expect(((await small.json()) as any).error).toMatch(/small-cap tier: no sizing and no tickets until week 9/);
+    expect(((await small.json()) as any).error).toMatch(/small-cap tier and its rule is still warming up \(70 closes stored of the 128/);   // week 9: warming, not "until week 9"
+    const q = await postJson(base(), "/api/position-size", { ticker: "QRN", capital: 10000 });
+    expect(q.status).toBe(422);
+    expect(((await q.json()) as any).error).toMatch(/is quarantined: the adjusted close moved ×0\.467 on 2026-07-01/);
     const warmDb = base().on("FROM signals WHERE symbol = ?1 ORDER BY date DESC LIMIT 1", (b) => ({ results: b[0] === "WRM" ? [{ ...AAPL, state: "warming", days: 90 }] : [AAPL] }));
     const warm = await postJson(warmDb, "/api/position-size", { ticker: "WRM", capital: 10000 });
     expect(warm.status).toBe(200);
@@ -142,7 +162,9 @@ describe("POST /api/tickets", () => {
     const j = (await (await postJson(db, "/api/tickets", { code: STUDENT.code, ticker: "AAPL", side: "open", journal: JOURNAL })).json()) as any;
     expect(j.reasons[0].message).toMatch(/The rule opens, you don't/);
     const s = (await (await postJson(base(), "/api/tickets", { code: STUDENT.code, ticker: "SML", side: "open", journal: JOURNAL })).json()) as any;
-    expect(s.reasons[0].message).toMatch(/no tickets until week 9/);
+    expect(s.reasons[0].message).toMatch(/still warming up \(70 closes stored of the 128/);                       // week 9: warming, not "until week 9"
+    const q = (await (await postJson(base(), "/api/tickets", { code: STUDENT.code, ticker: "QRN", side: "open", journal: JOURNAL })).json()) as any;
+    expect(q.reasons[0].message).toMatch(/quarantined: the adjusted close moved ×0\.467 on 2026-07-01/);
   });
   it("closes a held position: 201 with the P&L, the ticket and the UPDATE in one batch", async () => {
     const open = { id: 5, code: STUDENT.code, symbol: "AAPL", status: "open", opened_on: "2026-10-01", entry_price: 330, units: 18, exposure: 5940, stop_gap: 30, high_since: 350, stop_level: 320, stop_hit_on: "2026-10-28", instrument_risk: 18, closed_on: null, exit_price: null, pnl: null, open_ticket_id: 7, close_ticket_id: null };
@@ -177,6 +199,43 @@ describe("GET /api/tickets/:code and the page", () => {
     expect(html).toContain("Because &lt;b&gt;reasons&lt;/b&gt;");
     expect(html).not.toContain("<b>reasons</b>");
     expect(html).toContain("Cash<b>$4,043.15</b>");  // 10,000 − 5,940 − 16.85
+  });
+  it("week 9 — the page marks the account to market, prints the risk report and the nightly rows, and no longer prints the code (OI-56)", async () => {
+    const open = { id: 5, code: STUDENT.code, symbol: "AAPL", status: "open", opened_on: "2026-10-01", entry_price: 330, units: 18, exposure: 5940, stop_gap: 30, high_since: 350, stop_level: 320, stop_hit_on: null, instrument_risk: 18, closed_on: null, exit_price: null, pnl: null, open_ticket_id: 7, close_ticket_id: null };
+    const opened = { id: 7, code: STUDENT.code, symbol: "AAPL", side: "open", units: 18, fill_date: "2026-10-01", fill_price: 330, cost: 16.85, signal_state: "long", journal: JOURNAL, created_at: "2026-10-01T20:00:00.000Z" };
+    const night = { code: STUDENT.code, date: "2026-10-28", account_value: 10200, cash: 4043.15, market_value: 6156.85, open_pnl: 216.85, realised_pnl: 0, hwm: 10300, drawdown_pct: 0.97, risk_used_pct: 10.86, risk_target_pct: 12, instruments: 1, open_positions: 1, nearest_stop_pct: 6.4, stop_hits: 0, flags: '["drawdown"]', computed_at: "2026-10-28T23:00:05.000Z" };
+    const db = base().on("FROM positions WHERE code", () => ({ results: [open] })).on("FROM tickets WHERE code", () => ({ results: [opened] })).on("FROM risk_reports WHERE code", () => ({ results: [night] }));
+    const html = await (await get(db, "/tickets/K7PM-4R2X")).text();
+    // value = 4,043.15 cash + 18 × 348.91 = 10,323.53; the mark carried from the row is max(10,300, 10,200) → at a new high
+    expect(html).toContain("Account value<b>$10,323.53</b>");
+    expect(html).toContain("Open P&amp;L<b class=\"pos\">$340.38</b>");                        // (348.91 − 330) × 18
+    expect(html).toContain("Drawdown<b class=\"\">0.0%</b><i>high $10,323.53</i>");            // a drawdown is plain until the 10% note threshold (lesson 9: normal)
+    expect(html).toMatch(/Risk used<b>11\.1%<\/b>/);                                               // 6,280.38 ÷ 10,323.53 × 18.18
+    expect(html).toContain("On the 2026-10-29 close the account is worth $10,323.53");
+    expect(html).toContain("The account is at its high-water mark ($10,323.53)");
+    expect(html).toContain("<td class=\"d\">2026-10-28</td><td class=\"n\">$10,200.00</td>");   // the nightly row
+    expect(html).toContain("drawdown ≥ 10%");                                                       // the flag in words
+    expect(html).not.toContain(`Code ${STUDENT.code}`);                                              // OI-56: the code is the URL, not page text
+    expect(html).toContain("runs 1 instrument — each position sized at 12% a year");
+  });
+  it("week 9 — GET /api/risk/:code: the report, its reading and the nightly rows; a bad code 400, an unknown 404", async () => {
+    const j = (await (await get(base(), "/api/risk/k7pm-4r2x")).json()) as any;
+    expect(j.report).toMatchObject({ accountValue: 10000, cash: 10000, hwm: 10000, drawdownPct: 0, riskUsedPct: 0, instruments: 1, perInstrumentPct: 12, openPositions: 0, flags: [] });
+    expect(j.report.date).toBe("2026-10-29");                                                      // the night: the latest close for any instrument, before any row or position (review F6)
+    expect(j.report.reading[0]).toMatch(/^On the 2026-10-29 close the account is worth \$10,000\.00/);
+    // before the first signal pass ever ran there is no night to date it by: the page says so instead of "—"
+    const virgin = base().on("SELECT MAX(date) AS d FROM signals", () => ({ results: [{ d: null }] }));
+    const page = await (await get(virgin, "/tickets/K7PM-4R2X")).text();
+    expect(page).toContain("Risk report <span class=\"when\">before the first nightly close</span>");
+    expect(page).toContain("none yet — the first is written by the 23:00 UTC job tonight");
+    expect(page).not.toContain("as of the — close");
+    expect(j.report.reading[2]).toMatch(/^No open positions/);
+    expect(j.nightly).toEqual([]);
+    expect(j.rules).toEqual({ risk_target_pct: 12, per_instrument_pct: 12, max_instruments: 4, budget_tolerance_pct: 1, drawdown_note_pct: 10 });
+    expect((await get(base(), "/api/risk/short")).status).toBe(400);
+    expect((await get(base(), "/api/risk/AAAA-2222")).status).toBe(404);
+    const t = (await (await get(base(), "/api/tickets/k7pm-4r2x")).json()) as any;
+    expect(t).toMatchObject({ instruments: 1, per_instrument_target_pct: 12, value: 10000, open_pnl: 0, drawdown_pct: 0 });
   });
   it("the journal box carries no browser-side required/minlength: a blank journal reaches the server and the rule speaks (review F14)", async () => {
     const html = await (await get(base(), `/tickets/${STUDENT.code}`)).text();

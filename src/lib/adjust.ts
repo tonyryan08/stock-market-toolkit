@@ -110,6 +110,22 @@ export function adjustBars(
  * dividend is already taken out, so what remains is a split the toolkit
  * does not know about, or real news. Either way it goes on the record.
  */
+/**
+ * The `av_jump` receipt's text — written by the visit, read back by the signal pass's quarantine
+ * (week 9, OI-08). Formatter and parser sit together so they cannot drift (v0.11.0 review F1: the
+ * parser required a `×` before every ratio while the text carried it once, so a receipt naming two
+ * jumps was read for its first only — and a symbol whose first jump a splits row explained went
+ * unquarantined). Each jump is `×<ratio> on <date>`, comma-separated.
+ */
+export function jumpReceipt(jumps: { date: string; ratio: number }[]): string {
+  return `adjusted close moved ${jumps.map((j) => `×${j.ratio} on ${j.date}`).join(", ")} — a split the toolkit does not know (add it to the splits table), or news; prices are as traded`;
+}
+
+/** The jumps named in an `av_jump` receipt (any text with `<ratio> on <YYYY-MM-DD>` in it; a cut receipt yields the jumps it kept). */
+export function parseJumpReceipt(detail: string): { date: string; ratio: string }[] {
+  return [...String(detail ?? "").matchAll(/([0-9]+(?:\.[0-9]+)?) on (\d{4}-\d{2}-\d{2})/g)].map((m) => ({ ratio: m[1], date: m[2] }));
+}
+
 export function suspiciousJumps(bars: { date: string; adjClose: number }[], threshold = 0.4): { date: string; ratio: number }[] {
   const s = [...bars].sort((a, b) => a.date.localeCompare(b.date));
   const out: { date: string; ratio: number }[] = [];
