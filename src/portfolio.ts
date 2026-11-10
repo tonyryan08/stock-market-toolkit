@@ -21,7 +21,7 @@ import { Hono } from "hono";
 import { PAGE_CSS, FONTS_HTML, esc } from "./page";
 import { SIZING, sizePosition, describeSizing, SizeInputError, type Sizing } from "./lib/sizing";
 import { RULE as SIGNAL_RULE } from "./lib/signals";
-import { CODE, JOURNAL_MIN, parseTicket, decideTicket, accountOf, type Facts, type PositionRow, type TicketRow, type SignalFact, type Student, type Reason } from "./lib/tickets";
+import { CODE, JOURNAL_MIN, JOURNAL_MAX, parseTicket, decideTicket, accountOf, type Facts, type PositionRow, type TicketRow, type SignalFact, type Student, type Reason } from "./lib/tickets";
 import { markToMarket, buildReport, describeReport, type RiskReport, type Latest as RiskLatest } from "./lib/risk";
 import { targetFor, fmtPct } from "./lib/sizing";
 
@@ -142,7 +142,12 @@ portfolio.get("/size", async (c) => {
   const capitalRaw = c.req.query("capital") ?? "";
   const instrumentsRaw = c.req.query("instruments") ?? "";
   const instruments = parseInstruments(instrumentsRaw);
-  const universe = (await c.env.DB.prepare("SELECT symbol FROM tickers WHERE status = 'active' AND tier = 'core' ORDER BY symbol").all<{ symbol: string }>()).results.map((r) => r.symbol);
+  // The list offers every core-tier name and each small cap whose rule is mature and not quarantined
+  // (Phase 3 review H5: the lede said "core-tier" after week 9 made the small tier ticketable).
+  const universe = (await c.env.DB.prepare(
+    "SELECT t.symbol FROM tickers t LEFT JOIN signals s ON s.symbol = t.symbol AND s.date = (SELECT MAX(date) FROM signals WHERE symbol = t.symbol) " +
+    "WHERE t.status = 'active' AND (t.tier = 'core' OR (s.state IS NOT NULL AND s.state <> 'warming' AND s.quarantined IS NULL)) ORDER BY t.symbol",
+  ).all<{ symbol: string }>()).results.map((r) => r.symbol);
   let result: Awaited<ReturnType<typeof sizeFor>> | null = null;
   let error: string | null = null;
   const capital = capitalRaw === "" ? null : parseCapital(capitalRaw);
@@ -220,7 +225,7 @@ ${PAGE_CSS}
   <p class="back"><a href="/">← course home</a> · <a href="/signals">signals</a></p>
   <p class="eyebrow">Weeks 8–9 · how much to bet</p>
   <h1>The position-size calculator</h1>
-  <p class="lede">Carver's Starter System, unleveraged: a ${SIZING.riskTargetPct}% risk target shared equally between the instruments an account runs (${SIZING.riskTargetPct}% ÷ N each, N = 1 unless the tutor set more), the stop at half the annual instrument risk below the high since entry, whole shares, $${SIZING.costPerTrade} + ${SIZING.fxPct}% a trade. Type an account value and a core-tier ticker; the arithmetic is shown line by line so you can check every number on a calculator. The ticket sizes on the account's <em>current</em> value — type that, not the capital enrolled.</p>
+  <p class="lede">Carver's Starter System, unleveraged: a ${SIZING.riskTargetPct}% risk target shared equally between the instruments an account runs (${SIZING.riskTargetPct}% ÷ N each, N = 1 unless the tutor set more), the stop at half the annual instrument risk below the high since entry, whole shares, $${SIZING.costPerTrade} + ${SIZING.fxPct}% a trade. Type an account value and a ticker — any core-tier name, or a small cap once its rule has ${SIGNAL_RULE.minMatureDays} closes (the list offers the ones that do); the arithmetic is shown line by line so you can check every number on a calculator. The ticket sizes on the account's <em>current</em> value — type that, not the capital enrolled.</p>
   <form class="calc" method="get" action="/size">
     <label>Ticker <input name="ticker" list="universe" value="${esc(ticker)}" placeholder="AAPL" required maxlength="12"><datalist id="universe">${list}</datalist></label>
     <label>Account value, $ <input name="capital" inputmode="decimal" value="${esc(capital)}" placeholder="10000" required maxlength="14"></label>
@@ -467,7 +472,7 @@ ${PAGE_CSS}
   <h1>${esc(student.name)}</h1>
   <p class="lede">A paper account enrolled at ${money(student.capital)}, run by Carver's rule: open when the rule is long, size by instrument risk on the account's current value, close at the stop, write every decision down. This account runs ${student.instruments} instrument${student.instruments === 1 ? "" : "s"} — each position sized at ${fmtPct(targetFor(student.instruments))}% a year${student.instruments > 1 ? ` (${SIZING.riskTargetPct}% ÷ ${student.instruments})` : ""}. The page's address is its key: share a screenshot, not the link.</p>
   <div class="acct">
-    <span>Account value<b>${money(report.accountValue)}</b><i>${since >= 0 ? "+" : ""}${since.toFixed(1)}% since enrolment</i></span>
+    <span>Account value<b>${money(report.accountValue)}</b><i>${since >= 0 ? "+" : "−"}${Math.abs(since).toFixed(1)}% since enrolment</i></span>
     <span>Cash<b>${money(account.cash)}</b></span>
     <span>Open P&amp;L<b class="${report.openPnl >= 0 ? "pos" : "neg"}">${money(report.openPnl)}</b></span>
     <span>Realised P&amp;L<b class="${account.realised >= 0 ? "pos" : "neg"}">${money(account.realised)}</b></span>
@@ -484,7 +489,7 @@ ${PAGE_CSS}
     <label>Ticker <input name="symbol" value="${esc(keep.symbol ?? "")}" placeholder="AAPL" required maxlength="12"></label>
     <label>Side <select name="side"><option value="open"${sel("open")}>open</option><option value="close"${sel("close")}>close</option></select></label>
     <label>Units (blank = the rule's size) <input name="units" inputmode="numeric" value="${esc(keep.units ?? "")}" placeholder="" maxlength="7"></label>
-    <label class="wide">Decision journal — why, in your own words (at least ${JOURNAL_MIN} characters: what the rule said, where the stop is, what you will do if it is hit) <textarea name="journal" maxlength="1000">${esc(keep.journal ?? "")}</textarea></label>
+    <label class="wide">Decision journal — why, in your own words (at least ${JOURNAL_MIN} characters: what the rule said, where the stop is, what you will do if it is hit) <textarea name="journal" maxlength="${JOURNAL_MAX}">${esc(keep.journal ?? "")}</textarea></label>
     <button type="submit">Write the ticket</button>
   </form>
   <h2>Closed positions</h2>

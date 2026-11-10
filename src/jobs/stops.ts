@@ -50,6 +50,8 @@ export type StopsSummary = {
   realigned: number;
   /** Of the re-alignments, those that were a split (the share count changed). */
   splits: number;
+  /** Positions left untouched tonight because the series moved by a ratio the tracker does not know (a `split_unknown` receipt each). */
+  unknown: number;
   errors: number;
   ms: number;
 };
@@ -60,26 +62,39 @@ const RECEIPT_SUMMARY_CHARS = 1500;
 const CLOSES_PER_NIGHT = 400;
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
+/** Split ratios the tracker recognises without a table row: p-for-q with p, q ≤ 5 (3-for-2, 4-for-3, 5-for-4, 5-for-2 …) and their reverses. */
+const RATIOS: [number, number][] = [];
+for (let p = 2; p <= 5; p++) for (let q = 1; q < p; q++) if (gcd(p, q) === 1) RATIOS.push([p, q]);
+function gcd(a: number, b: number): number { return b === 0 ? a : gcd(b, a % b); }
+/** "2-for-1", "1-for-4", "3-for-2": the ratio's name for a receipt, from the share multiplier. */
+export function ratioName(mult: number): string {
+  for (let q = 1; q <= 10; q++) for (let p = 1; p <= 10; p++) if (Math.abs(mult - p / q) < 1e-9) return `${p}-for-${q}`;
+  return `×${mult}`;
+}
+
 /**
  * Is a re-alignment factor a split? Known splits come from the table; the core
- * tier's provider series is split-adjusted without a row, so a round ratio
- * (½, ⅓, ¼ … for a forward split; 2, 3, 4 … for a reverse) within 2% counts.
- * Returns new shares per old share, or null for a dividend-sized move.
+ * tier's provider series is split-adjusted without a row, so a recognised ratio
+ * within 2% counts — N-for-1 and 1-for-N, and (Phase 3 review F2) p-for-q with
+ * p, q ≤ 5: a 3-for-2 scales the series by ⅔ and the share count by 3/2.
+ * Returns new shares per old share; null for a dividend-sized move (under 19%);
+ * and "unknown" for a move of 19% or more that matches no ratio — the night
+ * leaves that position alone and writes a `split_unknown` receipt, and a row in
+ * the splits table (any tier; factor 1 for "news, not a split") settles it.
  */
-export function splitMultiplier(factor: number, known: { date: string; factor: number }[]): number | null {
+export function splitMultiplier(factor: number, known: { date: string; factor: number }[]): number | null | "unknown" {
   if (known.length) return known.reduce((m, k) => m * k.factor, 1);
-  if (!(factor > 0) || Math.abs(factor - 1) < 0.2) return null;
-  if (factor < 1) {
-    const n = Math.round(1 / factor);
-    return n >= 2 && Math.abs(1 / factor - n) / n < 0.02 ? n : null;
+  if (!(factor > 0) || Math.abs(factor - 1) < 0.19) return null;   // under 19%: a dividend (0.19, not 0.2, so that a 5-for-4's ×0.8 is not lost to floating point)
+  for (const [p, q] of RATIOS) {
+    if (Math.abs(factor - q / p) / (q / p) < 0.02) return p / q;        // a forward p-for-q: prices × q/p, shares × p/q
+    if (Math.abs(factor - p / q) / (p / q) < 0.02) return q / p;        // a reverse q-for-p: prices × p/q, shares × q/p
   }
-  const m = Math.round(factor);
-  return m >= 2 && Math.abs(factor - m) / m < 0.02 ? 1 / m : null;
+  return "unknown";
 }
 
 export async function runStops(env: Env, runAt: string): Promise<StopsSummary> {
   const started = Date.now();
-  const summary: StopsSummary = { phase: "stops", positions: 0, tracked: 0, hits: 0, realigned: 0, splits: 0, errors: 0, ms: 0 };
+  const summary: StopsSummary = { phase: "stops", positions: 0, tracked: 0, hits: 0, realigned: 0, splits: 0, unknown: 0, errors: 0, ms: 0 };
   const log = async (symbol: string | null, outcome: string, rows: number, detail: string) => {
     try {
       await env.DB.prepare("INSERT INTO fetch_log (run_at, symbol, outcome, rows_written, detail) VALUES (?1, ?2, ?3, ?4, ?5)")
@@ -121,18 +136,28 @@ export async function runStops(env: Env, runAt: string): Promise<StopsSummary> {
         const known = (await env.DB.prepare("SELECT date, factor FROM splits WHERE symbol = ?1 AND date > ?2 AND date <= ?3 ORDER BY date")
           .bind(p.symbol, realignDate ?? p.opened_on, latest.date).all<{ date: string; factor: number }>()).results;
         const mult = splitMultiplier(factor, known);
-        if (mult !== null) {
-          const newUnits = Math.round(units * mult);
-          const fractional = Math.abs(units * mult - newUnits) > 1e-9;
+        if (mult === "unknown") {
+          // Phase 3 review F2: a move the tracker cannot explain is left to a human, as the small tier's quarantine is —
+          // the position is not re-aligned or tracked tonight; a splits row (a ratio, or factor 1 for news) clears it.
+          summary.unknown++;
+          await log(p.symbol, "split_unknown", 0, `${p.code}: the series on the entry date moved ×${factor.toFixed(6)} — not a dividend-sized move and not a ratio the tracker knows (N-for-1, 1-for-N, p-for-q with p, q ≤ 5). Position left untouched tonight. Add a splits row: the share multiplier for a split, or factor 1 for a cash event such as a special dividend (the entry re-aligns, the shares stay, the difference is cash); a bad bar in the provider's series is fixed in the data, not with a row. The next pass re-aligns it.`);
+          continue;
+        }
+        if (mult !== null && mult !== 1) {
+          // Whole shares only: a fraction left by a p-for-q ratio is cash in lieu, as a broker pays it — the
+          // floored count times the new entry is the exposure, so the fraction's value lands in cash (F1's identity).
+          const exact = units * mult;
+          const newUnits = Math.floor(exact + 1e-9);
+          const fraction = r2(exact - newUnits);
           summary.splits++;
-          await log(p.symbol, "split_realigned", 1, `${p.code}: a ${mult >= 1 ? `${mult}-for-1` : `1-for-${Math.round(1 / mult)}`} split after entry${known.length ? ` (the splits table: ${known.map((k) => `${k.factor} on ${k.date}`).join(", ")})` : " (a round ratio in the provider's adjusted series)"}: ${units} shares → ${newUnits}${fractional ? " (a fractional share rounded — check the position)" : ""}, entry ${p.entry_price} → ${r2(entryNow.adj_close)}, stop gap ${p.stop_gap} → ${r2(gap * factor)}`);
+          await log(p.symbol, "split_realigned", 1, `${p.code}: a ${ratioName(mult)} split after entry${known.length ? ` (the splits table: ${known.map((k) => `${k.factor} on ${k.date}`).join(", ")})` : " (a ratio in the provider's adjusted series)"}: ${units} shares → ${newUnits}${fraction > 0 ? ` (the ${fraction} of a share is cash in lieu)` : ""}, entry ${p.entry_price} → ${r2(entryNow.adj_close)}, stop gap ${p.stop_gap} → ${r2(gap * factor)}`);
           units = newUnits;
         }
         entry = r2(entryNow.adj_close);
         gap = r2(gap * factor);
         realignDate = latest.date;
         summary.realigned++;
-        await log(p.symbol, "realigned", 1, `${p.code}: the series was re-aligned (×${factor.toFixed(6)}${mult !== null ? ", a split" : ""}); entry ${p.entry_price} → ${entry}, stop gap ${p.stop_gap} → ${gap}`);
+        await log(p.symbol, "realigned", 1, `${p.code}: the series was re-aligned (×${factor.toFixed(6)}${mult === 1 && known.length ? `, settled by the splits table — factor 1 on ${known.map((k) => k.date).join(", ")}: a cash event, the shares stay` : mult !== null ? ", a split" : ""}); entry ${p.entry_price} → ${entry}, stop gap ${p.stop_gap} → ${gap}`);
       }
 
       // The closes since the last tracked night, oldest first (review N6), and the high before them.
@@ -156,9 +181,13 @@ export async function runStops(env: Env, runAt: string): Promise<StopsSummary> {
       const highR = r2(high);
       const level = stopLevel(highR, gap);
       const trackedOn = closes[closes.length - 1].date;
+      // `exposure` is units × entry at all times (Phase 3 review F1): after a dividend re-alignment the entry falls by the
+      // dividend, so the exposure falls with it and the ledger's cash rises by units × dividend — the paper account
+      // receives the dividend as cash through the re-alignment, and value = capital + realised + open P&L − open costs holds
+      // for the whole life of the position. A split leaves units × entry where it was.
       await env.DB.prepare(
-        "UPDATE positions SET entry_price = ?2, stop_gap = ?3, high_since = ?4, stop_level = ?5, stop_hit_on = ?6, realign_date = ?7, tracked_on = ?8, units = ?9 WHERE id = ?1",
-      ).bind(p.id, entry, gap, highR, level, hitOn, realignDate, trackedOn, units).run();
+        "UPDATE positions SET entry_price = ?2, stop_gap = ?3, high_since = ?4, stop_level = ?5, stop_hit_on = ?6, realign_date = ?7, tracked_on = ?8, units = ?9, exposure = ?10 WHERE id = ?1",
+      ).bind(p.id, entry, gap, highR, level, hitOn, realignDate, trackedOn, units, r2(units * entry)).run();
       summary.tracked++;
     } catch (err) {
       summary.errors++;

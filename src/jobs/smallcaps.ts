@@ -22,6 +22,7 @@
  */
 
 import { fetchAvDailyCompact, fetchAvDividends, fetchAvIncomeAnnual, fetchAvBalanceAnnual, type AvResult, type AvBalanceYear } from "../providers-av";
+import { intSetting } from "../lib/settings";
 import { edgarEpsForPeriods } from "../providers-edgar";
 import { adjustBars, adjustmentFactors, suspiciousJumps, jumpReceipt, type SplitEvent } from "../lib/adjust";
 
@@ -142,7 +143,7 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
   // avCalls, every live quote its own row — and plan within what is left.
   // --calls (SMALLCAP_AV_CALLS) is a ceiling, not a promise; the clock no
   // longer matters. Two runs were cut short before this existed (27 Oct, 1 Nov).
-  const requested = Math.max(0, parseInt(env.SMALLCAP_AV_CALLS ?? "", 10) || AV_CALLS_PER_NIGHT);
+  const requested = intSetting(env.SMALLCAP_AV_CALLS, AV_CALLS_PER_NIGHT);   // "0" is a value: nothing planned (N3)
   let ration: Ration;
   try {
     ration = await rationLeft(env.DB, runAt);
@@ -155,11 +156,15 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
   const avPerNight = Math.min(requested, ration.available);
   if (avPerNight < 4) {
     // Not even one full visit (price + dividends + income + balance) fits: say so
-    // and spend nothing. The receipt names the time the oldest calls roll off.
+    // and spend nothing. The receipt names the time the oldest calls roll off —
+    // or the ceiling, when it is the ceiling (SMALLCAP_AV_CALLS under 4) that stops the visit.
+    const note = requested < 4
+      ? `ceiling ${requested}: SMALLCAP_AV_CALLS is below one visit's four calls — nothing fetched (${ration.used} of ${AV_RATION_PER_24H} used in the last 24 hours)`
+      : `ration spent: ${ration.used} of ${AV_RATION_PER_24H} calls used in the last 24 hours (${ration.visits} by visits, ${ration.quotes} by live quotes), ${AV_RESERVE} kept back — nothing fetched; the oldest calls roll off at ${ration.nextAt ?? "—"}`;
     await log(null, "run_summary", 0, JSON.stringify({
       phase: "smallcaps", tickers: tickers.length, planned: 0, withAccounts: 0, dividendsOnly: 0, avCalls: 0, edgarCalls: 0,
       ration: { ...ration, requested, planned: 0 },
-      note: `ration spent: ${ration.used} of ${AV_RATION_PER_24H} calls used in the last 24 hours (${ration.visits} by visits, ${ration.quotes} by live quotes), ${AV_RESERVE} kept back — nothing fetched; the oldest calls roll off at ${ration.nextAt ?? "—"}`,
+      note,
       ms: Date.now() - started,
     }));
     return;

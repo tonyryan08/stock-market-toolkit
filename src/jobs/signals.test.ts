@@ -112,12 +112,14 @@ describe("the small-cap quarantine (week 9, decision 20, OI-08)", () => {
     expect(await quarantineReason(asD1(given), "CLEAN", [])).toBeNull();
     expect(given.ran("FROM splits").length).toBe(1);          // an empty share → no splits read either
   });
-  it("one read of the receipts for the whole pass, three per symbol, newest first (review F3)", async () => {
-    const db = fakeD1().on("SELECT symbol, detail FROM fetch_log WHERE outcome = 'av_jump'", (b) => {
-      expect(b).toEqual([1000]);
-      return { results: [{ symbol: "MLI", detail: "r4" }, { symbol: "MLI", detail: "r3" }, { symbol: "CALM", detail: "c1" }, { symbol: "MLI", detail: "r2" }, { symbol: "MLI", detail: "r1" }] };
+  it("one read of the receipts for the whole pass, three per symbol, newest first — picked per symbol by a window function (review F3, Phase 3 review N6)", async () => {
+    const db = fakeD1().on("ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY id DESC)", (b) => {
+      expect(b).toEqual([]);
+      // what SQLite hands back: at most three rows per symbol, newest first within the symbol
+      return { results: [{ symbol: "CALM", detail: "c1" }, { symbol: "MLI", detail: "r4" }, { symbol: "MLI", detail: "r3" }, { symbol: "MLI", detail: "r2" }] };
     });
     const m = await loadJumpReceipts(asD1(db));
+    expect(db.ran("ROW_NUMBER")[0].sql).toMatch(/WHERE outcome = 'av_jump' AND symbol IS NOT NULL\) WHERE rn <= 3 ORDER BY symbol, rn$/);
     expect(m.get("MLI")).toEqual(["r4", "r3", "r2"]);
     expect(m.get("CALM")).toEqual(["c1"]);
     expect(m.get("NONE")).toBeUndefined();
@@ -126,7 +128,7 @@ describe("the small-cap quarantine (week 9, decision 20, OI-08)", () => {
     const db = fakeD1()
       .on("SELECT symbol, tier FROM tickers", () => ({ results: [{ symbol: "AAPL", tier: "core" }, { symbol: "MLI", tier: "small" }, { symbol: "SMLX", tier: "small" }] }))
       .on("FROM daily_prices", () => ({ results: closes(300) }))
-      .on("SELECT symbol, detail FROM fetch_log WHERE outcome = 'av_jump'", () => ({ results: [{ symbol: "MLI", detail: jump }, { symbol: "AAPL", detail: jump }] }))
+      .on("ROW_NUMBER() OVER (PARTITION BY symbol", () => ({ results: [{ symbol: "MLI", detail: jump }, { symbol: "AAPL", detail: jump }] }))
       .on("FROM splits WHERE symbol", () => ({ results: [] }));
     const s = await runSignals({ DB: asD1(db) }, "2026-11-05T23:00:00Z");
     expect(s).toMatchObject({ written: 3, quarantined: 1 });
@@ -141,7 +143,7 @@ describe("the small-cap quarantine (week 9, decision 20, OI-08)", () => {
     const db = fakeD1()
       .on("SELECT symbol, tier FROM tickers", () => ({ results: [{ symbol: "MLI", tier: "small" }] }))
       .on("FROM daily_prices", () => ({ results: closes(300) }))
-      .on("SELECT symbol, detail FROM fetch_log WHERE outcome = 'av_jump'", () => ({ error: "D1_ERROR: storage reset" }))
+      .on("ROW_NUMBER() OVER (PARTITION BY symbol", () => ({ error: "D1_ERROR: storage reset" }))
       .on("SELECT detail FROM fetch_log WHERE symbol = ?1 AND outcome = 'av_jump'", () => ({ results: [{ detail: jump }] }))
       .on("FROM splits WHERE symbol", () => ({ results: [] }));
     const s = await runSignals({ DB: asD1(db) }, "2026-11-05T23:00:00Z");

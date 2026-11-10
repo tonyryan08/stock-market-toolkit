@@ -103,7 +103,7 @@ dir .dev.vars*
 Keys are read at startup, so the restart is mandatory.
 
 1. `npm run dev`
-2. Browser: **http://localhost:8787/api/quote/AAPL**
+2. Browser: **http://127.0.0.1:8787/api/quote/AAPL**
 
 Three possible outcomes:
 
@@ -193,5 +193,5 @@ then delete the files. Two slips in the record (K-1, K-2 in `docs/data-provider-
 | `.dev.vars.txt` keeps appearing | You created the file from inside Notepad. Delete it and use the `copy` command in Part 3 — copy first, edit second. |
 | Warning says the key was rejected | Re-open `notepad .dev.vars`: exactly one pair of quotes per line, no spaces inside them, whole key pasted (they're easy to half-select). |
 | `wrangler secret put` says not logged in | `npx wrangler login`, click Allow in the browser, retry. |
-| Live site works but localhost doesn't (or vice versa) | Remember: two instances, two copies. Localhost reads `.dev.vars`; the live site reads the vault. Fix the one that's failing. |
+| Live site works but 127.0.0.1 doesn't (or vice versa) | Remember: two instances, two copies. The dev server reads `.dev.vars`; the live site reads the vault. Fix the one that's failing. |
 | It worked yesterday, warnings today | Probably the daily ration (Alpha Vantage ≈ 25 lookups/day). The warning text says so. It resets daily — and it's week 3's whole reason to exist. |

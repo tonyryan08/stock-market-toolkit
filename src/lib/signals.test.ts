@@ -28,6 +28,14 @@ describe("computeSignals", () => {
     expect(s.points.every((p) => p.sigmaPx === null && p.forecast === null && p.state === "warming")).toBe(true); // fewer than 20 changes
   });
 
+  it("σ needs exactly RULE.minDays changes: the 20th change has a σ, the 19th does not (Phase 3 review F3)", () => {
+    const stair = Array.from({ length: 21 }, (_, i) => 100 + i); // 21 closes = 20 changes
+    const s = computeSignals(series(stair));
+    expect(RULE.minDays).toBe(20);
+    expect(s.points[19].sigmaPx).toBeNull();   // 19 changes
+    expect(s.points[20].sigmaPx).toBe(1);      // 20 changes: the staircase's σ_px is exactly 1
+    expect(s.points[20].forecast).not.toBeNull();
+  });
   it("a +1-a-day staircase: σ_px is exactly 1, the forecast hits the +20 cap", () => {
     const s = computeSignals(series(Array.from({ length: 25 }, (_, i) => 100 + i)));
     const last = s.latest!;

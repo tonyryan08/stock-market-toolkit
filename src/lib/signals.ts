@@ -38,6 +38,14 @@
  *     version in one column (VC-19); that is why it is the course's.
  *   - Burn-in: a series shorter than 2 × the slow span (128 closes) is
  *     "warming up" — a state is computed but not trusted on the page.
+ *   - EWMA convention (Phase 3 review N1): the plain recursion seeded with the
+ *     first close — pandas `ewm(span=, adjust=False)`. pysystemtrade's default
+ *     is `adjust=True` (weights normalised over the history). The two converge;
+ *     at the 128-close maturity point the slow average still carries
+ *     (63/65)^127 ≈ 1.9% of the first close, worth up to about a forecast point
+ *     on the ±20 scale in a small cap's first mature weeks and nothing on the
+ *     core tier's ~1,260 closes. The recursion is the one a spreadsheet
+ *     reproduces in one column (VC-19); that is why it is the course's.
  *
  * Education, not advice. A signal is what a rule says about a price series.
  * It is not a recommendation to buy or sell anything.

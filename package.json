@@ -1,6 +1,6 @@
 {
   "name": "stock-market-toolkit",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "private": true,
   "description": "Course toolkit for 'Intro to the Stock Market' — a community-school course in good financial decision-making. Education, not advice.",
   "scripts": {

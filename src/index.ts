@@ -24,6 +24,7 @@ import {
 } from "./lib/graham";
 import { computeSignals, describeSignal, HISTORY_LIMIT, RULE as SIGNAL_RULE, type SignalSeries, type SignalPoint } from "./lib/signals";
 import { PAGE_CSS, FONTS_HTML, esc } from "./page";
+import { intSetting } from "./lib/settings";
 import { portfolio } from "./portfolio";
 
 type Env = {
@@ -119,8 +120,7 @@ app.get("/api/quote/:ticker", async (c) => {
   // calls in any 24 hours, counted in fetch_log, the rest answered from the
   // nightly cache with the reason. The tutor's "858 ms vs 9 ms" demo survives.
   // "0" switches the demo off; an unset or unparseable value means the default (OI-24).
-  const capRaw = (c.env.QUOTE_DAILY_CAP ?? "").trim();
-  const cap = capRaw === "" || !/^\d+$/.test(capRaw) ? QUOTE_DAILY_CAP_DEFAULT : parseInt(capRaw, 10);
+  const cap = intSetting(c.env.QUOTE_DAILY_CAP, QUOTE_DAILY_CAP_DEFAULT);
   const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
   // The receipt is written FIRST and the count taken after it, so requests in
   // flight together cannot all read the same count (verification V8): the
@@ -1056,7 +1056,7 @@ async function explainCompany(env: Env, ticker: string, plainOnly: boolean): Pro
     today: now.toISOString().slice(0, 10),
   };
   const sheet = buildFactSheet(input, f.close?.date ?? null);
-  const cap = Math.max(0, parseInt(env.EXPLAIN_DAILY_CAP ?? "", 10) || DAILY_CAP_DEFAULT);
+  const cap = intSetting(env.EXPLAIN_DAILY_CAP, DAILY_CAP_DEFAULT);   // "0" switches the generation off (N3)
   const model = env.EXPLAIN_MODEL || DEFAULT_MODEL;
 
   let narrative: Narrative | null = null;

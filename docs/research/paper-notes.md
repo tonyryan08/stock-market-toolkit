@@ -141,6 +141,16 @@ Build cadence: five course weeks in nine calendar weeks, including a September g
 - Verification checks: VC-01–VC-10 (weeks 2–3), VC-12 (week 4), VC-13 and VC-14 (15–16 Oct). Incidents: 2 Oct D1 write cap; I-1 Workers fetch cap (12 Oct); I-2 D1 7403 (12 Oct); I-3 D1 import 10000 (15 Oct) — three of four cleared by a retry or a one-line config change.
 - Conversation log: 169 turn headers, ~35,000 words, 221 KB, 11 Aug – 12 Oct; 52 dated Tony turns across 7 working days from 30 Sep.
 
+#### 4.2 addendum — brought forward to 10 Nov 2026 (Phase 3 close-out; Phase 3 review H12)
+
+- Code: ~7,270 lines of Worker source (`src/`, tests excluded) + ~3,670 lines of tests + ~670 lines of scripts + 10 migrations (12 D1 tables); 26 routes (23 GET, 3 POST).
+- Tests: 67 (v0.6.1, 16 Oct) → 149 (v0.8.2, 23 Oct) → 331 (v0.9.0, 24 Oct) → 401 (v0.10.0, 2 Nov) → 445 (v0.11.0, 5 Nov) → 452 (v0.11.1, 10 Nov). A fake D1 (`src/jobs/fake-d1.ts`) rehearses the nightly jobs; mutation testing by the reviewers from v0.9.0 (24 mutations at the Phase 3 review, 18 caught, the 6 survivors pinned in v0.11.1).
+- Versions: v0.7 → v0.8.3 (Phase 2 close, 23–24 Oct); v0.9.0 (24 Oct), v0.10.0 (2 Nov), v0.11.0 (5 Nov) + three same-day amendments, v0.11.1 (10 Nov).
+- Universe: 38 core + 48 small-cap tier (at least 42 with accounts by 5 Nov); the Graham ∩ Carver gate empty on 6 Nov (OI-68).
+- Decision log: rows 1–20 (17–20 are Phase 3's: the rule, the defaults, week 8's and week 9's choices).
+- Verification checks: VC-15–VC-21 since the last count (VC-19 the arithmetic by hand to six decimals; VC-20 the first live ticket; VC-21 the Phase 3 gate, executed by the AI in the tutor's browser). Incidents: I-4 (Alpha Vantage refusing the Worker's address, 20–22 Oct); key slips K-1, K-2 (19–23 Oct); the stray-edits incident OI-66 (5 Nov) and the unaccounted build of 2 Nov; the code leak in a screenshot (OI-56); the wall-clock test (OI-67).
+- Independent reviews: 7 (week 5; Phase 2, 27; v0.8.2 verification, 20; v0.9.0, 26; v0.10.0, 29; v0.11.0, 25; Phase 3 end-of-phase, 7 + 16 + 14) — every finding resolved on the record, the tutor's decision each time "implement all".
+
 ### 4.3 The AI error log (keep adding; this is what makes the paper credible)
 
 | Date | Error | Found by |

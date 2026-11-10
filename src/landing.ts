@@ -6,6 +6,7 @@
  * v0.9.0: week 7 shipped — the signal engine (Phase 3 begins).
  * v0.10.0: week 8 shipped — sizing, stops, tickets.
  * v0.11.0: week 9 shipped — the paper portfolio marked to market and the nightly risk report (Phase 3 complete).
+ * v0.11.1: the Phase 3 close-out — the end-of-phase review implemented (the ledger after a dividend, p/q splits, "0" settings, the week-9 box here).
  */
 
 export const LANDING_PAGE = /* html */ `<!doctype html>
@@ -245,11 +246,12 @@ export const LANDING_PAGE = /* html */ `<!doctype html>
   </section>
 
   <div class="try">
-    <strong>New this week:</strong> numbers into narrative. <a href="/explain/NVDA">Explain this stock</a> turns a company's
-    two screen verdicts into plain sentences &mdash; a numbered fact sheet first, then a short story written from that sheet alone
-    and checked against it, every sentence tagged with the facts it rests on. Your job is to catch the sentence that isn't.
-    Still here: <a href="/screen">the defensive screen</a> &middot; <a href="/screen/enterprising">the enterprising screen</a> &middot;
-    <a href="/card">the cards</a>.
+    <strong>New this week:</strong> the paper portfolio runs itself. Every enrolled account is marked to market each night and
+    gets a risk report &mdash; value, cash, open P&amp;L, drawdown from its high-water mark, risk used against the 12% target &mdash;
+    in the same sentences lesson 9 uses. <a href="/size">The calculator</a> now sizes for 1&ndash;4 instruments (12% &divide; N), and a
+    small cap becomes ticketable once its rule has 128 closes. Still here: <a href="/signals">the signals</a> &middot;
+    <a href="/screen">the defensive screen</a> &middot; <a href="/screen/enterprising">the enterprising screen</a> &middot;
+    <a href="/explain/NVDA">explain this stock</a> &middot; <a href="/card">the cards</a>.
     <form class="lookup" onsubmit="event.preventDefault();var t=this.t.value.trim().toUpperCase();if(t)location.href='/'+(this.books.checked?'fundamentals':'prices')+'/'+encodeURIComponent(t)">
       <input name="t" placeholder="AAPL" aria-label="Ticker symbol" autocapitalize="characters" autocomplete="off" spellcheck="false">
       <label style="display:flex;align-items:center;gap:.3rem;font-size:.8rem;color:var(--faint)"><input type="checkbox" name="books" checked> books</label>

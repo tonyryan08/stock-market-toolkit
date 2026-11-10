@@ -49,6 +49,25 @@ describe("markToMarket — the live site's 3 Nov 2026 figures", () => {
   });
 });
 
+describe("the ledger identity across a dividend re-alignment (Phase 3 review F1)", () => {
+  it("value = capital + realised + open P&L − open costs, before and after the tracker re-aligns entry AND exposure; with the old exposure the page is short by units × the dividend", () => {
+    const identity = (positions: PositionRow[]) => {
+      const m = markToMarket(student, positions, [aaplTicket], latest);
+      const openCosts = 17.22;
+      return { value: m.value, identity: Math.round((student.capital + m.realised + m.openPnl - openCosts) * 100) / 100 };
+    };
+    const before = identity([aaplOpen]);
+    expect(before.value).toBe(before.identity);                                     // 9,867.22 both
+    // a $0.26 dividend went ex: the tracker scales the entry to 338.06 and, from v0.11.1, the exposure to 18 × 338.06
+    const after = identity([{ ...aaplOpen, entry_price: 338.06, exposure: 6085.08 }]);
+    expect(after.value).toBe(9871.9);                                               // cash 3,897.70 (the dividend arrived as cash) + 5,974.20
+    expect(after.value).toBe(after.identity);
+    // the v0.11.0 behaviour — entry re-aligned, exposure left at 18 × 338.32 — breaks the identity by exactly 18 × $0.26
+    const stale = identity([{ ...aaplOpen, entry_price: 338.06 }]);
+    expect(Math.round((stale.identity - stale.value) * 100) / 100).toBe(4.68);
+  });
+});
+
 describe("buildReport — the high-water mark, the drawdown and the flags", () => {
   const m = markToMarket(student, [aaplOpen], [aaplTicket], latest);
   it("the first night: the mark is the larger of the enrolled capital and tonight's value; the drawdown is from it", () => {
@@ -68,6 +87,9 @@ describe("buildReport — the high-water mark, the drawdown and the flags", () =
     const up = buildReport(student, { ...m, value: 11_500 }, 11_000, "2026-11-03");
     expect(up.hwm).toBe(11500);
     expect(up.drawdownPct).toBe(0);
+    // the note's boundary is inclusive: exactly 10.00% below the mark is flagged; 9.99% is not (Phase 3 review F3)
+    expect(buildReport(student, { ...m, value: 9_000 }, 10_000, "2026-11-03").flags).toEqual(["drawdown"]);
+    expect(buildReport(student, { ...m, value: 9_001 }, 10_000, "2026-11-03").flags).toEqual([]);
   });
   it("over budget, a stop hit, a missing close and more positions than instruments each raise their flag", () => {
     const hit = markToMarket(student, [{ ...aaplOpen, stop_hit_on: "2026-11-03" }], [aaplTicket], { AAPL: { ...latest.AAPL, instrument_risk: 40 } });
@@ -102,6 +124,11 @@ describe("describeReport — statements a student can check, never instructions"
     expect(l2.find((l) => l.startsWith("The open positions carry"))).toBe("The open positions carry 11.6% a year of the 12% budget (AAPL 11.6% (at the entry risk; none stored tonight)); the account runs 1 instrument, each sized at 12%.");
     expect(l2.find((l) => l.startsWith("The nearest stop"))).toBe("The nearest stop is AAPL, 9.5% below the price it is valued at (its entry — no close is stored).");
     expect(l2.at(-1)).toBe("No close is stored tonight for AAPL: valued at entry until the nightly pass reaches it.");
+    // a close below the stop with no stamp (the tracker left the position untouched — a split_unknown night, Phase 3 review F2) is said plainly, never as a negative "below"
+    const under = markToMarket(student, [aaplOpen], [aaplTicket], { AAPL: { ...latest.AAPL, close: 300 } });
+    const l3 = describeReport(buildReport(student, under, null, "2026-11-03"), student.capital);
+    expect(l3.find((l) => l.includes("below its stop"))).toMatch(/^AAPL closed 2\.0% below its stop with no stamp: the tracker left it untouched tonight — a `split_unknown` receipt/);
+    expect(l3.join(" ")).not.toMatch(/-\d+\.\d% below/);
   });
   it("at the high, with nothing open, and with a stop hit", () => {
     const empty = markToMarket(student, [], [], {});

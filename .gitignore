@@ -10,3 +10,5 @@ _*.jsonc
 *VC-*form*.md
 key*.txt
 ua.txt
+*VC-*form*.*
+*.xlsx

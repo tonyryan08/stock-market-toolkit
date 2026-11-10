@@ -26,7 +26,7 @@ const base = () => fakeD1()
   .on("FROM students WHERE code", (b) => ({ results: b[0] === STUDENT.code ? [STUDENT] : [] }))
   .on("FROM positions WHERE code", () => ({ results: [] }))
   .on("FROM tickets WHERE code", () => ({ results: [] }))
-  .on("SELECT symbol FROM tickers WHERE status = 'active' AND tier = 'core'", () => ({ results: [{ symbol: "AAPL" }, { symbol: "KO" }] }))
+  .on("FROM tickers t LEFT JOIN signals s ON s.symbol = t.symbol", () => ({ results: [{ symbol: "AAPL" }, { symbol: "KO" }] }))
   .on("SELECT MAX(date) AS d FROM signals", () => ({ results: [{ d: "2026-10-29" }] }));
 
 describe("POST /api/position-size", () => {
@@ -102,6 +102,11 @@ describe("GET /size — the calculator page", () => {
     expect(html).toContain("$317.19");
     expect(html).toContain("<datalist id=\"universe\"><option value=\"AAPL\"><option value=\"KO\"></datalist>");
     expect(html).toContain("Education, not advice");
+    // the list is the core tier plus the mature, unquarantined small caps — the SQL says so (Phase 3 review H5)
+    const db = base();
+    await get(db, "/size");
+    expect(db.ran("FROM tickers t LEFT JOIN signals s")[0].sql).toMatch(/t\.tier = 'core' OR \(s\.state IS NOT NULL AND s\.state <> 'warming' AND s\.quarantined IS NULL\)/);
+    expect(html).toContain("or a small cap once its rule has 128 closes");
   });
   it("an empty form renders without an error; a bad ticker says so and escapes it", async () => {
     expect((await (await get(base(), "/size")).text())).not.toContain("class=\"empty\"");
@@ -217,6 +222,13 @@ describe("GET /api/tickets/:code and the page", () => {
     expect(html).toContain("drawdown ≥ 10%");                                                       // the flag in words
     expect(html).not.toContain(`Code ${STUDENT.code}`);                                              // OI-56: the code is the URL, not page text
     expect(html).toContain("runs 1 instrument — each position sized at 12% a year");
+    expect(html).toContain("+3.2% since enrolment");                                                // (10,323.53 − 10,000) ÷ 10,000
+    expect(html).toContain('<textarea name="journal" maxlength="1000">');                            // the server's JOURNAL_MAX, not a literal (Phase 3 review N7)
+    // a loss prints a true minus (U+2212), the sign the money() formatter already uses, never a hyphen
+    const under = base().on("FROM positions WHERE code", () => ({ results: [{ ...open, entry_price: 400, exposure: 7200 }] })).on("FROM tickets WHERE code", () => ({ results: [{ ...opened, fill_price: 400 }] }));
+    const loss = await (await get(under, "/tickets/K7PM-4R2X")).text();
+    expect(loss).toContain("−9.4% since enrolment");                                                // cash 2,783.15 + 18 × 348.91 = 9,063.53
+    expect(loss).not.toMatch(/-\d+\.\d% since enrolment/);
   });
   it("week 9 — GET /api/risk/:code: the report, its reading and the nightly rows; a bad code 400, an unknown 404", async () => {
     const j = (await (await get(base(), "/api/risk/k7pm-4r2x")).json()) as any;

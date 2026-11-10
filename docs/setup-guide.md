@@ -17,7 +17,7 @@ Instructions show Windows; where the Mac differs, it's flagged inline.
 | Node.js / npm | The runtime and its package manager — think vendor platform plus a dependency installer that works *per project*, not per machine |
 | `package.json` | The project's bill of materials — the spec from which everything else is regenerated |
 | `node_modules/` | The installed vendor libraries. Never shipped, never version-controlled — always regenerable from the spec |
-| `localhost:8787` | Your dev instance. Exists only on your machine; nothing is public yet |
+| `127.0.0.1:8787` | Your dev instance. Exists only on your machine; nothing is public yet. (Type the numbers, not `localhost`: on Windows the name resolves to the newer kind of address and the dev server listens on the older — the page never answers) |
 | GitHub repository | The controlled document store — full version history, every change attributable |
 | Commit / push | Checking your changes into the master record |
 | GitHub Actions | The automated deployment pipeline — change control that executes itself |
@@ -93,11 +93,11 @@ npm install
 npm run dev
 ```
 
-**Expected result:** a line containing `Ready on http://localhost:8787`. A prompt about usage metrics or a newer wrangler version can be answered either way / ignored.
+**Expected result:** a line containing `Ready on http://localhost:8787` (wrangler prints the name; open the numbers below). A prompt about usage metrics or a newer wrangler version can be answered either way / ignored.
 
 ### A5. Look at it
 
-Open **http://localhost:8787** — the ledger page, week 1 stamped SHIPPED. Then **http://localhost:8787/api/hello** — the JSON payload. You are now running a Cloudflare Worker on your own machine.
+Open **http://127.0.0.1:8787** — the ledger page, week 1 stamped SHIPPED. Then **http://127.0.0.1:8787/api/hello** — the JSON payload. You are now running a Cloudflare Worker on your own machine.
 
 ### A6. Stop it
 
@@ -199,34 +199,12 @@ Your repo on github.com → **Settings** → **Secrets and variables** → **Act
 
 ### D4. (On reactivation) Trigger the pipeline with a real change
 
-Open `src/index.ts` in any text editor (Notepad is fine), find the line near the bottom reading:
-
-```
-<p>&copy; 2026 Tony Ryan &middot; Source code: GitHub link to follow once the repo is public</p>
-```
-
-Replace it with (your username in the URL):
-
-```
-<p>&copy; 2026 Tony Ryan &middot; <a href="https://github.com/YOUR-USERNAME/stock-market-toolkit">Source code on GitHub</a></p>
-```
-
-Save. Then in GitHub Desktop: the change appears in the left pane → summary *"Add repo link; test CI deploy"* → **Commit to main** → **Push origin**.
-
-### D5. Watch it work
-
-Your repo on github.com → **Actions** tab → the run is executing. **Expected result:** a green tick in about two minutes. Refresh your live `workers.dev` URL — the footer now links to the source.
-
-You will never deploy by hand again. From now on, **pushing is deploying**.
-
----
-
-## Part E — The weekly rhythm (a few minutes, every week)
+*Parked, 10 Nov 2026 (Phase 3 review F7).* This step used to send you to a placeholder footer line in `src/index.ts` to replace with the repository link. The footer has lived in `src/landing.ts` since week 8 and already carries the link, so there is nothing to change. If you ever need a harmless real change to prove the pipeline: edit one word of this guide, then GitHub Desktop → summary *"Test CI deploy"* → **Commit to main** → **Push origin**, and watch the Actions tab.
 
 This is the whole loop from here to week 12. Two verbs, two meanings: **push = backup** (the record), **deploy = release** (the live site).
 
 1. Build the week's feature (this is where Claude Code earns its keep). A shipment arrives as a zip extracted over the project folder; its `_SHIPMENT-NOTES-*` / `_PATCH-NOTES-*` file is the apply sheet and is **never committed** (`.gitignore` excludes `_*.md`) — its record pastes go into `BUILD-LOG.md`, the decision log and the verification record *before* the commit, not after (decision #16: the Phase 2 review found six weeks of pastes unapplied).
-2. `npm test` (149 at v0.8.2), then `npm run dev` → check it locally at localhost:8787. A new migration: `npx wrangler d1 migrations apply stock-market-db --local`, then `--remote` before the deploy.
+2. `npm test` (452 at v0.11.1 — the count is in each shipment's notes), then `npm run dev` → check it locally at 127.0.0.1:8787. A new migration: `npx wrangler d1 migrations apply stock-market-db --local`, then `--remote` before the deploy.
 3. Run the week's verification check (VC-nn) and close it in `docs/data-provider-checks.md`; state the hand gates in `BUILD-LOG.md` as the record supports them.
 4. GitHub Desktop: review the diff (no `_` files, no `.dev.vars`, no `key*.txt`) → commit → **Push origin**. *(The backup.)* If GitHub's push protection refuses the push, a secret is in a commit: never "bypass" — rotate the key, fold the commit (K-2 in the record).
 5. `npm run deploy` → refresh the live URL. *(The release.)* The nightly alarms, the doorbell, the small-cap visit from this PC, the receipts and the resets are in the README's **Runbook**.
@@ -244,7 +222,7 @@ These mirror the hand-verification gates in `BUILD-LOG.md`:
 - [ ] Site runs locally (`npm run dev`, both URLs respond); `npm test` green
 - [ ] Live `workers.dev` URL opens on your phone over mobile data
 - [ ] Repository public on GitHub; the four secrets stored (`npx wrangler secret list` → four names; `docs/api-keys-guide.md` Part 6)
-- [ ] D1 created, migrations 0001–0007 applied local and remote, both seeds applied; `fetch_log` shows a `run_summary` row after the first night
+- [ ] D1 created, migrations 0001–0010 applied local and remote (ten at v0.11.1; `npx wrangler d1 migrations list stock-market-db --remote` shows what is pending), both seeds applied; `fetch_log` shows a `run_summary` row after the first night
 - [ ] *(Parked with Part D.)* Instead: an `npm run deploy` after a change produced a visible change on the live site
 - [ ] Landing-page placeholder replaced with the real repo link
 

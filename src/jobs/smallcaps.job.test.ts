@@ -77,6 +77,30 @@ describe("runSmallCaps and the ration", () => {
     expect(summary.note).toMatch(/ration spent: 19 of 25 calls used in the last 24 hours \(18 by visits, 1 by live quotes\), 3 kept back/);
     expect(summary.note).toMatch(/roll off at 2026-11-01T19:28:55.884Z/);
   });
+  it('SMALLCAP_AV_CALLS="0" is a value (Phase 3 review N3): nothing planned, nothing fetched, the receipt names the ceiling, not the ration', async () => {
+    const fetchSpy = vi.fn(() => { throw new Error("must not be called"); });
+    vi.stubGlobal("fetch", fetchSpy);
+    const db = fakeD1()
+      .on("FROM tickers WHERE status = 'active' AND tier = 'small'", () => ({ results: tier }))
+      .on("json_extract", () => ({ results: [{ n: null, oldest: null }] }))
+      .on("quote_demo", () => ({ results: [{ n: 0, oldest: null }] }));
+    await runSmallCaps(env(db, "0"), NOW, budget());
+    expect(fetchSpy).not.toHaveBeenCalled();
+    const receipts = db.ran("INSERT INTO fetch_log");
+    expect(receipts.length).toBe(1);
+    const summary = JSON.parse(String(receipts[0].binds[4]));
+    expect(summary).toMatchObject({ planned: 0, avCalls: 0, ration: { used: 0, available: 22, requested: 0, planned: 0 } });
+    expect(summary.note).toMatch(/^ceiling 0: SMALLCAP_AV_CALLS is below one visit's four calls — nothing fetched/);
+    // and an unparseable value is the default 20, as before (a spent window keeps the stub from being called)
+    const db2 = fakeD1()
+      .on("FROM tickers WHERE status = 'active' AND tier = 'small'", () => ({ results: tier }))
+      .on("json_extract", () => ({ results: [{ n: 22, oldest: "2026-10-31T19:18:55.884Z" }] }))
+      .on("quote_demo", () => ({ results: [{ n: 0, oldest: null }] }));
+    await runSmallCaps(env(db2, "abc"), NOW, budget());
+    const s2 = JSON.parse(String(db2.ran("INSERT INTO fetch_log")[0].binds[4]));
+    expect(s2.ration.requested).toBe(20);
+    expect(s2.note).toMatch(/^ration spent: 22 of 25/);
+  });
   it("a partly spent window caps the plan: 18 asked, 6 available → one full visit; the receipt carries the ration", async () => {
     // Alpha Vantage answers the first call with its daily-limit notice: the run halts cleanly after that one call.
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ Information: "We have detected your API key as k and our standard API rate limit is 25 requests per day." }), { status: 200, headers: { "content-type": "application/json" } })));

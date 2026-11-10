@@ -152,6 +152,18 @@ describe("decideTicket — opening", () => {
     const smaller = decideTicket(req({ units: 14 }), facts({ student: two, positions: [msft], tickets: [msftTicket], latest }));   // 14 × 348.91 + 14.21 = 4,898.95
     expect(smaller.ok).toBe(true);
   });
+  it("the fee is the margin (Phase 3 review F3 / OI-63): the shares fit the cash, the shares plus the cost do not — refused, and the sentence names what fits", () => {
+    // cash 3,495.00 (10,000 − 6,490 − 15); value 10,995 → the 6% size is 10 shares = 3,489.10 ≤ cash, + cost 10.72 = 3,499.82 > cash
+    const two = { ...student, instruments: 2 };
+    const latest = { MSFT: { date: "2026-10-29", close: 1500, instrument_risk: 5, state: "long", state_since: "2026-09-01" } };
+    const pos = { ...msft, entry_price: 1298, exposure: 6490 };
+    const tk = { ...msftTicket, fill_price: 1298, cost: 15 };
+    const d = decideTicket(req({ units: 10 }), facts({ student: two, positions: [pos], tickets: [tk], latest }));
+    expect(!d.ok && d.reasons.map((r) => r.code)).toEqual(["cash"]);
+    expect(!d.ok && d.reasons[0].message).toMatch(/\$3,495\.00 available .* 10 shares of AAPL at \$348\.91 plus the \$10\.72 cost is \$3,499\.82\. 9 shares would fit, cost included\./);
+    const nine = decideTicket(req({ units: 9 }), facts({ student: two, positions: [pos], tickets: [tk], latest }));
+    expect(nine.ok).toBe(true);
+  });
   it("week 9 — the small tier: ticketable once mature and not quarantined; warming or quarantined → its own sentence", () => {
     expect(decideTicket(req(), facts({ tier: "small" })).ok).toBe(true);                                        // long, 128+ closes, no quarantine
     const warming = decideTicket(req(), facts({ tier: "small", signal: { ...aapl, state: "warming", days: 90 } }));

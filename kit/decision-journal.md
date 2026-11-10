@@ -16,6 +16,7 @@ The one rule of this course that is never waived: **no entry, no trade.** Every 
 | My thesis: why this, why now, in two sentences max | |
 | What would prove me wrong? *(be specific — a price, a fact, a date)* | |
 | Size, and why that size *(per the course rules once you have them)* | |
+| One number from tonight's report *(from week 9: how far below the high the account is, or the risk it carries — e.g. "2.3% below the high")* | |
 | How calm am I right now? *(1 = fully calm … 5 = excited or anxious)* | |
 | Review date *(when will I judge this?)* | |
 

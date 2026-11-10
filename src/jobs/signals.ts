@@ -128,13 +128,21 @@ const daysApart = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(
 /** symbol → the newest three av_jump receipt texts. */
 export type JumpReceipts = Map<string, string[]>;
 
-/** The newest av_jump receipts, three per symbol, in one read (review F3). `limit` bounds the scan's result, never the table. */
-export async function loadJumpReceipts(db: D1Database, limit = 1000): Promise<JumpReceipts> {
-  const rows = (await db.prepare("SELECT symbol, detail FROM fetch_log WHERE outcome = 'av_jump' AND symbol IS NOT NULL ORDER BY id DESC LIMIT ?1").bind(limit).all<{ symbol: string; detail: string | null }>()).results;
+/**
+ * The newest av_jump receipts, three per symbol, in one read (review F3). The three are picked per
+ * symbol by the database (a window function), so a symbol with hundreds of receipts can never crowd
+ * another's out of a flat "newest 1000" — the shape the first version had (Phase 3 review N6).
+ */
+export async function loadJumpReceipts(db: D1Database): Promise<JumpReceipts> {
+  const rows = (await db.prepare(
+    "SELECT symbol, detail FROM (SELECT symbol, detail, ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY id DESC) AS rn " +
+    "FROM fetch_log WHERE outcome = 'av_jump' AND symbol IS NOT NULL) WHERE rn <= 3 ORDER BY symbol, rn",
+  ).all<{ symbol: string; detail: string | null }>()).results;
   const out: JumpReceipts = new Map();
   for (const r of rows) {
     const list = out.get(r.symbol) ?? [];
-    if (list.length < 3) { list.push(String(r.detail ?? "")); out.set(r.symbol, list); }
+    list.push(String(r.detail ?? ""));
+    out.set(r.symbol, list);
   }
   return out;
 }

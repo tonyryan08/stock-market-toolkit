@@ -104,9 +104,11 @@ export function describeReport(r: RiskReport, enrolledCapital: number): string[]
       const nearest = r.marked.contributions.filter((c) => c.stopDistancePct === r.nearestStopPct)[0];
       lines.push(r.stopHits > 0
         ? `${r.stopHits} stop${r.stopHits === 1 ? " has" : "s have"} been hit (${r.marked.contributions.filter((c) => c.stopHit).map((c) => c.symbol).join(", ")}): the rule says close — the close ticket is yours to write at the next decision, with the journal line.`
-        : `The nearest stop is ${nearest ? nearest.symbol + ", " : ""}${pct1(r.nearestStopPct)} below ${nearest && r.marked.missing.includes(nearest.symbol) ? "the price it is valued at (its entry — no close is stored)" : "the latest close"}.`);
+        : r.nearestStopPct < 0
+          ? `${nearest ? nearest.symbol + " closed" : "A position closed"} ${pct1(-r.nearestStopPct)} below its stop with no stamp: the tracker left it untouched tonight — a \`split_unknown\` receipt means its series moved by a factor the tracker cannot explain and a splits row is wanted before it is trusted (Phase 3 review F2).`
+          : `The nearest stop is ${nearest ? nearest.symbol + ", " : ""}${pct1(r.nearestStopPct)} below ${nearest && r.marked.missing.includes(nearest.symbol) ? "the price it is valued at (its entry — no close is stored)" : "the latest close"}.`);
     }
-    if (r.flags.includes("too_many_positions")) lines.push(`${r.openPositions} positions are open for an account set to ${r.instruments} instrument${r.instruments === 1 ? "" : "s"}: no new opening ticket until that is one or fewer than the setting.`);
+    if (r.flags.includes("too_many_positions")) lines.push(`${r.openPositions} positions are open for an account set to ${r.instruments} instrument${r.instruments === 1 ? "" : "s"}: no new opening ticket until the open count is back within the setting.`);
     if (r.flags.includes("missing_close")) lines.push(`No close is stored tonight for ${r.marked.missing.join(", ")}: valued at entry until the nightly pass reaches it.`);
   }
   return lines;
