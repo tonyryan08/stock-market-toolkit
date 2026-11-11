@@ -12,3 +12,4 @@ key*.txt
 ua.txt
 *VC-*form*.*
 *.xlsx
+.vitest/

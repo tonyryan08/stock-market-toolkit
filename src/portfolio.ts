@@ -18,7 +18,7 @@
  * account would do; the toolkit never says whether to do it.
  */
 import { Hono } from "hono";
-import { PAGE_CSS, FONTS_HTML, esc } from "./page";
+import { PAGE_CSS, FONTS_HTML, SHARED_CSS, esc } from "./page";
 import { SIZING, sizePosition, describeSizing, SizeInputError, type Sizing } from "./lib/sizing";
 import { RULE as SIGNAL_RULE } from "./lib/signals";
 import { CODE, JOURNAL_MIN, JOURNAL_MAX, parseTicket, decideTicket, accountOf, type Facts, type PositionRow, type TicketRow, type SignalFact, type Student, type Reason } from "./lib/tickets";
@@ -201,8 +201,8 @@ function sizePage(ticker: string, capital: string, instrumentsRaw: string, unive
 ${FONTS_HTML}
 <style>
 ${PAGE_CSS}
+${SHARED_CSS}
   main { max-width: 50rem; }
-  .lede { color:var(--faint); font-size:.95rem; margin:.3rem 0 1rem; }
   form.calc { display:flex; gap:.8rem; flex-wrap:wrap; align-items:flex-end; margin:1rem 0 1.4rem; }
   form.calc label { display:flex; flex-direction:column; font-size:.8rem; color:var(--faint); gap:.2rem; }
   form.calc input { font: inherit; padding:.4rem .5rem; border:1px solid var(--rule); border-radius:4px; background:#fff; min-width:9rem; }
@@ -219,7 +219,6 @@ ${PAGE_CSS}
   .verdict { font-weight:600; }
   .empty { color:var(--stamp); }
   .rule { background:rgba(255,255,255,.5); border:1px solid var(--rule); border-radius:6px; padding:.8rem 1rem; font-size:.85rem; margin:1.2rem 0; }
-  .wrap { overflow-x:auto; }
 </style></head>
 <body><main>
   <p class="back"><a href="/">← course home</a> · <a href="/signals">signals</a></p>
@@ -431,8 +430,8 @@ function ticketsPage(student: Student, positions: PositionRow[], tickets: Ticket
 ${FONTS_HTML}
 <style>
 ${PAGE_CSS}
+${SHARED_CSS}
   main { max-width: 56rem; }
-  .lede { color:var(--faint); font-size:.95rem; margin:.3rem 0 1rem; }
   .acct { display:flex; gap:1.4rem; flex-wrap:wrap; margin:.6rem 0 1.2rem; font-family:"IBM Plex Mono",monospace; font-size:.85rem; }
   .acct b { font-size:1.25rem; display:block; }
   .acct i { display:block; font-style:normal; color:var(--faint); font-size:.72rem; font-family:"IBM Plex Sans",sans-serif; }
@@ -449,8 +448,7 @@ ${PAGE_CSS}
   td.j { font-size:.8rem; min-width:18rem; max-width:24rem; }
   td.d { white-space:nowrap; }
   .sub { display:block; color:var(--faint); font-size:.72rem; font-family:"IBM Plex Sans",sans-serif; }
-  .tag { font-family:"IBM Plex Mono",monospace; font-size:.68rem; padding:.1rem .4rem; border-radius:3px; letter-spacing:.04em; white-space:nowrap; }
-  .tag.long { background:#3E6B54; color:#fff; } .tag.flat { background:#E3E8E4; color:#3b4a42; } .tag.warming { background:#F1EBD6; color:#6b5d2a; } .tag.hit { background:var(--stamp); color:#fff; }
+  .tag { font-size:.68rem; } .tag.hit { background:var(--stamp); color:#fff; }
   tr.hit td, tr.hit th { background:rgba(180,56,46,.07); }
   .pos { color:var(--entry); } .neg { color:var(--stamp); }
   .flash { border-radius:6px; padding:.8rem 1rem; margin:1rem 0; font-size:.9rem; }
@@ -463,7 +461,6 @@ ${PAGE_CSS}
   form.ticket textarea { min-height: 5rem; }
   form.ticket button { font: inherit; padding:.5rem 1rem; border:1px solid var(--entry); background:var(--entry); color:#fff; border-radius:4px; cursor:pointer; justify-self:start; }
   @media (max-width: 600px) { form.ticket { grid-template-columns: 1fr; } }
-  .wrap { overflow-x:auto; }
   .empty { color:var(--faint); font-style:italic; }
 </style></head>
 <body><main>

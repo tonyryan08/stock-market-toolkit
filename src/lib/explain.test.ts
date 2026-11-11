@@ -3,7 +3,7 @@
  * sheet itself has to be right — and checkable on paper.
  */
 import { describe, it, expect } from "vitest";
-import { buildFactSheet, templateNarrative, checkGrounding, fingerprint, findAdvice, findAdviceDetailed, extractNumbers, extractNumbersWithPrecision, ADVICE_PATTERNS, type Narrative } from "./explain";
+import { buildFactSheet, templateNarrative, checkGrounding, fingerprint, findAdvice, findAdviceDetailed, extractNumbers, extractNumbersWithPrecision, sameValue, ADVICE_PATTERNS, type Narrative } from "./explain";
 import type { ScreenInput } from "./graham";
 import type { FundamentalsYear } from "./ratios";
 
@@ -194,6 +194,8 @@ describe("the plain narrative and the grounding checks", () => {
     ["Fair value sits near 50.", "price target"],
     ["The intrinsic value of the shares is 60.", "price target"],
     ["The shares are worth $70.", "price target"],
+    ["It's worth $70 a share.", "price target"],
+    ["They're still worth $70.", "price target"],
     // forecast
     ["The shares are likely to rise from here.", "forecast"],
     ["Earnings should double next year.", "forecast"],
@@ -332,6 +334,39 @@ describe("the plain narrative and the grounding checks", () => {
     expect(findAdvice("Revenue grew; the company sells furniture and buys timber.")).toEqual([]);   // sells/buys as verbs about the business
     expect(findAdvice("The screen's bar for test 6 is 1.2 times tangible book.")).toEqual([]);
   });
+  it("the course's arithmetic may say 'hold' with a count, 'whole shares', 'at most' or 'the position' (week-10 review F8); a stance still fires", () => {
+    for (const t of [
+      "You must hold whole shares, and the calculator says how many you could hold at the latest close.",
+      "You could hold 18 shares at $348.91; the account would hold at most one position per instrument.",
+      "You should hold the position until the stop says close.",
+      "One would hold fewer shares after a split.",
+    ]) expect(findAdvice(t), t).toEqual([]);
+    for (const t of [
+      "You should hold through the dip.",
+      "Investors must hold this one for the long run.",
+      "You could hold it and add on weakness.",
+    ]) expect(findAdvice(t).length, t).toBeGreaterThan(0);
+  });
+  it("the course's sizing arithmetic may say what a lot of shares, an account or a position is worth (VC-22, OI-82); a verdict on the share still fires", () => {
+    for (const t of [
+      "18 shares worth $6,280.38 — 62.8% of the account, carrying 11.42% a year.",
+      "An account worth $10,000.00 supports $6,600.66 of AAPL — 18 shares at $348.91.",
+      "The 18 shares are worth $6,280.38 at the latest close.",
+      "Your 60 Coca-Cola shares are now worth $5,644.80.",
+      "The position is worth $6,280.38 tonight; the account is worth $9,867.22.",
+      "Your holdings are now worth $5,081.07.",
+      "That is where Graham's bar sits, not an estimate of what the share is worth.",
+      "One share worth $348.91 is the smallest lot the account can hold.",
+    ]) expect(findAdvice(t), t).toEqual([]);
+    for (const t of [
+      "The shares are worth $70.",
+      "The company's shares are worth $70.",
+      "It's worth $70 a share.",
+      "They're still worth $70.",
+      "The stock is worth 60.",
+      "KO is now worth $80.",
+    ]) expect(findAdviceDetailed(t).map((h) => h.family), t).toEqual(["price target"]);
+  });
   it("does not read balance-sheet English as orders or stances (v0.9.0 review F4)", () => {
     for (const t of [
       "Short-term borrowings fell to $12m.",
@@ -383,6 +418,15 @@ describe("the plain narrative and the grounding checks", () => {
     expect(g("Sales of $11.2bn.")).toEqual(["11200000000"]);     // ANDE, 24 Oct: the sheet said 11.3
     expect(g("Revenue grew 37.5% last year.")).toEqual(["37.5"]);
     expect(g("Nothing happened on October 14, 2026 (F13).")).toEqual([]);
+  });
+  it("a dash between two figures is a range, not a sign on the second (VC-22, OI-81); a minus on its own is still a minus; a date is still a date", () => {
+    expect(extractNumbers("A 12% target makes a 20–30% drawdown ordinary; one run in twenty reaches 40%.")).toEqual([12, 20, 30, 40]);
+    expect(extractNumbers("the ordinary 1–2% days; $10–$12; 10%–12%; 16/64; one in twenty")).toEqual([1, 2, 10, 12, 10, 12, 16, 64]);
+    expect(extractNumbers("$348.91 − $31.72 = $317.19")).toEqual([348.91, 31.72, 317.19]);
+    expect(extractNumbers("Net income −$52m; a loss of −$3m; −1.3% since enrolment; on 2026-11-10 (pp. 348–349).")).toEqual([-52e6, -3e6, -1.3]);
+    // the passage's range supports both ends of the answer's
+    const passage = extractNumbersWithPrecision("A 12% target makes a 20–30% drawdown ordinary.");
+    for (const h of extractNumbersWithPrecision("20 to 30%")) expect(passage.some((f) => sameValue(h, f)), String(h.value)).toBe(true);
   });
   // Review S13: numbers compared as values.
   it("reads $3,200m and $3.2bn as the same figure, a Unicode minus as a minus, and a date as no number", () => {

@@ -61,7 +61,7 @@ describe("R3 /api/signals and /signals with no rows, warming rows, a blocked tic
     const db = fakeD1().on("FROM signals s", () => ({ results: [] })).on("SELECT COUNT(*) AS n FROM tickers", () => ({ results: [{ n: 38 }] }));
     const j = await (await get(db, "/api/signals")).json() as any;
     expect(j.as_of_close).toBeNull();
-    expect(j.counts).toEqual({ long: 0, flat: 0, warming: 0, quarantined: 0 });
+    expect(j.counts).toEqual({ long: 0, flat: 0, warming: 0, quarantined: 0, gate_open: 0, gate_near: 0 });   // week 10: the gate counts
     expect(j.meta.rule).toMatch(/EWMAC 16\/64/);
     const html = await (await get(db, "/signals")).text();
     expect(html).toContain("No signals computed yet");
@@ -204,5 +204,68 @@ describe("R7 the scheduled handler: cron → phase (the reviewer's X2)", () => {
     expect(accounts.ran("INSERT INTO fetch_log").map((r) => r.binds[2])).toEqual(["auth_failed"]);   // no key in the test env
     const prices = await run("30 22 * * *");
     expect(prices.ran("INSERT INTO signals").length).toBe(0);
+  });
+});
+
+describe("R-W10 the Graham column on /signals and the watchlist (OI-68)", () => {
+  // the clean survivor of graham.test.ts as D1 rows, plus a dear cousin: the books, the dividends, the latest close
+  const years = (symbol: string) => [2025, 2024, 2023, 2022, 2021].map((fy, i) => ({
+    symbol, fiscal_year: String(fy), period_end: `${fy}-12-31`, revenue: 2e9, net_income: null, eps_diluted: [5, 4.6, 4.4, 4, 3.8][i],
+    current_assets: 400, current_liabilities: 150, total_assets: null, total_liabilities: null, long_term_debt: 100, shareholders_equity: 2000, shares_diluted: 50, goodwill_and_intangibles: null, readings: null,
+  }));
+  const divs = (symbol: string) => Array.from({ length: 11 }, (_, i) => 2016 + i).flatMap((y) => [{ symbol, ex_date: `${y}-03-01`, amount: 0.5 }, { symbol, ex_date: `${y}-09-01`, amount: 0.5 }]);   // twice a year into 2026: no gap over 15 months before "today"
+  const sig = (symbol: string, over: Record<string, unknown> = {}) => ({ symbol, name: `${symbol} Co`, tier: "core", date: "2026-11-10", close: 60, ewma_fast: 61, ewma_slow: 59, instrument_risk: 20.1, forecast: 8.2, state: "long", state_since: "2026-09-01", days: 1260, computed_at: "x", quarantined: null, ...over });
+  const books = () => fakeD1()
+    .on("SELECT symbol, name, sector, tier FROM tickers WHERE status = 'active' ORDER BY symbol", () => ({ results: [{ symbol: "DEAR", name: "Dear Co", sector: "Tech", tier: "core" }, { symbol: "GOOD", name: "Good Co", sector: "Consumer Defensive", tier: "core" }, { symbol: "NOBK", name: "No Books", sector: null, tier: "small" }] }))
+    .on("FROM fundamentals_annual ORDER BY symbol", () => ({ results: [...years("DEAR"), ...years("GOOD")] }))
+    .on("SELECT symbol, ex_date, amount FROM dividends", () => ({ results: [...divs("DEAR"), ...divs("GOOD")] }))
+    .on("JOIN (SELECT symbol, MAX(date) AS d FROM daily_prices GROUP BY symbol)", () => ({ results: [{ symbol: "DEAR", date: "2026-11-10", adj_close: 100 }, { symbol: "GOOD", date: "2026-11-10", adj_close: 60 }] }))
+    .on("SELECT COUNT(*) AS n FROM tickers", () => ({ results: [{ n: 3 }] }));
+  it("/api/signals carries each row's scores and gate; the page prints '7/7 · n/6' with GATE on an open gate and hover text naming the failed tests", async () => {
+    const db = books().on("FROM signals s", () => ({ results: [sig("GOOD"), sig("DEAR", { close: 100 }), sig("NOBK", { tier: "small", state: "warming", days: 40, forecast: null, instrument_risk: null, state_since: null })] }));
+    const j = (await (await get(db, "/api/signals")).json()) as any;
+    const good = j.signals.find((r: any) => r.symbol === "GOOD");
+    expect(good.gate).toBe("open");
+    expect(good.defensive).toMatchObject({ passes: 7, applicable: 7, verdict: "survivor", failed: [] });
+    expect(good.graham).toMatch(/^7\/7 · \d\/6$/);
+    const dear = j.signals.find((r: any) => r.symbol === "DEAR");
+    expect(dear.gate).toBe("closed");
+    expect(dear.defensive.failed).toEqual(["P/E", "P/B"]);
+    const nobk = j.signals.find((r: any) => r.symbol === "NOBK");
+    expect(nobk.gate).toBe("warming");
+    expect(nobk.graham).toBe("—");
+    expect(j.counts).toMatchObject({ long: 2, warming: 1, gate_open: 1, gate_near: 0 });
+    expect(j.meta.gate).toMatch(/Graham ∩ Carver, in that order/);
+    const html = await (await get(db, "/signals")).text();
+    expect(html).toContain("<th title=\"Graham tests passed: defensive (of 7) · enterprising (of 6), from the cached books — week 10, the two rules side by side\">Graham</th>");
+    expect(html).toMatch(/<td class="g open" title="Defensive: 7 of 7 passed\. Enterprising: \d of 6 passed, fails [^"]*">7\/7 · \d\/6 <span class="gt">GATE<\/span><\/td>/);
+    expect(html).toMatch(/<td class="g closed" title="Defensive: 5 of 7 passed, fails P\/E, P\/B\./);
+    expect(html).toContain('<td class="g warming" title="No accounts cached for this company yet');
+    expect(html).toContain("the two rules side by side");
+  });
+  it("/watchlist and /api/watchlist read the gate out: the open name, the longs failing both, the maturing small cap; the empty case says 'nothing'", async () => {
+    const db = books().on("FROM signals s", () => ({ results: [sig("GOOD"), sig("DEAR", { close: 100 }), sig("NOBK", { tier: "small", state: "warming", days: 40, forecast: null, instrument_risk: null, state_since: null })] }));
+    const j = (await (await get(db, "/api/watchlist")).json()) as any;
+    expect(j.gate_open.map((r: any) => r.symbol)).toEqual(["GOOD"]);
+    expect(j.longs_failing_both.map((r: any) => r.symbol)).toEqual(["DEAR"]);
+    expect(j.small_caps_maturing.map((r: any) => r.symbol)).toEqual(["NOBK"]);        // no books yet, but its rule is warming: on its way to 128
+    expect(j.reading[3]).toBe("1 small cap still warming up (fewer than 128 closes); the nearest, NOBK, has 40 — ticketable once it has 128 and no quarantine.");
+    expect(j.reading[0]).toBe("The gate tonight: 1 name passes a Graham screen and is long on the rule — GOOD. The Starter System sizes it; the stop closes it; the ticket is the student's.");
+    expect(j.meta.note).toMatch(/Education, not advice/);
+    const html = await (await get(db, "/watchlist")).text();
+    expect(html).toContain("<h1>The watchlist</h1>");
+    expect(html).toContain("The gate tonight: 1 name passes a Graham screen");
+    expect(html).toContain("defensive: P/E, P/B");
+    expect(html).toContain("Education, not advice. A gate is what two rules say together");
+    // the empty night
+    const empty = books().on("FROM signals s", () => ({ results: [sig("DEAR", { close: 100 }), sig("GOOD", { state: "flat" })] }));
+    const e = (await (await get(empty, "/api/watchlist")).json()) as any;
+    expect(e.gate_open).toEqual([]);
+    expect(e.reading[0]).toMatch(/^The gate tonight: nothing\. 1 name passes a Graham screen but is not long on the rule/);
+    const ehtml = await (await get(empty, "/watchlist")).text();
+    expect(ehtml).toContain("Nothing tonight. No company passes a Graham screen and is long on the rule");
+    expect(ehtml).toContain("No near miss is long tonight. A near miss is a reading list, not a pick.");
+    expect(ehtml).toContain("Every small cap in the tier has its 128 closes.");                  // a template literal, not a quoted string (review F5)
+    expect(ehtml).not.toContain("${");
   });
 });

@@ -9,6 +9,7 @@
  *        npm run enrol -- --set-instruments K7PM-4R2X 2
  *        npm run enrol -- --list
  *        npm run enrol -- --local --name "Test Student" --capital 10000    (the local database, for a rehearsal)
+ *        npm run enrol -- --retire K7PM-4R2X          (shows what would go; add --yes to delete the student and every row of theirs)
  *
  * Week 9 (decision 20): `--instruments N` (1–4, default 1) is how many
  * instruments the account runs; each position is sized at 12% ÷ N a year and
@@ -16,6 +17,12 @@
  * `--set-instruments CODE N` changes it later — positions already open are not
  * resized (the stop does its work); the nightly report says if the account is
  * over budget or over the count.
+ * Week 10 (OI-56): `--retire CODE` deletes a student and their tickets,
+ * positions and nightly reports — a test account whose code leaked, or a
+ * student who left. It prints the rows it would remove and does nothing
+ * without `--yes`; with it, the four DELETEs run as one batch and the
+ * count is read back. There is no undo: a retired account is gone from the
+ * database (the fetch_log keeps its receipts, which name no code).
  * Needs: `npx wrangler login` done (the live database is written through
  *        `wrangler d1 execute --remote`). The code is printed once — give it
  *        to the student; the list shows it again.
@@ -29,11 +36,11 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
 const WRANGLER = join(ROOT, "node_modules", "wrangler", "bin", "wrangler.js");
-const USAGE = 'usage: npm run enrol -- --name "Full Name" --capital 10000 [--instruments N] [--local]   |   npm run enrol -- --set-instruments CODE N [--local]   |   npm run enrol -- --list [--local]';
+const USAGE = 'usage: npm run enrol -- --name "Full Name" --capital 10000 [--instruments N] [--local]   |   npm run enrol -- --set-instruments CODE N [--local]   |   npm run enrol -- --list [--local]   |   npm run enrol -- --retire CODE [--yes] [--local]';
 
 // Strict arguments (OI-50): nothing is guessed.
 const argv = process.argv.slice(2);
-const KNOWN = { "--name": "str", "--capital": "int", "--instruments": "int", "--set-instruments": "pair", "--list": "flag", "--local": "flag" };
+const KNOWN = { "--name": "str", "--capital": "int", "--instruments": "int", "--set-instruments": "pair", "--list": "flag", "--local": "flag", "--retire": "str", "--yes": "flag" };
 const args = {};
 for (let i = 0; i < argv.length; i++) {
   const flag = argv[i];
@@ -93,6 +100,22 @@ if (args["--set-instruments"]) {
   if (!after.length || Number(after[0].instruments) !== n) { console.error("The change did not land — retry the same command."); process.exit(1); }
   console.log(`${before[0].name} (${code}): instruments ${before[0].instruments} → ${n}; each new position is sized at ${(12 / n) % 1 === 0 ? 12 / n : (12 / n).toFixed(2)}% a year, ${n} open position${n === 1 ? "" : "s"} at most (${where === "--local" ? "local database" : "live"}).`);
   console.log(`Positions already open keep their size; tonight's report says if the account is over the budget or the count.`);
+  process.exit(0);
+}
+
+if (args["--retire"]) {
+  if (args["--name"] || args["--capital"] || args["--instruments"] || args["--set-instruments"]) { console.error(`--retire stands alone (with --yes and --local as needed).\n${USAGE}`); process.exit(2); }
+  const code = String(args["--retire"]).toUpperCase();
+  if (!/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(code)) { console.error(`"${args["--retire"]}" is not a student code (XXXX-XXXX from the toolkit's alphabet — no I, O, 0 or 1).\n${USAGE}`); process.exit(2); }
+  const who = d1(`SELECT name, capital, instruments, created_at FROM students WHERE code = ${q(code)}`);
+  if (!who.length) { console.error(`No student with code ${code} — \`npm run enrol -- --list${where === "--local" ? " --local" : ""}\` shows the codes.`); process.exit(1); }
+  const counts = d1(`SELECT (SELECT COUNT(*) FROM tickets WHERE code = ${q(code)}) AS tickets, (SELECT COUNT(*) FROM positions WHERE code = ${q(code)}) AS positions, (SELECT COUNT(*) FROM risk_reports WHERE code = ${q(code)}) AS reports`)[0];
+  console.log(`${who[0].name} (${code}), enrolled ${String(who[0].created_at).slice(0, 10)}, $${Number(who[0].capital).toLocaleString("en-US")}, ${who[0].instruments} instr.: ${counts.tickets} ticket${counts.tickets === 1 ? "" : "s"}, ${counts.positions} position${counts.positions === 1 ? "" : "s"}, ${counts.reports} nightly report${counts.reports === 1 ? "" : "s"} (${where === "--local" ? "local database" : "live"}).`);
+  if (!args["--yes"]) { console.log(`Nothing deleted. Run the same command with --yes to retire the account — the student row and every row above go, and there is no undo.`); process.exit(0); }
+  d1(`DELETE FROM risk_reports WHERE code = ${q(code)}; DELETE FROM positions WHERE code = ${q(code)}; DELETE FROM tickets WHERE code = ${q(code)}; DELETE FROM students WHERE code = ${q(code)}`);
+  const left = d1(`SELECT (SELECT COUNT(*) FROM students WHERE code = ${q(code)}) + (SELECT COUNT(*) FROM tickets WHERE code = ${q(code)}) + (SELECT COUNT(*) FROM positions WHERE code = ${q(code)}) + (SELECT COUNT(*) FROM risk_reports WHERE code = ${q(code)}) AS n`)[0].n;
+  if (Number(left) !== 0) { console.error(`${left} row(s) remain — retry the same command.`); process.exit(1); }
+  console.log(`Retired: ${code} and its ${counts.tickets + counts.positions + counts.reports} rows are gone. /tickets/${code} now answers "No student with that code".`);
   process.exit(0);
 }
 

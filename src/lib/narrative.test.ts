@@ -91,6 +91,11 @@ describe("claudeNarrative with a fake API", () => {
   it("reports HTTP errors without throwing, and never includes the key", async () => {
     const fetchImpl = (async () => apiReply("", 401)) as typeof fetch;
     const r = await claudeNarrative(sheet, { apiKey: "sk-secret", fetchImpl });
+    // an upstream that echoes a key-shaped run in its error text is redacted before the reason leaves (week-10 review N6)
+    const leaky = (async () => new Response(JSON.stringify({ error: { type: "api_error", message: "bad key sk-TESTKEY-0000000000000000 rejected" } }), { status: 500, headers: { "content-type": "application/json" } })) as typeof fetch;
+    const l = await claudeNarrative(sheet, { apiKey: "sk-secret", fetchImpl: leaky });
+    expect(l.ok).toBe(false);
+    expect(!l.ok && l.reason).toBe("HTTP 500 api_error bad key [redacted] rejected");
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.status).toBe(401);

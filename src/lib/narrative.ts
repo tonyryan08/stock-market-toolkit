@@ -102,7 +102,18 @@ export function validateNarrative(raw: unknown, model: string): Narrative | null
   return { paragraphs, question, source: "claude", model };
 }
 
-export async function claudeNarrative(sheet: FactSheet, opts: ClaudeOptions): Promise<ClaudeResult> {
+/** The raw outcome of one Messages call: the reply's text and the usage, or why not. Shared by the narrative (week 6) and the tutor (week 10). */
+export type ClaudeTextResult =
+  | { ok: true; text: string; usage: { input: number; output: number }; stopReason: string | null; ms: number }
+  | { ok: false; reason: string; status?: number; ms: number };
+
+/**
+ * One call to the Messages API with a system prompt, one user message and a
+ * JSON schema for the answer (structured output). The week-6 narrative and
+ * the week-10 tutor both go through here: the same headers, the same
+ * timeout, thinking off, no temperature, the same never-echo-a-key rule.
+ */
+export async function claudeJson(call: { system: string; user: string; schema: object }, opts: ClaudeOptions): Promise<ClaudeTextResult> {
   const t0 = Date.now();
   const model = opts.model ?? DEFAULT_MODEL;
   const f = opts.fetchImpl ?? fetch;
@@ -122,18 +133,18 @@ export async function claudeNarrative(sheet: FactSheet, opts: ClaudeOptions): Pr
         // Current models think before answering by default and the thinking
         // tokens count toward max_tokens: 800 was spent on reasoning and the
         // JSON was cut off (stop_reason max_tokens, seen live 19 Oct 2026).
-        // Writing four paragraphs from a numbered sheet needs no reasoning
+        // Writing a few paragraphs from numbered material needs no reasoning
         // budget, so thinking is off (accepted on Haiku 5.5 at default effort)
         // and the ceiling leaves room for a verbose answer.
         max_tokens: opts.maxTokens ?? 2000,
         thinking: { type: "disabled" },
         // No `temperature`: the API rejects it for current models (400, seen
         // live the same day). The system prompt does the constraining.
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: sheetAsText(sheet) }],
+        system: call.system,
+        messages: [{ role: "user", content: call.user }],
         // Structured output: the API guarantees the shape, so a stray sentence
         // or a code fence can no longer make the answer unparseable.
-        output_config: { format: { type: "json_schema", schema: NARRATIVE_SCHEMA } },
+        output_config: { format: { type: "json_schema", schema: call.schema } },
       }),
       signal: ctrl.signal,
     });
@@ -149,8 +160,10 @@ export async function claudeNarrative(sheet: FactSheet, opts: ClaudeOptions): Pr
       const j = (await res.json()) as { error?: { type?: string; message?: string } };
       detail = `${j.error?.type ?? ""} ${j.error?.message ?? ""}`.trim();
     } catch { /* body unreadable */ }
-    // Never echo a key; the API never returns one, but the rule stands for every provider notice.
-    return { ok: false, status: res.status, reason: `HTTP ${res.status} ${detail}`.trim().slice(0, 200), ms: Date.now() - t0 };
+    // Never echo a key: the API never returns one, but the rule stands for every provider notice — a key-shaped run
+    // in an upstream's error text is redacted before the reason leaves here (week-10 review N6).
+    const safe = detail.replace(/\bsk-[A-Za-z0-9_-]{16,}/g, "[redacted]");
+    return { ok: false, status: res.status, reason: `HTTP ${res.status} ${safe}`.trim().slice(0, 200), ms: Date.now() - t0 };
   }
 
   let body: { content?: { type: string; text?: string }[]; usage?: { input_tokens?: number; output_tokens?: number }; stop_reason?: string };
@@ -160,8 +173,15 @@ export async function claudeNarrative(sheet: FactSheet, opts: ClaudeOptions): Pr
     return { ok: false, reason: "unparseable response body", ms: Date.now() - t0 };
   }
   const text = (body.content ?? []).filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n");
-  const narrative = validateNarrative(extractJson(text), model);
   const usage = { input: body.usage?.input_tokens ?? 0, output: body.usage?.output_tokens ?? 0 };
-  if (!narrative) return { ok: false, reason: `malformed narrative (stop_reason ${body.stop_reason ?? "?"})`, ms: Date.now() - t0 };
-  return { ok: true, narrative, usage, ms: Date.now() - t0 };
+  return { ok: true, text, usage, stopReason: body.stop_reason ?? null, ms: Date.now() - t0 };
+}
+
+export async function claudeNarrative(sheet: FactSheet, opts: ClaudeOptions): Promise<ClaudeResult> {
+  const model = opts.model ?? DEFAULT_MODEL;
+  const r = await claudeJson({ system: SYSTEM_PROMPT, user: sheetAsText(sheet), schema: NARRATIVE_SCHEMA }, opts);
+  if (!r.ok) return r;
+  const narrative = validateNarrative(extractJson(r.text), model);
+  if (!narrative) return { ok: false, reason: `malformed narrative (stop_reason ${r.stopReason ?? "?"})`, ms: r.ms };
+  return { ok: true, narrative, usage: r.usage, ms: r.ms };
 }

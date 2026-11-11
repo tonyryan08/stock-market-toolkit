@@ -15,6 +15,22 @@ export const PAGE_CSS = `
   footer .notice { color:var(--stamp); font-weight:600; }
   a:focus-visible { outline:2px solid var(--entry); outline-offset:2px; }
 `;
+/**
+ * The classes several pages share (week 10, OI-69 — they had been defined
+ * page by page since week 7): the lede under a title, the state tags the
+ * signals page and the student's page both print, a scrolling table wrapper
+ * and the caption line. A page that needs a variant overrides after this.
+ */
+export const SHARED_CSS = `
+  .lede { color:var(--faint); font-size:.95rem; margin:.3rem 0 1rem; }
+  .tag { font-family:"IBM Plex Mono",monospace; font-size:.7rem; padding:.1rem .4rem; border-radius:3px; letter-spacing:.04em; white-space:nowrap; }
+  .tag.long { background:#3E6B54; color:#fff; } .tag.flat { background:#E3E8E4; color:#3b4a42; } .tag.warming { background:#F1EBD6; color:#6b5d2a; }
+  .wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .caption { font-size:.8rem; color:var(--faint); margin-top:.7rem; line-height:1.5; }
+  .sym { color:var(--faint); font-size:.6em; }
+  .gap { margin:1rem 0; }
+  th.l { text-align:left; }
+`;
 export const FONTS_HTML = `<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Text:wght@400;700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">`;

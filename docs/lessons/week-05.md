@@ -26,7 +26,7 @@ Nominate, vote, pin. Then the chapter 8 reading: where did they spot Mr. Market 
 **0:10 — Margin of safety, in full (10 min).**
 Last week it was one sentence. Tonight it gets the full idea (ch. 20, p. 512). The engineer's version works on any room: a bridge rated for 30 tonnes carries 10-tonne lorries. You never know the true load, so you build the gap in. In investing, the gap is between what you pay and what the business is worth. The gap is there because you will sometimes be wrong. Write on the board: **every test on tonight's card is a different way of building in that gap.**
 
-**0:20 — Walk the card (15 min).**
+**0:20 — Walk the card: the defensive screen's seven tests (15 min).**
 Hand out the printed cards. Go through the seven tests at kitchen-table pace, using the italic "why" line on each:
 - Size: small firms break in bad years.
 - Strength: can it pay the bills, and is the mortgage smaller than the cushion?

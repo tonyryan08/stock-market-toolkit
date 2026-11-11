@@ -42,13 +42,13 @@ export class FakeD1 {
     return make([]);
   }
 
-  /** A handler may answer `{ changes: 0 }` to play a conditional write that did not land (review F8). */
+  /** A handler may answer `{ changes: 0 }` to play a conditional write that did not land (review F8). A batched read returns its handler's rows (week 10: loadScreen reads in a batch). */
   async batch<T = unknown>(stmts: D1PreparedStatement[]): Promise<D1Result<T>[]> {
     return stmts.map((s) => {
       const x = s as unknown as { __sql: string; __binds: unknown[] };
-      this.exec(x.__sql, x.__binds);
+      const rows = this.exec(x.__sql, x.__binds);
       const changes = this.last.changes;
-      return { results: [] as T[], success: true, meta: typeof changes === "number" ? { changes } : {} } as unknown as D1Result<T>;
+      return { results: rows as T[], success: true, meta: typeof changes === "number" ? { changes } : {} } as unknown as D1Result<T>;
     });
   }
 

@@ -7,7 +7,10 @@
  * v0.10.0: week 8 shipped — sizing, stops, tickets.
  * v0.11.0: week 9 shipped — the paper portfolio marked to market and the nightly risk report (Phase 3 complete).
  * v0.11.1: the Phase 3 close-out — the end-of-phase review implemented (the ledger after a dividend, p/q splits, "0" settings, the week-9 box here).
+ * v0.12.0: week 10 shipped — the tutor bot on the course notes (FTS5 in D1) and the Graham ∩ Carver watchlist (Phase 4 begins).
  */
+
+import { PAGE_CSS, FONTS_HTML } from "./page";
 
 export const LANDING_PAGE = /* html */ `<!doctype html>
 <html lang="en">
@@ -16,34 +19,11 @@ export const LANDING_PAGE = /* html */ `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Intro to the Stock Market — a community course</title>
 <meta name="description" content="A community-school course in good financial decision-making. Paper portfolios only. Education, not advice.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Text:wght@400;700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+${FONTS_HTML}
 <style>
-  :root {
-    --paper: #EEF2E9;      /* pale ledger green */
-    --ink: #182620;        /* ledger ink */
-    --rule: #B7C6D4;       /* ruling-line blue */
-    --entry: #3E6B54;      /* bookkeeper's green */
-    --stamp: #B4382E;      /* auditor's red */
-    --faint: #6B7A72;
-  }
-  * { box-sizing: border-box; margin: 0; }
-  body {
-    background: var(--paper);
-    color: var(--ink);
-    font-family: "IBM Plex Sans", system-ui, sans-serif;
-    line-height: 1.55;
-    padding: 2.5rem 1.25rem 4rem;
-  }
+${PAGE_CSS}
+  /* the ledger page's own rules on the shared skin (page.ts — the palette, the body, the eyebrow; week 10, OI-69) */
   main { max-width: 42rem; margin: 0 auto; }
-  .eyebrow {
-    font-family: "IBM Plex Mono", monospace;
-    font-size: .75rem;
-    letter-spacing: .12em;
-    text-transform: uppercase;
-    color: var(--faint);
-  }
   h1 {
     font-family: "Libre Caslon Text", serif;
     font-weight: 700;
@@ -230,9 +210,10 @@ export const LANDING_PAGE = /* html */ `<!doctype html>
 
     <div class="phase">
       <p class="phase-name">Phase 4 &middot; The takeaway</p>
-      <div class="row pending">
+      <div class="row shipped">
         <span class="wk">Wk 10</span>
-        <span><span class="lesson">Ask the tutor</span><br><span class="feature">A tutor that cites the course notes</span></span>
+        <span><span class="lesson">Ask the tutor</span><br><span class="feature"><a href="/tutor">A tutor that answers from the course notes</a> and cites the passage on every paragraph &mdash; checked, like week 6's story; and <a href="/watchlist">the watchlist</a>: Graham and Carver read side by side as a gate</span></span>
+        <span class="stamp">SHIPPED</span>
       </div>
       <div class="row pending">
         <span class="wk">Wk 11</span>
@@ -246,12 +227,12 @@ export const LANDING_PAGE = /* html */ `<!doctype html>
   </section>
 
   <div class="try">
-    <strong>New this week:</strong> the paper portfolio runs itself. Every enrolled account is marked to market each night and
-    gets a risk report &mdash; value, cash, open P&amp;L, drawdown from its high-water mark, risk used against the 12% target &mdash;
-    in the same sentences lesson 9 uses. <a href="/size">The calculator</a> now sizes for 1&ndash;4 instruments (12% &divide; N), and a
-    small cap becomes ticketable once its rule has 128 closes. Still here: <a href="/signals">the signals</a> &middot;
-    <a href="/screen">the defensive screen</a> &middot; <a href="/screen/enterprising">the enterprising screen</a> &middot;
-    <a href="/explain/NVDA">explain this stock</a> &middot; <a href="/card">the cards</a>.
+    <strong>New this week:</strong> <a href="/tutor">ask the tutor</a>. A tutor that has read the course's own notes &mdash; the ten
+    lesson plans and the kit, nothing else &mdash; answers from the passages it finds and cites them on every paragraph; a number from
+    nowhere is flagged, a tip is withheld. Your job is to check the citations. And <a href="/watchlist">the watchlist</a>: Graham
+    (<em>what</em>) and Carver (<em>when</em>, <em>how much</em>) read side by side as a gate &mdash; the signals page now shows each
+    company's Graham tests passed. Still here: <a href="/signals">the signals</a> &middot; <a href="/size">the calculator</a> &middot;
+    <a href="/screen">the defensive screen</a> &middot; <a href="/explain/NVDA">explain this stock</a> &middot; <a href="/card">the cards</a>.
     <form class="lookup" onsubmit="event.preventDefault();var t=this.t.value.trim().toUpperCase();if(t)location.href='/'+(this.books.checked?'fundamentals':'prices')+'/'+encodeURIComponent(t)">
       <input name="t" placeholder="AAPL" aria-label="Ticker symbol" autocapitalize="characters" autocomplete="off" spellcheck="false">
       <label style="display:flex;align-items:center;gap:.3rem;font-size:.8rem;color:var(--faint)"><input type="checkbox" name="books" checked> books</label>

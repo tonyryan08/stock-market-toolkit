@@ -20,4 +20,5 @@ EDGAR_USER_AGENT = "stock-market-toolkit you@example.com"
 # The key is shared with production and the PC visit; the day holds 25.
 SMALLCAP_AV_CALLS = "4"
 
-# Optional caps (defaults in brackets): EXPLAIN_DAILY_CAP (60), QUOTE_DAILY_CAP (3).
+# Optional caps (defaults in brackets): EXPLAIN_DAILY_CAP (60), QUOTE_DAILY_CAP (3), TUTOR_DAILY_CAP (60; "0" = the passages only, no model call).
+# Test hook only: EXPLAIN_API_URL = "http://127.0.0.1:8799/v1/messages" points the narrative AND the tutor at a stub server.

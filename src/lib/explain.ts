@@ -429,13 +429,17 @@ export type NumberHit = { value: number; precision: number; lossWord?: boolean }
  */
 export function extractNumbersWithPrecision(text: string): NumberHit[] {
   const t = text
-    .replace(/[−–]\s*(?=\$?\d)/g, "-")                    // Unicode minus / dash before a figure → ASCII minus
     .replace(/\b\d{4}-\d{2}-\d{2}\b/g, " ")               // ISO dates
     .replace(new RegExp(`\\b(?:${MONTHS})\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+\\d{4})?\\b`, "gi"), " ")   // October 14, 2026
     .replace(new RegExp(`\\b\\d{1,2}(?:st|nd|rd|th)?\\s+(?:${MONTHS})\\.?(?:\\s+\\d{4})?\\b`, "gi"), " ")       // 14 Oct 2026
     .replace(/\b(?:FY|fiscal year|in|since|during|for)\s*(?:19|20)\d{2}\b/gi, " ")   // FY2025, in 2024
     .replace(/\b[FB]\d{1,3}\b/g, " ")                        // fact ids F13, bar ids B2
-    .replace(/\b(?:pp?\.|ch\.|chapter|page)\s*\d+(?:[–-]\d+)?/gi, " "); // page and chapter references
+    .replace(/\b(?:pp?\.|ch\.|chapter|page)\s*\d+(?:[–-]\d+)?/gi, " ") // page and chapter references
+    // A dash BETWEEN two figures is a range — "20–30%", "1–2% days", "$10–12" — not a sign on the second
+    // (VC-22, OI-81: the drawdown passage's "20–30%" read as 20 and −30, and a correct "20 to 30%" was
+    // flagged). After the date strips, so an ISO date never becomes a range; before the minus rule.
+    .replace(/(\d%?)\s*[−–-]\s*(?=\$?\d)/g, "$1 to ")
+    .replace(/[−–]\s*(?=\$?\d)/g, "-");                   // Unicode minus / dash before a figure → ASCII minus
   const out: NumberHit[] = [];
   for (const m of t.matchAll(NUM_UNIT)) {
     const raw = m[2].replace(/,/g, "");
@@ -458,7 +462,7 @@ export function extractNumbers(text: string): number[] { return extractNumbersWi
  * OR a loss word before it ("a loss of $52m" is the sheet's "−$52m"; "a loss
  * of $114m" against a profit of $114m is not — review F5).
  */
-const sameValue = (a: NumberHit, b: NumberHit) => {
+export const sameValue = (a: NumberHit, b: NumberHit) => {
   if (b.value === 0 || a.value === 0) return Math.abs(a.value) < 1e-9 && Math.abs(b.value) < 1e-9;   // "$0m" matches nothing but zero
   const signA = a.value < 0 || a.lossWord ? -1 : 1;
   const signB = b.value < 0 ? -1 : 1;
@@ -466,7 +470,7 @@ const sameValue = (a: NumberHit, b: NumberHit) => {
   return Math.abs(Math.abs(a.value) - Math.abs(b.value)) <= Math.max(a.precision / 2, b.precision / 2, 0.005 * Math.abs(b.value)) + 1e-9;
 };
 /** Small counts, calendar numbers and Graham's own bars need no fact behind them (a figure equal to one of these cannot be checked — a documented limit). */
-const FREE_VALUES = new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 22.5, 1.5, 1.2, 120, 110, 100, 366]);
+export const FREE_VALUES = new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 22.5, 1.5, 1.2, 120, 110, 100, 366]);
 
 /**
  * Advice-shaped language (review S4): the prompt's own forbidden words plus the
@@ -475,12 +479,18 @@ const FREE_VALUES = new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 22.5,
  * advice, hence the subject list and the lookbehind.
  */
 export const ADVICE_PATTERNS: { family: string; re: RegExp }[] = [
-  { family: "subject should buy/sell", re: /(?<!whether )\b(?:you|investors?|one|we|i|they|readers?|anyone|everyone)\s*(?:'d|'ll|\s(?:should|would|could|ought to|might want to|need to|must|will|wouldn'?t|shouldn'?t|won'?t))\s+(?:not\s+|also\s+|probably\s+|want to\s+|do well to\s+)?(?:buy|sell|hold|invest|avoid|accumulate|add(?!\s+(?:\d|two|three|four|five|six|new|more|another|capacity|plants?|stores?|staff|jobs|a |an |the |its |their ))|trim|short|own|get in|get out|get some|pick up|steer clear|stay away|take profits?|add (?:to (?:my|our|your|their|a|the) (?:position|holding|stake)s?|on weakness))\b/i },
+  // "hold" followed by a count, "whole shares", "at most" or "the position" is the course's arithmetic ("you must hold whole
+  // shares", "you could hold 18"), not a stance — the second-person tutor says it (week-10 review F8); "hold through the dip" is still a tip.
+  { family: "subject should buy/sell", re: /(?<!whether )\b(?:you|investors?|one|we|i|they|readers?|anyone|everyone)\s*(?:'d|'ll|\s(?:should|would|could|ought to|might want to|need to|must|will|wouldn'?t|shouldn'?t|won'?t))\s+(?:not\s+|also\s+|probably\s+|want to\s+|do well to\s+)?(?:buy|sell|hold(?!\s+(?:\d|whole|only whole|at most|at the (?:latest|last) close|no more than|the position|a position|fewer|fractional|shares? (?:in whole|only)|them in whole))|invest|avoid|accumulate|add(?!\s+(?:\d|two|three|four|five|six|new|more|another|capacity|plants?|stores?|staff|jobs|a |an |the |its |their ))|trim|short|own|get in|get out|get some|pick up|steer clear|stay away|take profits?|add (?:to (?:my|our|your|their|a|the) (?:position|holding|stake)s?|on weakness))\b/i },
   // An order at the start of a sentence. Not a hyphenated compound: "Short-term borrowings",
   // "Sell-side analysts", "Hold-to-maturity" are balance-sheet English (review F4).
   { family: "imperative", re: /(?:^|[.!?:;]\s+|^\s*[-–•]\s*)(?:don'?t (?:sell|buy)|buy|sell|accumulate|avoid|hold(?! on\b)|short|dump(?! trucks?\b)|take profits?|get in|get out|steer clear|stay away|load up|back up the truck|back the truck up|grab some)\b(?!-)(?! list)/im },
   { family: "recommend/advise", re: /\b(?:(?:we|i)(?:'d| would)?\s+(?:recommend|suggest|advise)|recommended (?:buy|sell)|strong (?:buy|sell)|(?:a|the) (?:good |great |clear |screaming |strong )?(?:buy|sell)\b(?!-)(?! list)|(?:rate|rated|rating|rates)\s+(?:the\s+|these\s+|its\s+)?(?:shares?|stock|it)\s+(?:an?\s+|as\s+)?(?:outperform|underperform|buy|sell|hold|overweight|underweight)|upgraded? to (?:buy|outperform|overweight)|downgraded? to (?:sell|underperform|underweight))/i },
-  { family: "price target", re: /\b(?:price target|target price|fair value|intrinsic value of|worth \$?\d|worth (?:far |much |a lot )?more than|(?:see|hit|reach|touch)\s+\$?\d[\d,.]*\s+(?:by|before|within)\b|should trade at (?:a premium|a discount|\$?\d))/i },
+  // "The shares are worth $70" is a valuation; "18 shares worth $6,280", "an account worth $10,000 supports …", "the position is
+  // worth $6,280", "the account is worth $9,867.22" are the sizing arithmetic in lesson 8's, the ticket's and the risk line's own
+  // words (VC-22, OI-82: gold question 7 was withheld twice on "worth $6,…"). So "worth $N" needs a copula — is / are / 's / 're —
+  // and a counted lot of shares, an account, a position or a holding as its subject is not a verdict on the share.
+  { family: "price target", re: /\b(?:price target|target price|fair value|intrinsic value of|(?<!\d\s(?:[a-z-]+\s)?shares?\s)(?<!\b(?:account|position|exposure|holding|stake|portfolio|order|lot|size|trade)s?\s)(?:\b(?:is|are|was|were|be|been|being)|['’](?:s|re))\s+(?:(?:now|still|only|really|probably|easily|actually|clearly|arguably|surely)\s+)?worth\s+\$?\d|worth (?:far |much |a lot )?more than|(?:see|hit|reach|touch)\s+\$?\d[\d,.]*\s+(?:by|before|within)\b|should trade at (?:a premium|a discount|\$?\d))/i },
   // A forecast needs a price-like or earnings-like subject: "Total debt could fall" is accounting, not a tip.
   { family: "forecast", re: /\b(?:(?:shares?|stock|price|it|they)\s+(?:is|are)?\s*(?:will|is going to|are going to|likely to|set to|poised to|expected to|bound to|about to|should|could|would|may well)\s+(?:easily\s+|probably\s+|soon\s+|comfortably\s+)?(?:rise|fall|double|halve|recover|outperform|rally|rebound|climb|drop|crash|re-?rate|appreciate|gain|surge|soar|jump|plunge|tank|take off|beat the market|go (?:up|down|higher|lower))|(?:prices?|shares?|stock|it) (?:is|are) heading (?:higher|lower|up|down)|(?:earnings|profits?|margins?|revenue|sales|dividend)\s+(?:is|are)?\s*(?:will|is going to|are going to|likely to|set to|poised to|expected to|bound to|about to|should|could|would|may well)\s+(?:rise|fall|double|halve|recover|rebound|climb|drop|increase|decrease|gain|grow|surge|soar|jump|plunge))\b/i },
   { family: "expect the price", re: /\b(?:expect|expects|expecting)\s+(?:the\s+)?(?:price|shares?|stock)\s+to\b/i },

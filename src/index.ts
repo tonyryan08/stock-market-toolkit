@@ -23,9 +23,11 @@ import {
   ENTERPRISING, E as ET, screenEnterprising, type EnterprisingResult, type CriterionDef, type CriterionResult, type Verdict,
 } from "./lib/graham";
 import { computeSignals, describeSignal, HISTORY_LIMIT, RULE as SIGNAL_RULE, type SignalSeries, type SignalPoint } from "./lib/signals";
-import { PAGE_CSS, FONTS_HTML, esc } from "./page";
+import { PAGE_CSS, FONTS_HTML, SHARED_CSS, esc } from "./page";
 import { intSetting } from "./lib/settings";
+import { gateOf, scoreOf, scoresText, buildWatchlist, describeWatchlist, type GateRow, type ScreenScore } from "./lib/gate";
 import { portfolio } from "./portfolio";
+import { tutor } from "./tutor";
 
 type Env = {
   ALPHAVANTAGE_API_KEY: string;
@@ -50,6 +52,8 @@ type Env = {
   SMALLCAP_AV_SPACING_MS?: string;
   /** Optional override: live demo quotes allowed per day on the shared Alpha Vantage key (default 3). */
   QUOTE_DAILY_CAP?: string;
+  /** Week 10: tutor questions answered per day on the Claude key (default 60; "0" shows the passages only). */
+  TUTOR_DAILY_CAP?: string;
   DB: D1Database;
 };
 
@@ -59,6 +63,8 @@ const app = new Hono<{ Bindings: Env }>();
 
 // Week 8: the calculator, the tickets and the student pages live in their own module.
 app.route("/", portfolio);
+// Week 10: the tutor bot — its page, its API and the class's questions.
+app.route("/", tutor);
 
 app.get("/", (c) => c.html(LANDING_PAGE));
 
@@ -666,16 +672,56 @@ const RULE_META = {
   note: "Education, not advice. A signal is what a rule says about a price series, not a recommendation to buy or sell anything.",
 };
 
+/**
+ * Week 10 (OI-68): the signal rows with each company's two Graham scores
+ * beside them — the two rules read side by side. One screen pass over the
+ * cached books per request (four batched reads; the same work the screen
+ * pages do), joined to the latest signal rows by symbol.
+ */
+async function loadGate(env: Env): Promise<(GateRow & SignalRow)[]> {
+  const [rows, s] = await Promise.all([loadSignals(env), loadScreen(env)]);
+  const defensive = new Map<string, ScreenScore | null>();
+  const enterprising = new Map<string, ScreenScore | null>();
+  for (const i of s.inputs) {
+    defensive.set(i.symbol, scoreOf(screenCompany(i)));
+    enterprising.set(i.symbol, scoreOf(screenEnterprising(i)));
+  }
+  return rows.map((r) => ({ ...r, ...gateOf(r, defensive.get(r.symbol) ?? null, enterprising.get(r.symbol) ?? null) }));
+}
+
+const GATE_META = {
+  gate: "Graham ∩ Carver, in that order: a name passes a Graham screen (defensive, 7 tests; or enterprising, 6) AND is LONG on the rule before it would be ticketed; the Starter System sizes it; the stop closes it. 'near' is one Graham test short and long. No new rule: the two existing ones read side by side (syllabus, week 10; OI-68).",
+  note: "Education, not advice. A gate is what two rules say together about a company tonight — not a recommendation to buy or sell anything.",
+};
+
 app.get("/api/signals", async (c) => {
   const t0 = Date.now();
-  const rows = await loadSignals(c.env);
+  const rows = await loadGate(c.env);
   const asOf = rows.reduce<string | null>((m, r) => (m === null || r.date > m ? r.date : m), null);
   return c.json({
     as_of_close: asOf,
-    counts: { long: rows.filter((r) => r.state === "long").length, flat: rows.filter((r) => r.state === "flat").length, warming: rows.filter((r) => r.state === "warming").length, quarantined: rows.filter((r) => !!r.quarantined).length },
-    signals: rows,
-    meta: { source: "d1-cache (nightly signals table)", ...RULE_META, served_in_ms: Date.now() - t0 },
+    counts: { long: rows.filter((r) => r.state === "long").length, flat: rows.filter((r) => r.state === "flat").length, warming: rows.filter((r) => r.state === "warming").length, quarantined: rows.filter((r) => !!r.quarantined).length, gate_open: rows.filter((r) => r.gate === "open").length, gate_near: rows.filter((r) => r.gate === "near").length },
+    signals: rows.map((r) => ({ ...r, graham: scoresText(r) })),
+    meta: { source: "d1-cache (nightly signals table; the Graham scores from the cached books on request)", ...RULE_META, ...GATE_META, served_in_ms: Date.now() - t0 },
   });
+});
+
+app.get("/api/watchlist", async (c) => {
+  const t0 = Date.now();
+  const w = buildWatchlist(await loadGate(c.env));
+  return c.json({
+    as_of_close: w.asOf,
+    counts: w.counts,
+    reading: describeWatchlist(w),
+    gate_open: w.open, near_misses_long: w.near, longs_failing_both: w.longs, small_caps_maturing: w.maturing,
+    meta: { source: "d1-cache (nightly signals table; the Graham scores from the cached books on request)", ...GATE_META, served_in_ms: Date.now() - t0 },
+  });
+});
+
+app.get("/watchlist", async (c) => {
+  const t0 = Date.now();
+  const w = buildWatchlist(await loadGate(c.env));
+  return c.html(watchlistPage(w, Date.now() - t0));
 });
 
 app.get("/api/signals/:ticker", async (c) => {
@@ -712,12 +758,12 @@ app.get("/api/signals/:ticker", async (c) => {
 
 app.get("/signals", async (c) => {
   const t0 = Date.now();
-  const rows = await loadSignals(c.env);
+  const rows = await loadGate(c.env);
   const universe = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM tickers WHERE status = 'active'").first<{ n: number }>();
   return c.html(signalsPage(rows, universe?.n ?? 0, Date.now() - t0));
 });
 
-function signalsPage(rows: SignalRow[], universe: number, ms: number): string {
+function signalsPage(rows: (GateRow & SignalRow)[], universe: number, ms: number): string {
   const asOf = rows.reduce<string | null>((m, r) => (m === null || r.date > m ? r.date : m), null);
   const n = (st: string) => rows.filter((r) => r.state === st).length;
   const bar = (f: number | null) => {
@@ -734,6 +780,7 @@ function signalsPage(rows: SignalRow[], universe: number, ms: number): string {
       <td class="f">${bar(r.forecast)}<span class="fv">${r.forecast === null ? "—" : `${r.forecast > 0 ? "+" : ""}${r.forecast.toFixed(1)}`}</span></td>
       <td class="r">${r.instrument_risk === null ? "—" : `${r.instrument_risk.toFixed(0)}%`}</td>
       <td class="d">${r.state === "warming" ? `${r.days} of ${SIGNAL_RULE.minMatureDays} closes` : dateOf(r.state_since)}</td>
+      <td class="g ${r.gate}" title="${esc(grahamTitle(r))}">${esc(scoresText(r))}${r.gate === "open" ? ` <span class="gt">GATE</span>` : r.gate === "near" ? ` <span class="gt near">near</span>` : ""}</td>
       <td class="c">${r.close >= 100 ? r.close.toFixed(0) : r.close.toFixed(2)}</td>
     </tr>`).join("");
 
@@ -743,8 +790,8 @@ function signalsPage(rows: SignalRow[], universe: number, ms: number): string {
 ${FONTS_HTML}
 <style>
 ${PAGE_CSS}
+${SHARED_CSS}
   main { max-width: 52rem; }
-  .lede { color:var(--faint); font-size:.95rem; margin:.3rem 0 1rem; }
   .tally { display:flex; gap:1.2rem; flex-wrap:wrap; margin:.6rem 0 1rem; font-family:"IBM Plex Mono",monospace; font-size:.85rem; }
   .tally b { font-size:1.3rem; display:block; }
   table { width:100%; border-collapse:collapse; font-size:.85rem; }
@@ -754,18 +801,17 @@ ${PAGE_CSS}
   .nm { display:block; color:var(--faint); font-weight:400; font-size:.75rem; white-space:normal; }
   .st { font-family:"IBM Plex Mono",monospace; font-size:.65rem; color:var(--faint); margin-left:.3rem; vertical-align:super; }
   .st.q { color:var(--stamp); font-weight:600; cursor:help; }
-  .tag { font-family:"IBM Plex Mono",monospace; font-size:.7rem; padding:.1rem .4rem; border-radius:3px; letter-spacing:.04em; }
-  .tag.long { background:#3E6B54; color:#fff; } .tag.flat { background:#E3E8E4; color:#3b4a42; } .tag.warming { background:#F1EBD6; color:#6b5d2a; }
   .bar { position:relative; display:inline-block; width:120px; height:10px; background:#EEF1EC; border-radius:2px; vertical-align:middle; }
   .axis { position:absolute; left:50%; top:0; width:1px; height:100%; background:var(--faint); }
   .fill { position:absolute; top:1px; height:8px; border-radius:2px; } .fill.pos { background:#3E6B54; } .fill.neg { background:#B7C0BA; }
   .fv { font-family:"IBM Plex Mono",monospace; font-size:.8rem; margin-left:.5rem; }
-  td.r, td.c { font-family:"IBM Plex Mono",monospace; }
+  td.r, td.c, td.g { font-family:"IBM Plex Mono",monospace; }
+  td.g { white-space:nowrap; cursor:help; } td.g.no_books { color:var(--faint); }
+  .gt { font-family:"IBM Plex Mono",monospace; font-size:.62rem; letter-spacing:.08em; border:1.4px solid var(--entry); color:var(--entry); border-radius:3px; padding:0 .3rem; } .gt.near { border-color:var(--faint); color:var(--faint); }
   tr.flat th a, tr.flat td { color:var(--faint); } tr.flat th a { color:var(--entry); }
   .rule { background:rgba(255,255,255,.5); border:1px solid var(--rule); border-radius:6px; padding:.8rem 1rem; font-size:.85rem; margin:1rem 0; }
   .rule code { font-family:"IBM Plex Mono",monospace; font-size:.8rem; }
   .argue { margin:1rem 0; font-size:.9rem; }
-  .wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
   @media (max-width: 640px) { .nm { display:none; } .bar { width:70px; } td.c { display:none; } thead th:last-child { display:none; } td.d { white-space:nowrap; } }
 </style></head>
 <body><main>
@@ -780,9 +826,10 @@ ${PAGE_CSS}
     <span><b>${rows.filter((r) => r.quarantined).length}</b> quarantined <span class="st q">Q</span> — a jump in the series no splits row explains; no tickets until it does</span>` : ""}
   </div>
   <div class="wrap"><table>
-    <thead><tr><th>Instrument</th><th>State</th><th>Forecast (±${SIGNAL_RULE.forecastCap})</th><th title="Annualised volatility: EW σ of daily returns × 16">Instr. risk</th><th>Since</th><th>Close</th></tr></thead>
-    <tbody>${body || `<tr><td colspan="6">Nothing yet.</td></tr>`}</tbody>
+    <thead><tr><th>Instrument</th><th>State</th><th>Forecast (±${SIGNAL_RULE.forecastCap})</th><th title="Annualised volatility: EW σ of daily returns × 16">Instr. risk</th><th>Since</th><th title="Graham tests passed: defensive (of 7) · enterprising (of 6), from the cached books — week 10, the two rules side by side">Graham</th><th>Close</th></tr></thead>
+    <tbody>${body || `<tr><td colspan="7">Nothing yet.</td></tr>`}</tbody>
   </table></div>
+  <p class="argue"><strong>Week 10 — the two rules side by side:</strong> the Graham column is what the screens say about the company (tests passed, defensive · enterprising; hover for the failed ones); the State column is what the rule says about its price. A name the course would ticket by both is marked GATE; one Graham test short and long is <em>near</em>. <a href="/watchlist">The watchlist</a> reads the gate out in sentences — tonight it may well say nothing, which is the lesson.</p>
   <div class="rule">
     <strong>The rule, in full</strong> (the same numbers run the nightly job, this page and the chart overlay — <a href="/api/signals">raw JSON</a>):<br>
     <code>fast = EWMA(close, ${SIGNAL_RULE.fastSpan})</code> · <code>slow = EWMA(close, ${SIGNAL_RULE.slowSpan})</code> · <code>σ = EW standard deviation of daily price changes, span ${SIGNAL_RULE.volSpan}</code><br>
@@ -790,8 +837,71 @@ ${PAGE_CSS}
     EWMA weight λ = 2 ÷ (span + 1). The forecast scalar is Carver's (average |forecast| ≈ 10 over his data); the spans, the volatility lookback and the cap are his open-source defaults. Long-only is the course's adaptation: a negative forecast means no position, never a short. The rule reads the adjusted close — dividends are inside the price.
   </div>
   <p class="argue"><strong>Tonight's exercise:</strong> before you looked at this page you wrote three names you believed were "going up". How many are long here? The rule has no opinion about the company, the news or you — it has read 64 days of closes and divided by the noise. Where you and the rule disagree, write down why. Next week: how much a rule like this would let you hold, and where it would make you stop.</p>
-  <p class="caption">Served in ${ms} ms · <a href="/screen">the Graham screen</a> · <a href="/screen/enterprising">enterprising</a> · <a href="/card">the cards</a></p>
+  <p class="caption">Served in ${ms} ms · <a href="/watchlist">the watchlist</a> · <a href="/screen">the Graham screen</a> · <a href="/screen/enterprising">enterprising</a> · <a href="/card">the cards</a></p>
   <footer><p class="notice">Education, not advice. A signal is what a rule says about a price series — a long is not a recommendation to buy, a flat is not a recommendation to sell. Sizing and stops: <a href="/size">the calculator</a> (week 8); tickets are written on a student's own page.</p></footer>
+</main></body></html>`;
+}
+
+/** The hover text of a Graham cell: the failed tests by name, or why there is no score. */
+function grahamTitle(r: GateRow): string {
+  if (!r.defensive && !r.enterprising) return "No accounts cached for this company yet (the core tier's accounts arrive 15 a night; the small tier's with the PC visit).";
+  const one = (label: string, x: ScreenScore | null) => x ? `${label}: ${x.passes} of ${x.applicable} passed${x.failed.length ? `, fails ${x.failed.join(", ")}` : ""}${x.verdict === "insufficient" ? " (insufficient data)" : ""}` : `${label}: —`;
+  return `${one("Defensive", r.defensive)}. ${one("Enterprising", r.enterprising)}.`;
+}
+
+function watchlistPage(w: ReturnType<typeof buildWatchlist>, ms: number): string {
+  const row = (r: GateRow, showFails = true) => `<tr>
+      <th scope="row"><a href="/prices/${esc(r.symbol)}">${esc(r.symbol)}</a>${r.tier === "small" ? `<span class="st">s</span>` : ""}<span class="nm">${esc(r.name ?? "")}</span></th>
+      <td><span class="tag ${r.state}">${r.state === "long" ? "LONG" : r.state === "flat" ? "FLAT" : "WARMING UP"}</span></td>
+      <td class="g" title="${esc(grahamTitle(r))}">${esc(scoresText(r))}</td>
+      <td class="f">${showFails ? esc([r.defensive?.failed.length ? `defensive: ${r.defensive.failed.join(", ")}` : r.defensive ? "defensive: passes" : "", r.enterprising?.failed.length ? `enterprising: ${r.enterprising.failed.join(", ")}` : r.enterprising ? "enterprising: passes" : ""].filter(Boolean).join(" · ")) : `${r.days} of ${SIGNAL_RULE.minMatureDays} closes`}</td>
+      <td class="r">${r.instrument_risk === null ? "—" : `${r.instrument_risk.toFixed(0)}%`}</td>
+    </tr>`;
+  const table = (rows: GateRow[], empty: string, showFails = true) => `<div class="wrap"><table>
+    <thead><tr><th>Company</th><th>Rule</th><th title="Graham tests passed: defensive (of 7) · enterprising (of 6)">Graham</th><th>${showFails ? "The failed tests" : "Closes"}</th><th>Instr. risk</th></tr></thead>
+    <tbody>${rows.length ? rows.map((r) => row(r, showFails)).join("") : `<tr><td colspan="5" class="empty">${esc(empty)}</td></tr>`}</tbody>
+  </table></div>`;
+  const reading = describeWatchlist(w);
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The watchlist — Graham ∩ Carver</title>
+${FONTS_HTML}
+<style>
+${PAGE_CSS}
+${SHARED_CSS}
+  main { max-width: 52rem; }
+  h2 { font-family:"Libre Caslon Text",serif; font-size:1.2rem; margin:1.6rem 0 .4rem; }
+  .reading { background:rgba(255,255,255,.55); border:1px solid var(--rule); border-radius:6px; padding:.8rem 1rem; margin:1rem 0; font-size:.92rem; }
+  .reading p { margin:.4rem 0; }
+  table { width:100%; border-collapse:collapse; font-size:.85rem; }
+  th, td { padding:.4rem .5rem; border-bottom:1px solid var(--rule); text-align:left; vertical-align:middle; }
+  thead th { color:var(--faint); font-weight:400; font-size:.75rem; letter-spacing:.04em; text-transform:uppercase; }
+  tbody th { font-weight:500; white-space:nowrap; }
+  .nm { display:block; color:var(--faint); font-weight:400; font-size:.75rem; white-space:normal; }
+  .st { font-family:"IBM Plex Mono",monospace; font-size:.65rem; color:var(--faint); margin-left:.3rem; vertical-align:super; }
+  td.g, td.r { font-family:"IBM Plex Mono",monospace; white-space:nowrap; } td.g { cursor:help; }
+  td.f { font-size:.8rem; color:var(--faint); }
+  td.empty { color:var(--faint); font-style:italic; }
+  .how { font-size:.88rem; margin:1rem 0; }
+  @media (max-width: 640px) { .nm { display:none; } td.f { display:none; } thead th:nth-child(4) { display:none; } }
+</style></head>
+<body><main>
+  <p class="back"><a href="/">&larr; the twelve-week ledger</a> · <a href="/signals">signals</a> · <a href="/screen">the screen</a></p>
+  <p class="eyebrow">Phase 4 · week 10 · Graham ∩ Carver</p>
+  <h1>The watchlist</h1>
+  <p class="lede">Graham says <em>what</em> (the screens, from the accounts, slowly); Carver says <em>when</em> and <em>how much</em> (the rule, from prices, nightly). Read together, in that order, as a gate: a name must pass a Graham screen <em>and</em> be long on the rule before the course would ticket it. ${w.asOf ? `As of the ${esc(w.asOf)} close.` : "No signals computed yet."} No new rule — the two that exist, side by side.</p>
+  <div class="reading">${reading.map((l) => `<p>${esc(l)}</p>`).join("")}</div>
+  <h2>The gate: passes a screen and long</h2>
+  ${table(w.open, "Nothing tonight. No company passes a Graham screen and is long on the rule — the rule's answer is cash.")}
+  <h2>Near misses that are long</h2>
+  ${table(w.near, "No near miss is long tonight.")}
+  <h2>The rule's longs that fail both screens</h2>
+  <p class="how">Sorted by defensive tests passed. These are what a "relaxed" gate would read first — labelled as such in lesson 10, never as picks: the failed tests are mostly the two price tests, P/E ≤ 15 and P/B ≤ 1.5, set in the 1970s.</p>
+  ${table(w.longs, "No long fails both screens tonight.")}
+  <h2>Small caps on their way to ${SIGNAL_RULE.minMatureDays} closes</h2>
+  ${table(w.maturing, `Every small cap in the tier has its ${SIGNAL_RULE.minMatureDays} closes.`, false)}
+  <p class="caption">Served in ${ms} ms · <a href="/api/watchlist">raw JSON</a> · <a href="/signals">the signals</a> · <a href="/screen">the defensive screen</a> · <a href="/screen/enterprising">the enterprising screen</a> · <a href="/tutor">ask the tutor</a></p>
+  <footer><p class="notice">Education, not advice. A gate is what two rules say together about a company tonight — a name on this page is not a recommendation to buy anything, and an empty gate is not a recommendation to wait: it is what the rules say, written down.</p></footer>
 </main></body></html>`;
 }
 
@@ -887,8 +997,9 @@ function screenPage(
 ${FONTS_HTML}
 <style>
 ${PAGE_CSS}
+${SHARED_CSS}
   main { max-width: 52rem; }
-  .lede { color:var(--faint); font-size:.95rem; margin:.3rem 0 1.2rem; }
+  .lede { margin-bottom:1.2rem; }
   .tally { display:flex; flex-wrap:wrap; gap:.6rem; margin-bottom:1.2rem; }
   .tally div { background:rgba(255,255,255,.55); border:1px solid var(--rule); border-radius:6px; padding:.5rem .8rem; min-width:7rem; }
   .tally b { font-family:"Libre Caslon Text",serif; font-size:1.6rem; display:block; line-height:1.1; }
@@ -936,7 +1047,7 @@ ${PAGE_CSS}
     <div><b>${n("insufficient")}</b><span>incomplete data</span></div>
   </div>
   <div class="wrap"><table>
-    <thead><tr><th scope="col" style="text-align:left">Company</th>${head}<th scope="col">Score</th><th scope="col"></th></tr></thead>
+    <thead><tr><th scope="col" class="l">Company</th>${head}<th scope="col">Score</th><th scope="col"></th></tr></thead>
     <tbody>${body || `<tr><td colspan="${CRIT.length + 3}">No company has cached accounts yet — the nightly refresh fills the books over three nights.</td></tr>`}</tbody>
     ${foot}
   </table></div>
@@ -1096,18 +1207,31 @@ async function explainCompany(env: Env, ticker: string, plainOnly: boolean): Pro
     } else if (!env.ANTHROPIC_API_KEY) {
       meta.fallback_reason = "no AI key is configured on this deployment";
     } else {
-      // 2) budget: generations in the last 24 hours
+      // 2) budget: generations in the last 24 hours — a `pending` row for this sheet is written FIRST and counted
+      //    (the OI-24 shape, applied here at the week-10 review's F4: a read-then-insert check lets a burst through)
       const since = new Date(now.getTime() - 24 * 3600 * 1000).toISOString();
-      const used = await env.DB.prepare(
-        "SELECT COUNT(*) AS n FROM explanations WHERE source IN ('claude','rejected') AND created_at >= ?1",
-      ).bind(since).first<{ n: number }>();
-      if ((used?.n ?? 0) >= cap) {
+      const pendingAt = new Date().toISOString();
+      let used = 1;
+      try {
+        await env.DB.prepare(
+          "INSERT OR REPLACE INTO explanations (symbol, facts_hash, source, model, created_at, narrative) VALUES (?1, ?2, 'pending', ?3, ?4, '{}')",
+        ).bind(ticker, sheet.hash, model, pendingAt).run();
+        used = (await env.DB.prepare(
+          "SELECT COUNT(*) AS n FROM explanations WHERE source IN ('claude','rejected','pending') AND created_at >= ?1",
+        ).bind(since).first<{ n: number }>())?.n ?? 1;
+      } catch { /* no table: treat as unused */ }
+      const dropPending = async () => {
+        try { await env.DB.prepare("DELETE FROM explanations WHERE symbol = ?1 AND facts_hash = ?2 AND source = 'pending'").bind(ticker, sheet.hash).run(); } catch { /* best effort */ }
+      };
+      if (used > cap) {
+        await dropPending();
         meta.fallback_reason = `today's narrative budget (${cap}) is spent; the plain version is shown until it resets`;
         await log("explain_capped", 0, `cap ${cap} reached`);
       } else {
         // 3) ask Claude, check the answer, keep the receipt
         const r = await claudeNarrative(sheet, { apiKey: env.ANTHROPIC_API_KEY, model, apiUrl: env.EXPLAIN_API_URL || undefined });
         if (!r.ok) {
+          await dropPending();
           meta.fallback_reason = `the AI call failed (${r.reason}); the plain version is shown`;
           await log("explain_error", 0, r.reason);
         } else {
@@ -1174,10 +1298,10 @@ app.get("/explain/:ticker", async (c) => {
 
 function explainEmptyPage(ticker: string, reason: string): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(ticker)} — explain this stock</title>${FONTS_HTML}<style>${PAGE_CSS}</style></head>
+<title>${esc(ticker)} — explain this stock</title>${FONTS_HTML}<style>${PAGE_CSS}${SHARED_CSS}</style></head>
 <body><main><p class="back"><a href="/screen">&larr; the Graham screen</a></p>
 <p class="eyebrow">Phase 2 · week 6 · numbers into narrative</p><h1>${esc(ticker)}</h1>
-<p style="margin:1rem 0">${esc(reason)}</p>
+<p class="gap">${esc(reason)}</p>
 <footer><p class="notice">Education, not advice.</p></footer></main></body></html>`;
 }
 
@@ -1418,6 +1542,7 @@ function fundamentalsPage(
 ${FONTS_HTML}
 <style>
 ${PAGE_CSS}
+${SHARED_CSS}
   .figures { font-size:.95rem; color:var(--faint); margin:.4rem 0 1rem; }
   .sources { font-size:.8rem; color:var(--faint); line-height:1.5; margin:-.4rem 0 1rem; }
   .tiertag { font-family:"IBM Plex Mono",monospace; font-size:.7rem; letter-spacing:.06em; text-transform:uppercase; color:var(--stamp); border:1px solid var(--stamp); padding:.05rem .35rem; border-radius:3px; }
@@ -1446,7 +1571,7 @@ ${PAGE_CSS}
 <main>
   <p class="back"><a href="/">&larr; the twelve-week ledger</a></p>
   <p class="eyebrow">The books &middot; from the course cache &middot; 5 fiscal years</p>
-  <h1>${name ? esc(name) : T} <span style="color:var(--faint);font-size:.6em">(${T})</span></h1>
+  <h1>${name ? esc(name) : T} <span class="sym">(${T})</span></h1>
   ${body}
   <footer><p class="notice">Education, not advice. Graham bars are teaching thresholds from The Intelligent Investor ch. 14 — not a recommendation to buy or sell anything.</p></footer>
 </main>
@@ -1580,6 +1705,7 @@ function chartPage(
 ${FONTS_HTML}
 <style>
 ${PAGE_CSS}
+${SHARED_CSS}
   .figures { margin:.6rem 0 .4rem; }
   .big { font-family:"IBM Plex Mono",monospace; font-size:1.6rem; font-weight:500; }
   .chg { color:var(--faint); font-size:.9rem; margin-left:.4rem; }
@@ -1611,7 +1737,7 @@ ${PAGE_CSS}
 <main>
   <p class="back"><a href="/">&larr; the twelve-week ledger</a></p>
   <p class="eyebrow">Nightly close · from the course cache</p>
-  <h1>${name ? esc(name) : T} <span style="color:var(--faint);font-size:.6em">(${T})</span></h1>
+  <h1>${name ? esc(name) : T} <span class="sym">(${T})</span></h1>
   ${body}
   <footer><p class="notice">Education, not advice. Nothing here is a recommendation to buy or sell anything.</p></footer>
 </main>
