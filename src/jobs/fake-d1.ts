@@ -11,6 +11,8 @@ export type Handler = (binds: unknown[]) => { results?: FakeRow[]; error?: strin
 
 export class FakeD1 {
   public log: { sql: string; binds: unknown[] }[] = [];
+  /** How many times batch() was called — the chunking a job does is visible only here (OI-77, review N10). */
+  public batches = 0;
   private handlers: { match: string; fn: Handler }[] = [];
 
   /** Register what a statement containing `match` answers. Later registrations win. */
@@ -44,6 +46,7 @@ export class FakeD1 {
 
   /** A handler may answer `{ changes: 0 }` to play a conditional write that did not land (review F8). A batched read returns its handler's rows (week 10: loadScreen reads in a batch). */
   async batch<T = unknown>(stmts: D1PreparedStatement[]): Promise<D1Result<T>[]> {
+    this.batches++;
     return stmts.map((s) => {
       const x = s as unknown as { __sql: string; __binds: unknown[] };
       const rows = this.exec(x.__sql, x.__binds);

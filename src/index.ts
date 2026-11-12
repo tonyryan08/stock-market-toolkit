@@ -28,6 +28,8 @@ import { intSetting } from "./lib/settings";
 import { gateOf, scoreOf, scoresText, buildWatchlist, describeWatchlist, type GateRow, type ScreenScore } from "./lib/gate";
 import { portfolio } from "./portfolio";
 import { tutor } from "./tutor";
+import { review } from "./review";
+import { costs } from "./costs";
 
 type Env = {
   ALPHAVANTAGE_API_KEY: string;
@@ -54,6 +56,9 @@ type Env = {
   QUOTE_DAILY_CAP?: string;
   /** Week 10: tutor questions answered per day on the Claude key (default 60; "0" shows the passages only). */
   TUTOR_DAILY_CAP?: string;
+  /** Week 11: process-review readings per student per day (default 3; "0" shows the audit only) and for the class (default 40). */
+  REVIEW_DAILY_CAP?: string;
+  REVIEW_GLOBAL_CAP?: string;
   DB: D1Database;
 };
 
@@ -65,6 +70,9 @@ const app = new Hono<{ Bindings: Env }>();
 app.route("/", portfolio);
 // Week 10: the tutor bot — its page, its API and the class's questions.
 app.route("/", tutor);
+// Week 11: the process review (the student's page, its API) and the costs-and-tax worksheet.
+app.route("/", review);
+app.route("/", costs);
 
 app.get("/", (c) => c.html(LANDING_PAGE));
 

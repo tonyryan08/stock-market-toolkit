@@ -1,8 +1,9 @@
 /**
  * Week 10: the course notes as a corpus — the chunker.
  *
- * The tutor answers only from passages of the course's own notes: the ten
- * lesson plans, the two week-5 segments and the four kit documents. This
+ * The tutor answers only from passages of the course's own notes: the lesson
+ * plans (eleven from week 11), the two week-5 segments and the kit documents
+ * (six from week 11: the costs-and-tax walkthrough and the scam notes). This
  * module turns a markdown file into passages a student can be shown and a
  * model can cite — one per section or running-order step, split at paragraph
  * boundaries when a section runs long, each with a stable id ("L8.3": lesson
@@ -30,10 +31,13 @@ export const CORPUS = [
   ["docs/lessons/week-08.md", "L8"],
   ["docs/lessons/week-09.md", "L9"],
   ["docs/lessons/week-10.md", "L10"],
+  ["docs/lessons/week-11.md", "L11"],
   ["kit/starter-system-rules-card.md", "K-RULES"],
   ["kit/student-quickstart.md", "K-START"],
   ["kit/decision-journal.md", "K-JOURNAL"],
   ["kit/reading-list.md", "K-READING"],
+  ["kit/costs-and-tax-walkthrough.md", "K-COSTS"],
+  ["kit/scam-spotting-notes.md", "K-SCAMS"],
 ];
 
 /** A passage longer than this (in words) is split at the next paragraph break. */
@@ -56,8 +60,11 @@ export function plain(md) {
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")                 // links → text
     .replace(/\*\*(.+?)\*\*/g, "$1")                            // bold (the lazy match crosses an inner italic — review H8)
     .replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, "$1$2")          // italic
-    .replace(/^\s*\|?\s*-{3,}[\s|:-]*$/gm, "")                 // table rules
-    .replace(/^\s*\|(.*)\|\s*$/gm, (_, r) => r.split("|").map((c) => c.trim()).filter(Boolean).join(" — "))   // table rows
+    // Table rules go, with their own newline only; a row keeps its line break. (Week 11: `\s*$` on these two swallowed the
+    // newline after every row and the blank line after every table — a header joined its first row ("Your entryDate")
+    // and a table's paragraph break was lost, so a long table-and-text section could not split. 194 passages after.)
+    .replace(/^[ \t]*\|?[ \t]*-{3,}[ \t|:-]*\n/gm, "")           // table rules
+    .replace(/^[ \t]*\|(.*)\|[ \t]*$/gm, (_, r) => r.split("|").map((c) => c.trim()).filter(Boolean).join(" — "))   // table rows
     .replace(/^#{1,6}\s+/gm, "")                                // heading marks
     .replace(/&mdash;/g, "—").replace(/&middot;/g, "·").replace(/&amp;/g, "&").replace(/&nbsp;/g, " ")
     .replace(/[ \t]+$/gm, "")

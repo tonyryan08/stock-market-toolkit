@@ -1,7 +1,8 @@
 -- 0011_tutor.sql — Week 10: the tutor bot on the course notes (decision log #3, #21).
 --
 -- Two tables. `notes` holds the course's own notes as passages — the ten
--- lesson plans, the two week-5 segments and the four kit documents, chunked
+-- lesson plans, the two week-5 segments and the kit documents (week 11 added
+-- its lesson and two kit pages: 194 passages), chunked
 -- by scripts/notes-chunker.mjs and written by `npm run seed-notes` →
 -- `wrangler d1 execute --file=scripts/seed-notes.sql` (the seed replaces the
 -- rows and rebuilds the full-text index `notes_fts`, an FTS5 virtual table it

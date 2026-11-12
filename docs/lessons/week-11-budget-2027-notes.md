@@ -1,49 +1,52 @@
-# Week 11 groundwork — Budget 2027 (announced 6 Oct 2026)
+# Week 11 groundwork — Budget 2027 (announced 6 Oct 2026) and the Finance (No. 2) Bill 2026 (published 19 Oct 2026)
 
-**Status: provisional.** The measures below were announced in the Budget and still need legislation. Re-verify every figure against the enacted Finance Act before week 11 is taught. Sources: Irish Times, Irish Examiner and Citizens Information summaries, 6 Oct 2026.
+**Status: verified against the Bill as published, 12 Nov 2026 — a Bill, not an Act.** The 6 Oct notes below were re-read against the Finance (No. 2) Bill 2026 (published 19 October 2026) through the professional firms' summaries of it (Arthur Cox, PwC, BDO, Dillon Eustace, Forvis Mazars, Grant Thornton), the Irish Times' Budget main points, Revenue's CGT pages, and etf.ie's dated tax guide (21 Oct 2026). The Bill is expected to pass in December 2026; the account needs a commencement order. **Re-verify every figure against the enacted Finance Act and Revenue's guidance before week 11 is taught, and again before anyone acts on one.** The figures the toolkit uses are in `src/lib/costs.ts` (`TAX_RULES`, with `checkedOn` and a `basis` of "Bill" or "current" on every rule).
 
-## The new Personal Investment Account (PIA)
+## The new account — the Individual Investment Account (the Bill's name; "Personal Investment Account" in the speech)
 
-| Feature | As announced |
-|---|---|
-| Opens | **1 July 2027** (pending legislation) |
-| Who | Age 18+, Irish resident, PPS number; **one account per person** |
-| Annual contribution limit | **€12,000** |
-| Tax-free threshold | **€50,000 account balance** (the value held, not a lifetime contribution total) |
-| Above the threshold | **1% tax on the excess** (e.g. €52k balance → 1% × €2k = €20). It is levied on *balance*, so it is payable even in a loss year if the balance is over €50k |
-| Inside the account | **No CGT, no dividend withholding tax, no exit tax, no deemed disposal**; no routine dealings with Revenue |
-| Eligible | Listed shares, listed bonds, instruments on regulated markets, retail investment funds, ETFs |
-| Excluded | Derivatives, crypto, complex/high-risk products |
-| Flexibility | No minimum holding period, no lock-in; tax-neutral transfers between providers "where possible" |
-| Model | Sweden's ISK, not the UK ISA |
+| Feature | As announced (6 Oct) | As drafted in the Bill (19 Oct) |
+|---|---|---|
+| Opens | 1 July 2027 (pending legislation) | expected 1 July 2027, **on a commencement order** by the Minister |
+| Who | 18+, Irish resident, PPS number; one account per person | the same; multiple accounts "to be considered in future years" |
+| Annual contribution limit | €12,000 | €12,000, no minimum; a €3,000 penalty on the provider for an excess contribution without reasonable excuse |
+| Tax-free threshold | €50,000 account balance | €50,000 |
+| Above the threshold | 1% on the excess | **1% a year on the average daily value above €50,000** (the "investment account tax", a final liability); calculated by the provider each **31 December**, reported to Revenue by **31 March**, paid and deducted from the account by **14 April**; the holder files nothing. A fall in value can still leave tax payable if the daily average exceeded the threshold |
+| Inside | no CGT, no DWT, no exit tax, no deemed disposal | the same: income, profits and gains from eligible assets exempt from other Irish tax; the 1% levy on insurance premiums disapplied inside |
+| Eligible | listed shares, listed bonds, regulated-market instruments, retail funds, ETFs | listed shares and bonds, UCITS funds (ETFs among them), insurance-based investment products |
+| Excluded | derivatives, crypto, complex products | not covered by the summaries read; assume the same |
+| Flexibility | no minimum holding period, no lock-in; transfers between providers | transfers between qualifying providers; the receiving provider accountable for the year's tax after a mid-year transfer |
+| Providers | — | MiFID firms, fund managers, banks and insurers that register with Revenue; a Revenue register of providers to be published; non-EU EEA providers need a contract with Revenue or an Irish responsible person |
+| Model | Sweden's ISK, not the UK ISA | — |
 
-## Other Budget lines relevant to the course
+## The other Budget lines, as confirmed
 
-- **CGT on shares outside the account: cut from 33% to 31%.** Confirm the commencement date.
-- CAT thresholds raised (Group A €420k / B €44k / C €22k). Background only for us.
-- Nothing found in the summaries on the exit tax or deemed disposal for ETFs held **outside** the account. Check the Finance Bill.
+- **CGT on shares outside the account: 33% → 31% for disposals on or after 7 October 2026** (Budget night; "disposals made after October 7th" in the main points — the course treats a disposal on 7 October as the first at 31%, as the dated guide does). The €1,270 annual exemption, the loss rules and the payment dates (15 December / 31 January; the return by 31 October of the following year) are unchanged.
+- **The exit tax on funds, ETFs and life products: 38% in 2026 (Budget 2026 cut it from 41% on 1 Jan 2026); 35% from 1 January 2027** as announced and drafted (the summaries cite sections 28, 29 and 36 of the Bill; a new section 739DA gives Irish ETFs held through a clearing system the same rate). Tax falling due before 1 Jan 2027 — a sale or an eighth anniversary — stays at 38%.
+- **Deemed disposal: kept** for funds held outside the account (no change in the Bill); none inside it.
+- CAT thresholds raised (Group A €420,000 / B €44,000 / C €22,000, from 7 October) — background only.
+- Nothing in the summaries on stamp duty on shares or on dividend taxation: both current (1% Irish, 0.5% UK, none on US shares; dividends as income with the treaty withholding).
 
-## Why this matters for our students
+## Why this matters for our students (unchanged)
 
-1. **It is built for exactly this room.** Policy target: about €170bn of deposits "sitting idle". The course audience is savers moving to investing with roughly €10k, growing to roughly €50k. That €50k pot is precisely the tax-free ceiling.
-2. **The contribution cap sets the pace.** €12k a year means a €10k start fits in year one. Reaching €50k in the account takes at least four years of contributions (plus or minus growth).
-3. **It removes the worst Irish ETF frictions** (exit tax, 8-year deemed disposal) *inside the wrapper*. That changes the week-11 comparison of shares versus ETFs.
-4. **It suits systematic management** (Carver, weeks 7–9). With no CGT on each closed trade and no lock-in, rule-based rebalancing has no tax drag inside the wrapper. Trading costs and spreads still apply, so the week-2 cost ledger still counts.
-5. **It's a balance tax, not a gains tax.** That's a new idea for most students: tax on what you *hold*, not on what you *gain*. It's a good CORE link (Macro Unit 10, government as economic actor).
+1. **It is built for exactly this room.** The policy target is about €170bn of deposits "sitting idle". The course audience is savers moving to investing with roughly €10k, growing to roughly €50k — the tax-free ceiling.
+2. **The contribution cap sets the pace.** €12k a year means a €10k start fits in year one; €50k in the account takes at least five years of contributions.
+3. **It removes the worst Irish ETF frictions** (exit tax, the eight-year deemed disposal) *inside the wrapper*. The week-11 worksheet shows the same gain three ways for that reason.
+4. **It suits systematic management** (Carver, weeks 7–9): with no CGT on each closed trade and no lock-in, rule-based trading has no tax drag inside the wrapper. Trading costs and spreads still apply, so the week-2 cost ledger still counts.
+5. **It is a balance tax, not a gains tax.** Tax on what you *hold*, not on what you *gain* — a new idea for most students, and a CORE link (Macro Unit 10, government as economic actor).
 
-## Open questions — answer from the Finance Bill before week 11
+## The open questions — where they stand (12 Nov 2026)
 
-- [ ] Is the 1% **annual**, and on what valuation date?
-- [ ] **Are non-EU-listed (US) shares eligible?** "Regulated markets" wording matters, because our cached universe is US-listed.
-- [ ] Treatment of **foreign withholding tax** on US dividends inside the account (the exemption cited covers *Irish* DWT).
-- [ ] Which **providers** will offer it, and whether DeGiro will. This affects the kit's DeGiro walkthrough.
-- [ ] Commencement date of the 31% CGT rate.
-- [ ] Any change to exit tax or deemed disposal **outside** the account.
+- [x] Is the 1% **annual**, and on what valuation date? — **Yes: annual, on the average daily value over the calendar year, calculated at 31 December.**
+- [ ] **Are non-EU-listed (US) shares eligible?** — **Not settled by the Bill's text as summarised** ("listed shares" without the markets named). For the Act and Revenue's guidance; the worksheet and the lesson say so. Our cached universe is US-listed, so this is the question that matters most to the room.
+- [ ] Treatment of **foreign withholding tax** on US dividends inside the account — **not settled** (the exemption cited is from Irish tax; a treaty withholding is the US's).
+- [ ] Which **providers** will offer it, and whether DEGIRO will — **unknown**; Revenue's register of providers is to come. The kit's DEGIRO walkthrough stands on its own.
+- [x] Commencement date of the 31% CGT rate — **7 October 2026** (disposals on or after).
+- [x] Any change to exit tax or deemed disposal **outside** the account — **the rate to 35% from 1 January 2027; the deemed disposal unchanged.**
 
-## Candidate toolkit feature (week 9 or 11 — decide later)
+## The toolkit feature — built (week 11)
 
-A **wrapper toggle** on the paper portfolio. It would show the same trades taxed three ways: (a) shares outside the account at 31% CGT on realised gains; (b) ETFs outside at the exit-tax rate with deemed disposal; (c) inside the PIA, at 0 below €50k and 1% of the excess above it. This is cost literacy made concrete, using the students' own paper trades. It needs the Finance Act figures first.
+The "wrapper toggle" became `/costs` (`src/lib/costs.ts`): the same paper trade priced in euro — the trade's costs on a published schedule beside the course's $2 + 0.25% model, the holding's costs, and the gain taxed three ways — (a) shares outside at 31% CGT above the €1,270 exemption; (b) a fund or ETF outside at the exit tax (38% in 2026, 35% from 2027) with the eighth-year deemed disposal; (c) inside the account at 0 below a €50,000 average balance and 1% on the excess. Every rate with its date and its basis; the page prints "as checked on" and marks the Bill's lines. When the Act is law, `TAX_RULES.checkedOn` and the `basis` fields change and the page follows.
 
-## Holding line for weeks 4–10 (replaces "the rules just moved")
+## Holding line (now for the lesson itself)
 
-> "From July 2027 a new Personal Investment Account will let you hold listed shares and ETFs tax-free up to a €50,000 balance. The law isn't final yet. Week 11 prices it properly — until then, it changes *where* you hold investments, not *how* we choose them."
+> "From July 2027 a new Individual Investment Account would let you hold listed shares and funds with nothing charged below a €50,000 balance and 1% a year on what sits above it. The Bill is published; it is not yet law. The worksheet prices it beside the two existing regimes — and it changes *where* you hold investments, not *how* we choose them."

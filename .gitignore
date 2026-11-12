@@ -5,8 +5,7 @@ dist/
 *.log
 .DS_Store
 worker-configuration.d.ts
-_*.md
-_*.jsonc
+_*
 *VC-*form*.md
 key*.txt
 ua.txt

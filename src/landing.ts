@@ -8,6 +8,7 @@
  * v0.11.0: week 9 shipped — the paper portfolio marked to market and the nightly risk report (Phase 3 complete).
  * v0.11.1: the Phase 3 close-out — the end-of-phase review implemented (the ledger after a dividend, p/q splits, "0" settings, the week-9 box here).
  * v0.12.0: week 10 shipped — the tutor bot on the course notes (FTS5 in D1) and the Graham ∩ Carver watchlist (Phase 4 begins).
+ * v0.13.0: week 11 shipped — the process review (explain-my-portfolio) and the costs-and-tax worksheet.
  */
 
 import { PAGE_CSS, FONTS_HTML } from "./page";
@@ -215,9 +216,10 @@ ${PAGE_CSS}
         <span><span class="lesson">Ask the tutor</span><br><span class="feature"><a href="/tutor">A tutor that answers from the course notes</a> and cites the passage on every paragraph &mdash; checked, like week 6's story; and <a href="/watchlist">the watchlist</a>: Graham and Carver read side by side as a gate</span></span>
         <span class="stamp">SHIPPED</span>
       </div>
-      <div class="row pending">
+      <div class="row shipped">
         <span class="wk">Wk 11</span>
-        <span><span class="lesson">The real world: costs &amp; tax</span><br><span class="feature">&ldquo;Explain my portfolio&rdquo;</span></span>
+        <span><span class="lesson">The real world: costs &amp; tax</span><br><span class="feature">&ldquo;Explain my portfolio&rdquo; &mdash; your tickets read against your rules by an audit and a reading that cannot see the result (on your page); and <a href="/costs">the costs-and-tax worksheet</a>: the same trade priced in euro, the gain taxed three ways</span></span>
+        <span class="stamp">SHIPPED</span>
       </div>
       <div class="row pending">
         <span class="wk">Wk 12</span>
@@ -227,12 +229,12 @@ ${PAGE_CSS}
   </section>
 
   <div class="try">
-    <strong>New this week:</strong> <a href="/tutor">ask the tutor</a>. A tutor that has read the course's own notes &mdash; the ten
-    lesson plans and the kit, nothing else &mdash; answers from the passages it finds and cites them on every paragraph; a number from
-    nowhere is flagged, a tip is withheld. Your job is to check the citations. And <a href="/watchlist">the watchlist</a>: Graham
-    (<em>what</em>) and Carver (<em>when</em>, <em>how much</em>) read side by side as a gate &mdash; the signals page now shows each
-    company's Graham tests passed. Still here: <a href="/signals">the signals</a> &middot; <a href="/size">the calculator</a> &middot;
-    <a href="/screen">the defensive screen</a> &middot; <a href="/explain/NVDA">explain this stock</a> &middot; <a href="/card">the cards</a>.
+    <strong>New this week:</strong> <a href="/costs">what a trade really costs</a> &mdash; the same paper trade priced in euro the way
+    an Irish student would pay for it, and the gain taxed three ways (shares, a fund, the new investment account), every rate dated and
+    the Bill marked as a Bill. And on your own page, <strong>did you follow your rules?</strong> &mdash; the process review: an audit that
+    needs no AI, and a reading written from a sheet with no P&amp;L on it, so it can only talk about process. Still here:
+    <a href="/tutor">the tutor</a> &middot; <a href="/watchlist">the watchlist</a> &middot; <a href="/signals">the signals</a> &middot;
+    <a href="/size">the calculator</a> &middot; <a href="/screen">the defensive screen</a> &middot; <a href="/explain/NVDA">explain this stock</a> &middot; <a href="/card">the cards</a>.
     <form class="lookup" onsubmit="event.preventDefault();var t=this.t.value.trim().toUpperCase();if(t)location.href='/'+(this.books.checked?'fundamentals':'prices')+'/'+encodeURIComponent(t)">
       <input name="t" placeholder="AAPL" aria-label="Ticker symbol" autocapitalize="characters" autocomplete="off" spellcheck="false">
       <label style="display:flex;align-items:center;gap:.3rem;font-size:.8rem;color:var(--faint)"><input type="checkbox" name="books" checked> books</label>

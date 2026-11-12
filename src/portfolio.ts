@@ -464,7 +464,7 @@ ${SHARED_CSS}
   .empty { color:var(--faint); font-style:italic; }
 </style></head>
 <body><main>
-  <p class="back"><a href="/">← course home</a> · <a href="/signals">signals</a> · <a href="/size">calculator</a></p>
+  <p class="back"><a href="/">← course home</a> · <a href="/signals">signals</a> · <a href="/size">calculator</a> · <a href="/tickets/${esc(student.code)}/review">review my process</a> · <a href="/costs">costs &amp; tax</a></p>
   <p class="eyebrow">Weeks 8–9 · paper portfolio</p>
   <h1>${esc(student.name)}</h1>
   <p class="lede">A paper account enrolled at ${money(student.capital)}, run by Carver's rule: open when the rule is long, size by instrument risk on the account's current value, close at the stop, write every decision down. This account runs ${student.instruments} instrument${student.instruments === 1 ? "" : "s"} — each position sized at ${fmtPct(targetFor(student.instruments))}% a year${student.instruments > 1 ? ` (${SIZING.riskTargetPct}% ÷ ${student.instruments})` : ""}. The page's address is its key: share a screenshot, not the link.</p>

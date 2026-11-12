@@ -5,6 +5,7 @@
  * FTS5 path is exercised on the local Worker and recorded in BUILD-LOG).
  */
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import { loadCorpus, chunkMarkdown, plain, CORPUS, MAX_WORDS, MIN_WORDS } from "../../scripts/notes-chunker.mjs";
 import {
   termsOf, ftsQuery, stemOf, rankByTerms, passagesAsText, validateAnswer, checkAnswer, resolveLabels,
@@ -15,7 +16,7 @@ const corpus: Passage[] = loadCorpus(process.cwd());
 
 describe("the corpus (scripts/notes-chunker.mjs)", () => {
   it("every file in CORPUS yields passages; ids are unique and positional; no passage is over the size or under the floor (except a file's last)", () => {
-    expect(CORPUS.length).toBe(16);
+    expect(CORPUS.length).toBe(19);   // week 11: lesson 11, the costs-and-tax walkthrough, the scam notes
     expect(corpus.length).toBeGreaterThan(120);
     const ids = new Set(corpus.map((p) => p.id));
     expect(ids.size).toBe(corpus.length);
@@ -39,6 +40,18 @@ describe("the corpus (scripts/notes-chunker.mjs)", () => {
     expect(plain("**x** *y* `z` [q](u) &mdash;")).toBe("x y `z` q —");
   });
 });
+
+  it("the committed seed is exactly what the chunker makes of the files tonight (v0.13.0 review F2: a stale seed fails here)", async () => {
+    const { buildSeed, seededAtOf } = await import("../../scripts/seed-notes.mjs");
+    const fts = readFileSync("scripts/seed-notes.sql", "utf8");
+    const plain = readFileSync("scripts/seed-notes-plain.sql", "utf8");
+    const at = seededAtOf(fts);
+    expect(at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    const built = buildSeed(loadCorpus("."), at);
+    expect(fts).toBe(built.fts);
+    expect(plain).toBe(built.plain);
+    expect(fts.split("\n")[0]).toContain(`${loadCorpus(".").length} passages from ${CORPUS.length} files`);
+  });
 
 describe("termsOf / ftsQuery / stemOf", () => {
   it("drops stop words and short words, keeps the course's nouns, tickers and numbers, lower-cases, de-duplicates, caps at twelve", () => {
@@ -87,6 +100,8 @@ describe("rankByTerms — the word-match fallback over the real corpus (the gold
     ["What will the ticket refuse?", /rules-card|week-09/, /What the ticket will refuse|Two new refusals/i, true],
     ["Where do prices come from, and what does data cost?", /week-02/, /What a quote actually is|Why is our data delayed|The ration book/i, true],
     ["What did Graham mean by Mr. Market and the margin of safety?", /week-04|week-05\.md/, /^0:40 — Mr\. Market|margin of safety|Walk the card/i, true],
+    // from week 11 the notes carry the kit's costs-and-tax walkthrough, so the tax question is answerable (the gold set's note; review H8 of v0.13.0)
+    ["How is capital gains tax charged on shares in Ireland?", /costs-and-tax|week-11\.md/, /The same gain taxed three ways|Irish tax, the walkthrough/i, true],
   ];
   it.each(GOLD)("%s", (q, source, heading, first) => {
     const ps = top(q);
