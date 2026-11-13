@@ -334,5 +334,6 @@ Open items carried into Phase 3 (from the review's N11): EDGAR from Cloudflare's
 - [x] Migration 0013, the 214-passage seed, `npm run deploy` — applied 13 Nov afternoon (not pasted; the live lede "214 passages indexed 2026-11-13" at VC-24 (e) is the evidence)
 - [x] `TUTOR_EMAILS` set; both test accounts linked to the tutor's one address (`--allow-shared-email`); Zero Trust Free; the One-time PIN login method; one policy, one Emails rule; the switch — *All traffic* (the tutor, 16:00–18:00; the dashboard's layout not everywhere as the guide names it — OI-101)
 - [x] VC-24 — the Phase 4 gate — **met 18:18**, run by the tutor in his own browser (Cloudflare's checks refused the builder's automated pane at the dashboard and at the Access page; not worked around); the closure appended to the record
-- [ ] Commit "Week 12: demo day — the real student logins, the kit, the handover, v1.0.0" → push → the tag v1.0.0 (OI-100)
+- [x] Committed and pushed 13 Nov 18:28 as `6e6b9f5` (36 files, 14 new and 22 changed, identical to the sandbox tree; nothing forbidden)
+- [x] The tag `v1.0.0` pushed 13 Nov 18:31 — an annotated tag on `6e6b9f5`, verified on the remote
 - [ ] The review's resolution table read (`docs/reviews/v100-independent-review.md`)
