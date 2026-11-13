@@ -23,3 +23,10 @@ SMALLCAP_AV_CALLS = "4"
 # Optional caps (defaults in brackets): EXPLAIN_DAILY_CAP (60), QUOTE_DAILY_CAP (3), TUTOR_DAILY_CAP (60; "0" = the passages only, no model call),
 # REVIEW_DAILY_CAP (3 readings per student per day; "0" = the audit only) and REVIEW_GLOBAL_CAP (40 for the class).
 # Test hook only: EXPLAIN_API_URL = "http://127.0.0.1:8799/v1/messages" points the narrative, the tutor AND the process review at a stub server.
+
+# Week 12 (decision 23): the tutor's email address(es), comma-separated. With Cloudflare Access on, these open every
+# student's page; a student's own email opens theirs. A SECRET on the live Worker (`wrangler secret put TUTOR_EMAILS`),
+# never a var in wrangler.jsonc — the repository is public. Locally, Access is simulated by an `access.dev` block in
+# wrangler.jsonc: { "access": { "dev": { "aud": "local", "identity": { "email": "you@example.com" } } } } — remove the
+# block to rehearse the door switched off (the code scheme). Both are described in docs/setup-guide.md, Part E.
+TUTOR_EMAILS = "tutor@example.ie"

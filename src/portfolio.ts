@@ -19,6 +19,7 @@
  */
 import { Hono } from "hono";
 import { PAGE_CSS, FONTS_HTML, SHARED_CSS, esc } from "./page";
+import { ownerGate, type Door, DOOR_OFF } from "./lib/access";
 import { SIZING, sizePosition, describeSizing, SizeInputError, type Sizing } from "./lib/sizing";
 import { RULE as SIGNAL_RULE } from "./lib/signals";
 import { CODE, JOURNAL_MIN, JOURNAL_MAX, parseTicket, decideTicket, accountOf, type Facts, type PositionRow, type TicketRow, type SignalFact, type Student, type Reason } from "./lib/tickets";
@@ -310,7 +311,14 @@ async function handleTicket(db: D1Database, raw: Record<string, unknown>): Promi
 portfolio.post("/api/tickets", async (c) => {
   let body: Record<string, unknown>;
   try { body = (await c.req.json()) as Record<string, unknown>; } catch { return c.json({ error: "Send JSON: { \"code\", \"ticker\", \"side\": \"open\"|\"close\", \"units\"?, \"journal\" }" }, 400); }
-  const out = await handleTicket(c.env.DB, body);
+  // Week 12: the API writes no ticket for another student's code. The code is normalised ONCE, here, and the same value
+  // goes to the gate and to the parser (v1.0.0 review F1: an array-wrapped code once skipped the gate and passed the parser).
+  const code = typeof body.code === "string" ? body.code.trim().toUpperCase() : "";
+  if (CODE.test(code)) {
+    const { check } = await ownerGate(c, code);
+    if (!check.ok) return c.json({ error: check.reason }, check.status);
+  }
+  const out = await handleTicket(c.env.DB, { ...body, code });
   return c.json(out.body, out.status);
 });
 
@@ -319,6 +327,8 @@ portfolio.get("/api/tickets/:code", async (c) => {
   if (!CODE.test(code)) return c.json({ error: "That doesn't look like a student code." }, 400);
   const student = await loadStudent(c.env.DB, code);
   if (!student) return c.json({ error: "No student with that code." }, 404);
+  const { check } = await ownerGate(c, code);
+  if (!check.ok) return c.json({ error: check.reason }, check.status);
   const [positions, tickets, rows, night] = await Promise.all([loadPositions(c.env.DB, code), loadTickets(c.env.DB, code), loadRiskRows(c.env.DB, code, 1), latestNight(c.env.DB)]);
   const account = accountOf(student.capital, positions, tickets);
   const latest = await latestFor(c.env.DB, positions.filter((p) => p.status === "open").map((p) => p.symbol));
@@ -334,6 +344,8 @@ portfolio.get("/api/risk/:code", async (c) => {
   if (!CODE.test(code)) return c.json({ error: "That doesn't look like a student code." }, 400);
   const student = await loadStudent(c.env.DB, code);
   if (!student) return c.json({ error: "No student with that code." }, 404);
+  const { check } = await ownerGate(c, code);
+  if (!check.ok) return c.json({ error: check.reason }, check.status);
   const [positions, tickets, rows, night] = await Promise.all([loadPositions(c.env.DB, code), loadTickets(c.env.DB, code), loadRiskRows(c.env.DB, code, 30), latestNight(c.env.DB)]);
   const latest = await latestFor(c.env.DB, positions.filter((p) => p.status === "open").map((p) => p.symbol));
   const r = reportNow(student, positions, tickets, latest, rows, night);
@@ -362,14 +374,18 @@ portfolio.get("/tickets/:code", async (c) => {
   if (!CODE.test(code)) return c.html(ticketsEmptyPage("That doesn't look like a student code — eight characters like K7PM-4R2X."), 400);
   const student = await loadStudent(c.env.DB, code);
   if (!student) return c.html(ticketsEmptyPage("No student with that code. Codes come from the tutor's enrolment."), 404);
+  const { gate, check } = await ownerGate(c, code);   // week 12: with Access on, the page is its own student's or the tutor's
+  if (!check.ok) return c.html(ticketsEmptyPage(check.reason), check.status);
   const [positions, tickets, rows, night] = await Promise.all([loadPositions(c.env.DB, code), loadTickets(c.env.DB, code), loadRiskRows(c.env.DB, code), latestNight(c.env.DB)]);
   const latest = await latestFor(c.env.DB, positions.filter((p) => p.status === "open").map((p) => p.symbol));
-  return c.html(ticketsPage(student, positions, tickets, latest, null, {}, rows, night));
+  return c.html(ticketsPage(student, positions, tickets, latest, null, {}, rows, night, gate));
 });
 
 portfolio.post("/tickets/:code", async (c) => {
   const code = c.req.param("code").trim().toUpperCase();
   if (!CODE.test(code)) return c.html(ticketsEmptyPage("That doesn't look like a student code."), 400);
+  const { gate, check } = await ownerGate(c, code);   // week 12: nobody writes another student's ticket
+  if (!check.ok) return c.html(ticketsEmptyPage(check.reason), check.status);
   const form = await c.req.parseBody();
   const raw: Record<string, unknown> = { code, symbol: form.symbol, side: form.side, units: form.units, journal: form.journal };
   const out = await handleTicket(c.env.DB, raw);
@@ -381,7 +397,7 @@ portfolio.post("/tickets/:code", async (c) => {
     ? { kind: "ok" as const, text: `Ticket accepted: ${out.body.side} ${out.body.units} × ${out.body.symbol} at ${money(out.body.fill_price as number)} on the ${out.body.fill_date} close (cost ${money(out.body.cost as number)}).${out.body.side === "open" ? ` Stop ${money(out.body.stop_level as number)}.` : ` P&L ${money(out.body.pnl as number)}.`}` }
     : { kind: "no" as const, text: "The ticket was not accepted.", reasons: out.reasons ?? [] };
   const keep: Record<string, string> = out.status === 201 ? {} : { symbol: String(form.symbol ?? ""), side: String(form.side ?? ""), units: String(form.units ?? ""), journal: String(form.journal ?? "") };
-  return c.html(ticketsPage(student, positions, tickets, latest, flash, keep, rows, night), out.status === 201 ? 200 : out.status);
+  return c.html(ticketsPage(student, positions, tickets, latest, flash, keep, rows, night, gate), out.status === 201 ? 200 : out.status);
 });
 
 function ticketsEmptyPage(reason: string): string {
@@ -389,7 +405,7 @@ function ticketsEmptyPage(reason: string): string {
 <body><main><p class="back"><a href="/">← course home</a></p><p class="eyebrow">Week 8 · tickets</p><h1>Paper tickets</h1><p class="empty">${esc(reason)}</p><footer><p class="notice">${NOTE}</p></footer></main></body></html>`;
 }
 
-function ticketsPage(student: Student, positions: PositionRow[], tickets: TicketRow[], latest: Latest, flash: { kind: "ok" | "no"; text: string; reasons?: Reason[] } | null, keep: Record<string, string>, riskRows: RiskRow[] = [], night: string | null = null): string {
+function ticketsPage(student: Student, positions: PositionRow[], tickets: TicketRow[], latest: Latest, flash: { kind: "ok" | "no"; text: string; reasons?: Reason[] } | null, keep: Record<string, string>, riskRows: RiskRow[] = [], night: string | null = null, gate: Door = DOOR_OFF): string {
   const account = accountOf(student.capital, positions, tickets);
   const open = positions.filter((p) => p.status === "open");
   const closed = positions.filter((p) => p.status === "closed");
@@ -467,7 +483,7 @@ ${SHARED_CSS}
   <p class="back"><a href="/">← course home</a> · <a href="/signals">signals</a> · <a href="/size">calculator</a> · <a href="/tickets/${esc(student.code)}/review">review my process</a> · <a href="/costs">costs &amp; tax</a></p>
   <p class="eyebrow">Weeks 8–9 · paper portfolio</p>
   <h1>${esc(student.name)}</h1>
-  <p class="lede">A paper account enrolled at ${money(student.capital)}, run by Carver's rule: open when the rule is long, size by instrument risk on the account's current value, close at the stop, write every decision down. This account runs ${student.instruments} instrument${student.instruments === 1 ? "" : "s"} — each position sized at ${fmtPct(targetFor(student.instruments))}% a year${student.instruments > 1 ? ` (${SIZING.riskTargetPct}% ÷ ${student.instruments})` : ""}. The page's address is its key: share a screenshot, not the link.</p>
+  <p class="lede">A paper account enrolled at ${money(student.capital)}, run by Carver's rule: open when the rule is long, size by instrument risk on the account's current value, close at the stop, write every decision down. This account runs ${student.instruments} instrument${student.instruments === 1 ? "" : "s"} — each position sized at ${fmtPct(targetFor(student.instruments))}% a year${student.instruments > 1 ? ` (${SIZING.riskTargetPct}% ÷ ${student.instruments})` : ""}. ${gate.on ? `Signed in as ${esc(gate.identity?.email ?? "")}${gate.tutor ? " (the tutor)" : ""}: this page opens only for its own student and the tutor (week 12).` : "The page's address is its key: share a screenshot, not the link."}</p>
   <div class="acct">
     <span>Account value<b>${money(report.accountValue)}</b><i>${since >= 0 ? "+" : "−"}${Math.abs(since).toFixed(1)}% since enrolment</i></span>
     <span>Cash<b>${money(account.cash)}</b></span>

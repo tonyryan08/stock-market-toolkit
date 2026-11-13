@@ -12,6 +12,13 @@ describe("parseTicket — input validation with messages a student can act on", 
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.req).toEqual({ code: "K7PM-4R2X", symbol: "AAPL", side: "open", units: null, journal: "The rule is long since May; stop at 317.19; if hit I close on Monday." });
   });
+  it("v1.0.0 review F1: the code must be a string — an array, an object with toString, a number are refused as 'code', not stringified", () => {
+    for (const shape of [["K7PM-4R2X"], { toString: () => "K7PM-4R2X" }, 12345678, true, null, undefined]) {
+      const r = parseTicket({ code: shape as any, ticker: "AAPL", side: "open", journal: "The rule is long since May; stop at 317.19; if hit I close on Monday." });
+      expect(r.ok, JSON.stringify(shape)).toBe(false);
+      if (!r.ok) expect(r.reasons.map((x) => x.code)).toContain("code");
+    }
+  });
   it("refuses a blank journal, a bad code, a bad symbol, a bad side and fractional units — all at once", () => {
     const r = parseTicket({ code: "ABC", symbol: "AAPL'--", side: "buy", units: "2.5", journal: "ok" });
     expect(r.ok).toBe(false);

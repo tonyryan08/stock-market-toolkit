@@ -16,7 +16,7 @@ const corpus: Passage[] = loadCorpus(process.cwd());
 
 describe("the corpus (scripts/notes-chunker.mjs)", () => {
   it("every file in CORPUS yields passages; ids are unique and positional; no passage is over the size or under the floor (except a file's last)", () => {
-    expect(CORPUS.length).toBe(19);   // week 11: lesson 11, the costs-and-tax walkthrough, the scam notes
+    expect(CORPUS.length).toBe(21);   // week 12: lesson 12 and demo day's rubric join (19 at week 11)
     expect(corpus.length).toBeGreaterThan(120);
     const ids = new Set(corpus.map((p) => p.id));
     expect(ids.size).toBe(corpus.length);

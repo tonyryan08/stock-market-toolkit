@@ -215,6 +215,47 @@ That's it. Parts 0–C never repeat.
 
 ---
 
+## Part E — The door: Cloudflare Access in front of the site (week 12, decision #23)
+
+From week 12 the whole site stands behind Cloudflare Access: a visitor gets Cloudflare's login page, types an email, receives a one-time code, and is let in only if the address is on the policy. The Worker is handed the signed-in email and matches it to the student's row — it validates nothing itself (the runtime does), and with Access off it behaves exactly as it did from week 8. Five steps, **in this order** — the order is the point.
+
+### E1. Link every account to its email
+
+```
+npm run enrol -- --list
+```
+Every row that shows "(no email …)" needs one:
+```
+npm run enrol -- --set-email K7PM-4R2X ada@example.com
+```
+New students from now on: `npm run enrol -- --name "…" --capital 10000 --email ada@example.com`. One email, one account — the script refuses a duplicate. Your own test accounts may share your address (`--allow-shared-email`); `/me` then shows them as a list of doors.
+
+### E2. The tutor's secret
+
+Your own address (or addresses, comma-separated) — these open every student's page. Stage it outside the project folder as with the other secrets (the Runbook's "Secrets" paragraph):
+```
+npx wrangler secret put TUTOR_EMAILS
+```
+`npx wrangler secret list` now shows five names. Never a `vars` entry in `wrangler.jsonc`: the repository is public and an email is a personal record.
+
+### E3. The login method and the policy
+
+Zero Trust is free up to 50 users. The first visit (dash.cloudflare.com → **Zero Trust**) names your team — any name; it becomes the login page's address, `<team>.cloudflareaccess.com` — and asks for a plan and payment details: choose the **Free** plan (the details are still asked for; nothing is charged — the docs say so, read 13 Nov 2026).
+
+**The login method.** Since 18 June 2026 a new organisation's default login is Cloudflare's own identity provider, not the email code, so add the code: Zero Trust → **Integrations** → **Identity providers** → **Add new identity provider** → **One-time PIN**. That is the whole setup: a student types their email, presses *Send login code*, gets a PIN that lives ten minutes, pastes it, *Sign in*.
+
+**The policy.** Zero Trust → **Access controls** → **Policies** → **Add a policy** → name it (say *Enrolled*), action **Allow**, under **Include** choose **Emails** and paste every address from E1 and your own. Save. (The section was labelled *Access* until recently; the docs now say *Access controls* — OI-101 watches the screens.) (Adding a student later is this screen plus E1 — both, or the door opens to an address with no page, or a page to nobody.)
+
+### E4. The switch
+
+dash.cloudflare.com → **Workers & Pages** → **stock-market-toolkit** → the **Access** tab → **Protect this Worker behind Access** → **All traffic** (not *Previews only*) → the policy from E3 — the tab also offers *Cloudflare account* and *Email domain*: **not those** — the first admits your account's members, the second every address at a domain → the session duration (24 hours unless you set it longer; a week suits a weekly class) → **Apply Access**. Worker-level protection covers every route and the `workers.dev` hostname at once, and stays attached if routes change (the 14 Aug 2026 release: `docs/lessons/week-12.md` tutor notes). Nothing is redeployed.
+
+### E5. The rehearsal — VC-24
+
+In a private window: the site answers with Cloudflare's page; your own address → the code → the site, the landing saying "Signed in as … (the tutor)", `/me` naming your accounts, every code page opening. A student's address (a second private window): `/me` lands on their page; another student's code answers 403 with the way to their own; the review button works. To sign out between rehearsals (and for the demo in class): `/cdn-cgi/access/logout` on the course address, or the landing's "sign out" link. An address that is not on the policy: the page says "A code has been emailed to you" and **no code arrives** — Cloudflare sends one only to an address a policy allows — so the door never opens; **that is the phase's exit check** (the syllabus: *the Access policy admits only enrolled emails*), and the room should know the refusal looks like silence, not a message. Close it in `docs/data-provider-checks.md`. The nightly jobs are unaffected (Access gates requests, not the schedule): the next morning's receipt has its six rows.
+
+**Locally**, `wrangler dev` simulates the door with an `access.dev` block in `wrangler.jsonc` — `"access": { "dev": { "aud": "local", "identity": { "email": "you@example.com" } } }` — and `TUTOR_EMAILS` in `.dev.vars`; remove the block to rehearse the door switched off; if `/api/me` does not change after an edit to the block, restart `wrangler dev` (its watcher missed the block being put back, at the build). **If the door must come off** (a policy mistake on the night): the same Access tab, remove the policy — the Worker falls back to the code scheme at once and `/me` says so.
+
 ## Done — the acceptance checklist
 
 These mirror the hand-verification gates in `BUILD-LOG.md`:

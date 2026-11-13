@@ -30,6 +30,8 @@ import { portfolio } from "./portfolio";
 import { tutor } from "./tutor";
 import { review } from "./review";
 import { costs } from "./costs";
+import { me, whoLine, doorSentence } from "./me";
+import { doorOf, accountsFor } from "./lib/access";
 
 type Env = {
   ALPHAVANTAGE_API_KEY: string;
@@ -59,6 +61,9 @@ type Env = {
   /** Week 11: process-review readings per student per day (default 3; "0" shows the audit only) and for the class (default 40). */
   REVIEW_DAILY_CAP?: string;
   REVIEW_GLOBAL_CAP?: string;
+  /** Week 12 (decision 23): the tutor's email address(es), comma-separated — `wrangler secret put TUTOR_EMAILS`. With Cloudflare
+   *  Access on, these open every student's page; a student's own email opens theirs. Never in wrangler.jsonc (the repo is public). */
+  TUTOR_EMAILS?: string;
   DB: D1Database;
 };
 
@@ -73,8 +78,17 @@ app.route("/", tutor);
 // Week 11: the process review (the student's page, its API) and the costs-and-tax worksheet.
 app.route("/", review);
 app.route("/", costs);
+// Week 12: the student's door (/me), the kit's (/kit).
+app.route("/", me);
 
-app.get("/", (c) => c.html(LANDING_PAGE));
+app.get("/", async (c) => {
+  // The landing is a constant page but for one line: who Access says is here, and where their page is (week 12).
+  const gate = await doorOf(c);
+  const accounts = gate.on && gate.identity ? await accountsFor(c.env.DB, gate.identity.email) : [];
+  // function replacements (review N2): a string replacement would read `$&`/`$'` in an address as a pattern
+  const page = LANDING_PAGE.replace("<!--who-->", () => whoLine(gate, accounts)).replace("<!--door-->", () => doorSentence(gate));
+  return c.html(page, 200, gate.on ? { "cache-control": "no-store" } : {});
+});
 
 // The browser asks every site for a tab icon; give it one instead of log noise.
 const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">📒</text></svg>`;

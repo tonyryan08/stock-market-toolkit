@@ -142,6 +142,7 @@ ${PAGE_CSS}
   <p class="eyebrow">A community-school course &middot; built in the open</p>
   <h1>Intro to the Stock&nbsp;Market</h1>
   <p class="strapline">We grade decisions, not outcomes.</p>
+<!--who-->
 
   <div class="promises">
     <p><strong>Paper portfolios only.</strong> Nobody risks a cent in this room.</p>
@@ -221,18 +222,18 @@ ${PAGE_CSS}
         <span><span class="lesson">The real world: costs &amp; tax</span><br><span class="feature">&ldquo;Explain my portfolio&rdquo; &mdash; your tickets read against your rules by an audit and a reading that cannot see the result (on your page); and <a href="/costs">the costs-and-tax worksheet</a>: the same trade priced in euro, the gain taxed three ways</span></span>
         <span class="stamp">SHIPPED</span>
       </div>
-      <div class="row pending">
+      <div class="row shipped">
         <span class="wk">Wk 12</span>
-        <span><span class="lesson">Demo day</span><br><span class="feature">Student logins &amp; the takeaway kit</span></span>
+        <span><span class="lesson">Demo day</span><br><span class="feature">The real student logins &mdash; the site behind Cloudflare Access, an email code at the door, <a href="/me">your page found by your email</a>; <a href="/kit">the takeaway kit</a> assembled; the course tagged v1.0</span></span>
+        <span class="stamp">SHIPPED</span>
       </div>
     </div>
   </section>
 
   <div class="try">
-    <strong>New this week:</strong> <a href="/costs">what a trade really costs</a> &mdash; the same paper trade priced in euro the way
-    an Irish student would pay for it, and the gain taxed three ways (shares, a fund, the new investment account), every rate dated and
-    the Bill marked as a Bill. And on your own page, <strong>did you follow your rules?</strong> &mdash; the process review: an audit that
-    needs no AI, and a reading written from a sheet with no P&amp;L on it, so it can only talk about process. Still here:
+    <strong>New this week:</strong> the door. <!--door--> <a href="/kit">The takeaway kit</a> is
+    assembled: the rules card, the journal template, the reading list, the costs-and-tax walkthrough, the scam-spotting notes, demo day's
+    rubric. Still here: <a href="/costs">what a trade really costs</a> &middot;
     <a href="/tutor">the tutor</a> &middot; <a href="/watchlist">the watchlist</a> &middot; <a href="/signals">the signals</a> &middot;
     <a href="/size">the calculator</a> &middot; <a href="/screen">the defensive screen</a> &middot; <a href="/explain/NVDA">explain this stock</a> &middot; <a href="/card">the cards</a>.
     <form class="lookup" onsubmit="event.preventDefault();var t=this.t.value.trim().toUpperCase();if(t)location.href='/'+(this.books.checked?'fundamentals':'prices')+'/'+encodeURIComponent(t)">

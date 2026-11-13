@@ -32,12 +32,14 @@ export const CORPUS = [
   ["docs/lessons/week-09.md", "L9"],
   ["docs/lessons/week-10.md", "L10"],
   ["docs/lessons/week-11.md", "L11"],
+  ["docs/lessons/week-12.md", "L12"],
   ["kit/starter-system-rules-card.md", "K-RULES"],
   ["kit/student-quickstart.md", "K-START"],
   ["kit/decision-journal.md", "K-JOURNAL"],
   ["kit/reading-list.md", "K-READING"],
   ["kit/costs-and-tax-walkthrough.md", "K-COSTS"],
   ["kit/scam-spotting-notes.md", "K-SCAMS"],
+  ["kit/demo-day.md", "K-DEMO"],
 ];
 
 /** A passage longer than this (in words) is split at the next paragraph break. */

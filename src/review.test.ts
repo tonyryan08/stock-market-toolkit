@@ -155,6 +155,13 @@ describe("GET /api/explain-my-portfolio/:code", () => {
     expect(upd.binds[0]).toBe("rejected");
     expect(String(upd.binds[2])).toMatch(/Well done on KO/);
     expect(JSON.parse(String(upd.binds[2]))).toEqual(PRAISE);
+    // a rejection on language alone carries no empty "flagged:" (the 16:12 live receipt did)
+    vi.stubGlobal("fetch", vi.fn(async () => reply({ paragraphs: [{ text: "The trade went well, by the record.", facts: ["F1"] }], next_week: "Read the stop line first." })));
+    const d2 = db();
+    expect(((await (await api(d2)).json()) as any).outcome).toBe("rejected");
+    const detail = String(d2.ran("INSERT INTO fetch_log")[0].binds[3]);
+    expect(detail).toMatch(/ — went well$/);
+    expect(detail).not.toMatch(/flagged/);
   });
   it("any failed check withholds (review F1): a number from nowhere, a fact not on the sheet, an uncited paragraph — each rejected with its reason, the audit intact", async () => {
     const cases: [unknown, RegExp][] = [

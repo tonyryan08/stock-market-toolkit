@@ -7,6 +7,7 @@
 1. **A browser.** Phone, tablet or laptop — all fine.
 2. **The course web address**, written on the whiteboard each week.
 3. **Your decision journal** (printed) and a pen.
+4. From week 12, **the email address you gave the tutor** — the site sends a sign-in code to it.
 
 That's the entire kit list. **You will never be asked to install anything.**
 
@@ -26,6 +27,12 @@ On your own page, "review my process": every ticket and position read against th
 
 `/costs` is the worksheet from lesson 11: what a trade really costs through a broker, in euro, and the same gain taxed three ways — as shares, as a fund or ETF, and inside the investment account the Finance Bill would open in July 2027 — every rate with its date, the Bill marked as a Bill. The kit's walkthrough (`costs-and-tax-walkthrough.md`) and the scam-spotting notes go with it.
 
+## Signing in, and your page (from week 12)
+
+From week 12 the site stands behind a door: open the course address and Cloudflare asks for your email, sends a one-time code to it, and lets you in for a day or so before asking again. Only the addresses the tutor enrolled are on the list — a friend with the address gets the door and no further. Once inside, **`/me` is your page**: the site finds your paper account by the email you signed in with, so there is no address to keep secret any more. The old `/tickets/<code>` address still works, and it opens for you and for the tutor only; the review page and the worksheet are where they were. If `/me` says no account is linked to your email, tell the tutor — the enrolment list carries the link.
+
+The sign-in is Cloudflare's, not the course's: the toolkit never sees your code and stores no password. It is handed your email and matches it to your account, and that is all it does with it.
+
 ## Wait — don't I need to set up the software?
 
 No. Your tutor builds the toolkit; you use it. Building it is a separate craft that happens off-stage so that class time stays on the actual subject: how to make good investment decisions and how to avoid being parted from your money.
@@ -41,6 +48,10 @@ If you're curious enough to want to run it yourself, say so and your tutor will 
 - **Paper portfolios only.** Nobody risks a cent in this room.
 - **No tips, ever.** You leave with a process, not a portfolio.
 - **Everything is open.** Every tool we use is built in public.
+
+## The kit, in one place
+
+`/kit` on the course address lists every document in this kit with what it is for, and links each to its page in the repository: this quickstart, the decision journal, the Starter System rules card, the reading list, the costs-and-tax walkthrough, the scam-spotting notes, and demo day's rubric and retrospective. Print the rules card and the journal template; keep the links for the rest.
 
 ---
 

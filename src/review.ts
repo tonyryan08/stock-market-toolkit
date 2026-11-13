@@ -26,6 +26,7 @@ import { Hono } from "hono";
 import { PAGE_CSS, FONTS_HTML, esc, SHARED_CSS } from "./page";
 import { intSetting } from "./lib/settings";
 import { DEFAULT_MODEL, claudeJson, extractJson } from "./lib/narrative";
+import { ownerGate } from "./lib/access";
 import { CODE, type Student, type PositionRow, type TicketRow } from "./lib/tickets";
 import { SIZING } from "./lib/sizing";
 import {
@@ -194,11 +195,12 @@ export async function reviewStudent(env: Env, rawCode: string, opts: { ai: boole
   const grounding = checkReading(reading, audit);
   const meta = { ...meta0, model, tokens: call.usage, ms: Date.now() - t0 };
   const tokens = `${call.usage.input}/${call.usage.output} tokens ${meta.ms} ms ${REVIEW_PROMPT_VERSION}`;
-  const flagged = grounding.clean ? "" : " — flagged: " + [
+  const flags = [
     ...grounding.unknownFacts.map((u) => `facts ${u.ids.join(",")}`),
     ...(grounding.uncited.length ? [`uncited ${grounding.uncited.join(",")}`] : []),
     ...grounding.unsupportedNumbers.map((u) => `numbers ${u.numbers.join(",")}`),
-  ].join("; ");
+  ];
+  const flagged = flags.length ? ` — flagged: ${flags.join("; ")}` : "";   // empty when only the language families fired (the 16:12 receipt ended "— flagged: ")
   if (!grounding.clean) {
     // Any failed check withholds the reading (review F1): in a review of a student's own record a number from nowhere or a
     // fact that is not there is a wrong statement about them, not a footnote.
@@ -239,13 +241,22 @@ review.get("/api/explain-my-portfolio/:code", async (c) => {
   // The audit by default; a reading only when asked for (`?ai=1`) — a GET that a link preview or a prefetch can issue
   // must not spend one of the student's three (review F10, OI-89).
   const ai = c.req.query("ai") === "1";
-  const r = await reviewStudent(c.env, c.req.param("code"), { ai });
+  const code = c.req.param("code").trim().toUpperCase();
+  if (CODE.test(code)) {
+    const { check } = await ownerGate(c, code);   // week 12: another student's audit is not served, nor is a reading spent on it
+    if (!check.ok) return c.json({ error: check.reason }, check.status);
+  }
+  const r = await reviewStudent(c.env, code, { ai });
   const status = r.outcome === "invalid" ? 400 : r.outcome === "not_found" ? 404 : 200;
   return c.json({ ...r, note: NOTE }, status, { "cache-control": "no-store" });
 });
 
 review.get("/tickets/:code/review", async (c) => {
   const code = c.req.param("code").trim().toUpperCase();
+  if (CODE.test(code)) {
+    const { check } = await ownerGate(c, code);   // week 12
+    if (!check.ok) return c.html(emptyPage(check.reason), check.status);
+  }
   const r0 = await reviewStudent(c.env, code, { ai: false });
   if (r0.outcome === "invalid" || r0.outcome === "not_found") return c.html(emptyPage(r0.reason ?? ""), r0.outcome === "invalid" ? 400 : 404);
   // the budget line's used count (OI-94): the audit-only path returns before the cap's count, so count here — one query
@@ -259,6 +270,10 @@ review.get("/tickets/:code/review", async (c) => {
 
 review.post("/tickets/:code/review", async (c) => {
   const code = c.req.param("code").trim().toUpperCase();
+  if (CODE.test(code)) {
+    const { check } = await ownerGate(c, code);   // week 12: the button spends nothing on another student's account
+    if (!check.ok) return c.html(emptyPage(check.reason), check.status);
+  }
   const r = await reviewStudent(c.env, code, { ai: true });
   if (r.outcome === "invalid" || r.outcome === "not_found") return c.html(emptyPage(r.reason ?? ""), r.outcome === "invalid" ? 400 : 404);
   // A refresh of the page must never spend a second reading: redirect to the page, the row's id in the query

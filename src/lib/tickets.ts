@@ -74,7 +74,9 @@ const money = (v: number) => `$${v.toLocaleString("en-US", { minimumFractionDigi
 /** Parse and bound the request; the messages are the ones the form shows. */
 export function parseTicket(body: Record<string, unknown>): { ok: true; req: TicketRequest } | { ok: false; reasons: Reason[] } {
   const reasons: Reason[] = [];
-  const code = String(body.code ?? "").trim().toUpperCase();
+  // A string only (v1.0.0 review F1): `String(["K7PM-4R2X"])` is "K7PM-4R2X", and a gate that looked at the raw body
+  // and a parser that looked at the stringified one could be made to disagree. One shape, refused otherwise.
+  const code = typeof body.code === "string" ? body.code.trim().toUpperCase() : "";
   if (!CODE.test(code)) reasons.push({ code: "code", message: "The student code looks wrong — it is eight characters like K7PM-4R2X, from your enrolment." });
   const symbol = String(body.symbol ?? body.ticker ?? "").trim().toUpperCase();
   if (!/^[A-Z0-9][A-Z0-9.\-]{0,11}$/.test(symbol)) reasons.push({ code: "symbol", message: "That doesn't look like a ticker symbol." });

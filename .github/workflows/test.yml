@@ -1,0 +1,20 @@
+# Week 12 (decision #23 c): the tests on every push — no secrets, no deploy.
+# Releasing stays `npm run deploy` by hand (decision #6; deploy.yml is parked).
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run check   # wrangler types (the generated worker-configuration.d.ts is not committed) + tsc
