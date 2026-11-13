@@ -150,6 +150,11 @@ describe("GET /api/explain-my-portfolio/:code", () => {
     expect(log[0].binds[1]).toBe("review_rejected");
     expect(String(log[0].binds[3])).toMatch(/Well done/);
     noCodeInReceipts(d);
+    // OI-97: the withheld reading is kept on the row as the audit copy — the API answered null, the row has the words
+    const upd = d.ran("UPDATE reviews SET outcome")[0];
+    expect(upd.binds[0]).toBe("rejected");
+    expect(String(upd.binds[2])).toMatch(/Well done on KO/);
+    expect(JSON.parse(String(upd.binds[2]))).toEqual(PRAISE);
   });
   it("any failed check withholds (review F1): a number from nowhere, a fact not on the sheet, an uncited paragraph — each rejected with its reason, the audit intact", async () => {
     const cases: [unknown, RegExp][] = [
@@ -292,10 +297,16 @@ describe("the pages", () => {
     const r = await post(db(), `/tickets/${CODE}/review`);
     expect(r.status).toBe(303);
     const grounding = { unknownFacts: [], uncited: [], unsupportedNumbers: [], recommendationLanguage: [], outcomeLanguage: ["Well done", "made a profit"], clean: false };
-    const just = [{ id: 5, asked_at: "2026-11-12T13:00:00.000Z", as_of: "2026-11-10", prompt_version: REVIEW_PROMPT_VERSION, outcome: "rejected", audit: "{}", reading: null, grounding: JSON.stringify(grounding), model: "claude-haiku-5-5", input_tokens: 1400, output_tokens: 260, ms: 2000 }];
+    // the row carries the withheld reading as the audit copy (OI-97) — the page must show its reason and none of its words
+    const just = [{ id: 5, asked_at: "2026-11-12T13:00:00.000Z", as_of: "2026-11-10", prompt_version: REVIEW_PROMPT_VERSION, outcome: "rejected", audit: "{}", reading: JSON.stringify(PRAISE), grounding: JSON.stringify(grounding), model: "claude-haiku-5-5", input_tokens: 1400, output_tokens: 260, ms: 2000 }];
     const html = await (await get(db({ just }), `/tickets/${CODE}/review?r=5`)).text();
     expect(html).toMatch(/was withheld by the course's checks \(outcome language: &quot;Well done&quot;/);
     expect(html).toMatch(/NOT FOLLOWED/);
+    expect(html).not.toMatch(/selling early made a profit|Keep trusting your instincts/);
+    // nor can a withheld row become "the last reading": the query that picks it selects answered rows only (the fake answers any row it is handed, so the pin is the SQL)
+    const d2 = db({ just });
+    await get(d2, `/tickets/${CODE}/review?r=5`);
+    expect(d2.ran("FROM reviews WHERE code = ?1 AND outcome = 'answered'")).toHaveLength(1);
     // a row of another student's is not shown
     const other = await (await get(db({ just: [{ ...just[0], code: "Q2WD-8HJ3" }] }), `/tickets/${CODE}/review?r=5`)).text();
     expect(other).toMatch(/withheld/);   // the fake answers any id; the route binds the code — the SQL carries it

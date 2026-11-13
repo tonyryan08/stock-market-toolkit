@@ -164,6 +164,9 @@ describe("the reading — validated and checked", () => {
       "It is fortunate that the entry named the stop.", "The return of the Monday routine would help.", "The close fell below the stop and the rule said close.", "Write it down on Monday.",
       "The rule went long on the 2026-10-14 close.", "The position is still open.", "The stop is the closing rule.", "You worked out the size from the calculator.",
       "The stop was hit and you closed at the next close: the rule, followed.", "The report flagged a stop hit on 10 nights.", "The entry names what would prove you wrong.",
+      // OI-96 (13 Nov, the first live rejection): "well" after a copula is an adverb on what follows, not a result
+      "The entry is well short of what the template asks for.", "The record is well kept.", "The journal was well written.",
+      "The rule was well followed on both tickets.", "The stop is well below the entry by design.", "These are well within the week.",
     ];
     for (const ok of innocent) expect(findOutcomeLanguage(ok), ok).toEqual([]);
     const results = [
@@ -173,6 +176,8 @@ describe("the reading — validated and checked", () => {
       "A return of 8% on KO.", "It went up after you bought it.", "KO is up since entry.", "The trade went well.", "You did well.", "The price has risen since entry.",
       "Apple fell sharply.", "The share recovered since.", "The trade was up 8% when you sold.", "Down 5 per cent on MSFT.", "You sold at the high.", "The stop saved you money.",
       "You were lucky with the timing.", "The trade beat the market.",
+      // OI-96: the forms kept when the copula + well form went
+      "It is going well.", "The position did well.", "Things have gone badly since.", "The share is up 5%.", "The account was down.", "KO has been up since entry.",
     ];
     for (const bad of results) expect(findOutcomeLanguage(bad).length, bad).toBeGreaterThan(0);
     expect(OUTCOME_PATTERNS.map((p) => p.family)).toEqual(["praise", "money outcome"]);
@@ -183,7 +188,7 @@ describe("the reading — validated and checked", () => {
     expect(validateReading({ paragraphs: Array(4).fill({ text: "x", facts: [] }), next_week: "" })).toBeNull();   // three at most, as the prompt says (review N1)
     expect(validateReading({ paragraphs: Array(3).fill({ text: "x", facts: ["F1"] }), next_week: "" })).not.toBeNull();
     expect(validateReading({ paragraphs: [{ text: "ok", facts: ["f2", " F3 "] }] })).toEqual({ paragraphs: [{ text: "ok", facts: ["F2", "F3"] }], next_week: "" });
-    expect(REVIEW_PROMPT_VERSION).toBe("r3");
+    expect(REVIEW_PROMPT_VERSION).toBe("r4");
     expect(REVIEW_SYSTEM_PROMPT).toMatch(/A1, A2 …\) are the audit's own reading of the facts and are not citable/);
   });
   it("r3 (OI-93): the prompt asks for two paragraphs and the next-week sentence once, in its own field — r2 listed it as a third paragraph beside the schema's field and the model wrote it twice", () => {
@@ -191,5 +196,12 @@ describe("the reading — validated and checked", () => {
     expect(REVIEW_SYSTEM_PROMPT).not.toMatch(/two or three/);
     expect(REVIEW_SYSTEM_PROMPT).toMatch(/in the next_week field only — not in the paragraphs, and written once — one sentence for next week/);
     expect(REVIEW_SCHEMA.required).toEqual(["paragraphs", "next_week"]);
+  });
+  it("r4 (OI-95): F1 and the prompt say the sheet carries no stop levels, closes or account figures by design — their absence is not the student's omission", () => {
+    const a = auditProcess(student, positions, tickets, reports, "2026-11-10");
+    expect(a.facts[0].id).toBe("F1");
+    expect(a.facts[0].text).toMatch(/This sheet carries no stop levels, closes or account figures by design — their absence here is not something the student left out; the journal's own words are the test/);
+    expect(sheetAsText(a)).toMatch(/^F1\. The account runs 2 instruments .* the journal's own words are the test of what was written down\.$/m);
+    expect(REVIEW_SYSTEM_PROMPT).toMatch(/their absence is not something the student failed to record — judge a journal entry by its own words/);
   });
 });

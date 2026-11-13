@@ -129,15 +129,18 @@ export async function reviewStudent(env: Env, rawCode: string, opts: { ai: boole
   };
   const askedAt = new Date().toISOString();
   let pendingId: number | null = null;
-  const record = async (r: ReviewResult, extra: { model?: string | null; input?: number; output?: number; ms?: number } = {}) => {
+  // `extra.reading` is the audit copy (OI-97): the model's reading stored on the row whatever the outcome, so a withheld one
+  // can be read afterwards with a remote query. The page renders a row's reading only when its outcome is 'answered'.
+  const record = async (r: ReviewResult, extra: { model?: string | null; input?: number; output?: number; ms?: number; reading?: Reading | null } = {}) => {
+    const stored = extra.reading ?? r.reading;
     try {
       if (pendingId !== null) {
         await env.DB.prepare("UPDATE reviews SET outcome = ?1, audit = ?2, reading = ?3, grounding = ?4, model = ?5, input_tokens = ?6, output_tokens = ?7, ms = ?8 WHERE id = ?9")
-          .bind(r.outcome, JSON.stringify(auditForRow(audit)), r.reading ? JSON.stringify(r.reading) : null, r.grounding ? JSON.stringify(r.grounding) : null, extra.model ?? null, extra.input ?? null, extra.output ?? null, extra.ms ?? null, pendingId).run();
+          .bind(r.outcome, JSON.stringify(auditForRow(audit)), stored ? JSON.stringify(stored) : null, r.grounding ? JSON.stringify(r.grounding) : null, extra.model ?? null, extra.input ?? null, extra.output ?? null, extra.ms ?? null, pendingId).run();
         return;
       }
       await env.DB.prepare("INSERT INTO reviews (code, asked_at, as_of, prompt_version, outcome, audit, reading, grounding, model, input_tokens, output_tokens, ms) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)")
-        .bind(code, askedAt, audit.asOf, REVIEW_PROMPT_VERSION, r.outcome, JSON.stringify(auditForRow(audit)), r.reading ? JSON.stringify(r.reading) : null, r.grounding ? JSON.stringify(r.grounding) : null, extra.model ?? null, extra.input ?? null, extra.output ?? null, extra.ms ?? null).run();
+        .bind(code, askedAt, audit.asOf, REVIEW_PROMPT_VERSION, r.outcome, JSON.stringify(auditForRow(audit)), stored ? JSON.stringify(stored) : null, r.grounding ? JSON.stringify(r.grounding) : null, extra.model ?? null, extra.input ?? null, extra.output ?? null, extra.ms ?? null).run();
     } catch { /* the receipt is a convenience; the page still renders */ }
   };
 
@@ -205,7 +208,7 @@ export async function reviewStudent(env: Env, rawCode: string, opts: { ai: boole
       : grounding.unknownFacts.length ? `a citation to a fact not on the sheet: ${grounding.unknownFacts[0].ids.join(", ")}`
       : "a paragraph with no citation";
     const r: ReviewResult = { ...withAudit, outcome: "rejected", reading: null, grounding, reason: `The AI's reading was withheld by the course's checks (${why}). The audit above is the review — it needs no AI.`, meta };
-    await record(r, { model, input: call.usage.input, output: call.usage.output, ms: meta.ms });
+    await record(r, { model, input: call.usage.input, output: call.usage.output, ms: meta.ms, reading });   // the audit copy (OI-97): kept on the row, shown to no one
     const words = [...grounding.outcomeLanguage, ...grounding.recommendationLanguage];
     await log("review_rejected", 1, `${model} ${tokens}${words.length ? ` — ${words.join("; ")}` : ""}${flagged}`);
     return r;

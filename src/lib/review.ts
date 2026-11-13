@@ -41,8 +41,11 @@ import { extractNumbersWithPrecision, sameValue, FREE_VALUES, findAdvice } from 
  *       student's own words may carry a result and are quoted in fragments only; no outcome words even when the journal uses them.
  *   r3 (2026-11-12, VC-23 / OI-93): the next-week sentence is written once, in the `next_week` field only — r2 listed it as the
  *       third of "two or three paragraphs" beside a separate schema field, and the model wrote it in both (the page printed it twice).
+ *   r4 (2026-11-12, VC-23 fix2 / OI-95): F1 and a prompt line say the sheet carries no stop levels, closes or account figures by
+ *       design — the r3 reading on a live account had read the missing stop level as the student's omission ("not written down
+ *       anywhere on the sheet, so … cannot be checked").
  */
-export const REVIEW_PROMPT_VERSION = "r3";
+export const REVIEW_PROMPT_VERSION = "r4";
 export const REVIEW_DAILY_CAP_DEFAULT = 3;      // readings per student per 24 hours
 export const REVIEW_GLOBAL_CAP_DEFAULT = 40;    // readings for the whole class per 24 hours
 export const REVIEW_PARAGRAPHS_MAX = 3;
@@ -60,6 +63,7 @@ Rules you must keep:
 - No outcomes: never say whether a trade went well or badly, never mention profit, loss, gains, returns, luck, or whether a decision "paid off" — and never repeat such words from a journal entry. A stop being hit is a process event, not a bad outcome.
 - No advice and no prediction: nothing about what any share will do, nothing about what to buy, sell or hold; the rule decides, the student writes the ticket — say "close" and "write the ticket", not "sell".
 - Quote the student's journal only in short fragments (a few words); do not invent what they were thinking.
+- The sheet carries no stop levels, closes or account figures by design (F1 says so): their absence is not something the student failed to record — judge a journal entry by its own words, and say nothing about figures the sheet does not carry.
 - Reply as JSON matching the schema; no markdown.`;
 
 export const REVIEW_SCHEMA = {
@@ -168,7 +172,7 @@ export function auditProcess(student: Student, positions: PositionRow[], tickets
 
   facts.push({
     id: "F1",
-    text: `The account runs ${student.instruments} instrument${student.instruments === 1 ? "" : "s"} by the course's rules: open only when the rule is LONG on the latest close; size by instrument risk (fewer shares allowed, never more); close at the stop, writing the ticket at the next opportunity; a journal entry on every ticket saying what the rule said, where the stop is and what you will do if it is hit.`,
+    text: `The account runs ${student.instruments} instrument${student.instruments === 1 ? "" : "s"} by the course's rules: open only when the rule is LONG on the latest close; size by instrument risk (fewer shares allowed, never more); close at the stop, writing the ticket at the next opportunity; a journal entry on every ticket saying what the rule said, where the stop is and what you will do if it is hit. This sheet carries no stop levels, closes or account figures by design — their absence here is not something the student left out; the journal's own words are the test of what was written down.`,
   });
 
   if (tickets.length === 0) {
@@ -304,10 +308,13 @@ export function validateReading(raw: unknown): Reading | null {
  * The family is partial by nature (OI-45's kind, OI-91): it names the common ways a result is praised or blamed, not every
  * way. Widened at the v0.13.0 review (F4) from the six phrases the first version pinned; "gain", "impressive" and
  * "fortunate" dropped as over-catchers ("you will gain a clearer record"); a figure required after "return of/on".
+ * OI-96 (13 Nov, after the first live rejection): the copula + well/badly form dropped — "well" after is/was/are is an adverb on
+ * what follows ("is well short of the template", "was well followed", "is well below the entry by design"); went/going/gone well,
+ * did well and copula + up/down stay.
  */
 export const OUTCOME_PATTERNS: { family: string; re: RegExp }[] = [
   { family: "praise", re: /\b(well done|congratulations?|(?:good|great|nice|excellent|fine|smart|clever|wise) (?:job|work|result|outcome|call|trade|move|timing)|nice (?:gain|profit)|you (?:were|are) right\b|well[- ]?(?:timed|judged|played)|paid off|(?:it|that|this|trade|decision|which) worked out\b|came out ahead|(?:better|worse) off|(?:a |an )?(?:good|bad|poor|great|excellent) (?:outcome|result)|(?:a |an )?successful (?:trade|sale|close|position|outcome|week|month)|in the money|in the green|in the red|a win\b|winner|loser)\b/i },
-  { family: "money outcome", re: /\b((?:made|lost|earned|gained|banked|pocketed|making|losing)\s+(?:a |some |real |good |any )?(?:profit|money|loss|gains?|value|\$|€|\d)|profits?\b|profitabl(?:e|y)|(?<!stop[- ])(?<!stop )loss(?:es)?\b(?!\s+of\s+(?:nerve|confidence|discipline|focus|patience|habit))|p&l|p\/l|return(?:s|ed)?\s+(?:of|on)\s+(?:about |roughly |some )?[\$€]?\d|(?:went|gone|going|is|are|was|were|has been|have been)\s+(?:well|badly|up|down)\b|did (?:well|badly)|(?:has|had|have)\s+(?:risen|fallen|recovered|rallied)\b|(?:rose|fell|climbed|dropped|jumped|slid|rallied|recovered|tumbled|soared|slumped)\s+(?:sharply|steeply|hard|back|further|since|by\s+\d|\d|to\s+[\$€]?\d|a lot)|(?:up|down)\s+(?:by\s+)?\d+(?:\.\d+)?\s*(?:%|per\s?cent|percent|points?)|sold (?:at|near|above|below) the (?:high|low|top|bottom)|saved you (?:money|[\$€]?\d)|outperform|underperform|beat the market|lucky|unlucky)/i },
+  { family: "money outcome", re: /\b((?:made|lost|earned|gained|banked|pocketed|making|losing)\s+(?:a |some |real |good |any )?(?:profit|money|loss|gains?|value|\$|€|\d)|profits?\b|profitabl(?:e|y)|(?<!stop[- ])(?<!stop )loss(?:es)?\b(?!\s+of\s+(?:nerve|confidence|discipline|focus|patience|habit))|p&l|p\/l|return(?:s|ed)?\s+(?:of|on)\s+(?:about |roughly |some )?[\$€]?\d|(?:went|gone|going)\s+(?:well|badly)\b|(?:is|are|was|were|has been|have been|went|gone|going)\s+(?:up|down)\b|did (?:well|badly)|(?:has|had|have)\s+(?:risen|fallen|recovered|rallied)\b|(?:rose|fell|climbed|dropped|jumped|slid|rallied|recovered|tumbled|soared|slumped)\s+(?:sharply|steeply|hard|back|further|since|by\s+\d|\d|to\s+[\$€]?\d|a lot)|(?:up|down)\s+(?:by\s+)?\d+(?:\.\d+)?\s*(?:%|per\s?cent|percent|points?)|sold (?:at|near|above|below) the (?:high|low|top|bottom)|saved you (?:money|[\$€]?\d)|outperform|underperform|beat the market|lucky|unlucky)/i },
 ];
 export function findOutcomeLanguage(text: string): string[] {
   const hits: string[] = [];
