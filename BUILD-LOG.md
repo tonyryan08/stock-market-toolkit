@@ -353,8 +353,10 @@ Open items carried into Phase 3 (from the review's N11): EDGAR from Cloudflare's
 **Verified — machine (sandbox), after the review.** 628/628 and `tsc` clean. On the local Worker again, on the same gate-seed D1 the first run left (GOOD held, a saved plan in the pre-review shape): the saved plan read as a plan without its capital; the page on the judge's facts ($9,986.03 value, $5,199.56 cash, N = 2, 6% each, room for 1); NEAR fitted to the cash ("the rule's size is 133 shares, 69 fit"); raise with no thesis → "Not raised: Write the thesis …", nothing written; a cross-site `Origin` → 403, nothing written; raise with a thesis → "Ticket accepted: open 69 × NEAR … stop $73.97", the position on the account's page with that stop and the journal "… Thesis: the near miss is one test short …"; the account after $21.32 cash — the planner's fit and the judge agree to the cent; the student's identity → 403 on the page and the raise; the door off → "the code is the key", the CSV 200. The config restored byte for byte, `.dev.vars` deleted, the state directory restored.
 
 **Verified — hand (gates "done", for the tutor).**
-- [ ] `npm test` 628/628; `npm run check` silent
-- [ ] Migration 0014 local and remote; `npm run deploy`
-- [ ] VC-25 — the planner on the live site (setup guide F4), the closure appended to the record
+- [x] `npm test` 628/628 — not pasted; the push carries the shipped files byte for byte
+- [x] Migration 0014 local and remote; `npm run deploy` — applied 13 Nov ~21:45 (the live `/plan` at VC-25 is the evidence)
+- [x] `TUTOR_EMAILS` re-put 21:51 — the first value had matched nobody since the switch (OI-109; `/api/me` `tutor: false` → `true`)
+- [x] VC-25 — run 21:56–22:12 by the builder in the pane on the tutor's sign-in: (a)–(f) and the room-0 raise met, nothing written; the acceptance path and (h) not observed live (both test accounts full; one enrolled address) — the closure appended to the record
 - [ ] The review's resolution table read (`docs/reviews/v110-independent-review.md`)
-- [ ] Committed and pushed (GitHub Desktop) — "After the course: the planner, v1.1.0"
+- [x] Committed and pushed 13 Nov 22:11 as `6197f68` ("the planner": the 17 shipped paths, byte-identical, nothing forbidden)
+- [ ] fix1 committed — the closure, OI-109 (`tutorEmails` tolerant of quotes and the key name), OI-110 (the room-0 sentence); 629 tests

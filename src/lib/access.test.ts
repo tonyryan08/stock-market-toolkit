@@ -15,6 +15,10 @@ describe("TUTOR_EMAILS", () => {
     expect(tutorEmails(TUTOR)).toEqual(["tutor@example.ie", "second@example.com"]);
     expect(tutorEmails({ TUTOR_EMAILS: " a@b.c ;; nonsense , " })).toEqual(["a@b.c"]);
     expect(tutorEmails({})).toEqual([]);
+    // OI-109: a value typed like a .dev.vars line, or quoted, matched nobody at the v1.1.0 apply
+    expect(tutorEmails({ TUTOR_EMAILS: 'TUTOR_EMAILS="tutor@example.ie"' })).toEqual(["tutor@example.ie"]);
+    expect(tutorEmails({ TUTOR_EMAILS: "'Tutor@Example.ie', \"second@example.com\"" })).toEqual(["tutor@example.ie", "second@example.com"]);
+    expect(isTutor("tutor@example.ie", { TUTOR_EMAILS: 'TUTOR_EMAILS="tutor@example.ie"' })).toBe(true);
     expect(isTutor("TUTOR@example.ie", TUTOR)).toBe(true);
     expect(isTutor("student@example.ie", TUTOR)).toBe(false);
     expect(isTutor(null, TUTOR)).toBe(false);

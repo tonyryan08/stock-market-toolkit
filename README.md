@@ -22,7 +22,7 @@ Prerequisites: Node 20+. Five secrets (see `.dev.vars.example` and `docs/api-key
 
 ```sh
 npm ci             # a fresh clone: installs exactly the lockfile (npm install under another npm rewrites it — Phase 3 review N16); `npm install` after a shipment that changes a pin
-npm test           # 628 tests
+npm test           # 629 tests
 npm run check      # wrangler types + tsc
 npm run dev        # http://127.0.0.1:8787 (wrangler binds the IPv4 loopback; `localhost` can resolve to ::1 on Windows and not answer)
 ```
@@ -189,7 +189,7 @@ This project doubles as a working demonstration of AI-assisted delivery: design 
 | 12 | Demo day | The real student logins (Cloudflare Access, `/me`), the kit assembled, this README, v1.0 | 13 Nov (v1.0.0) | v1.0.0 review · VC-24 |
 | after | The planner | The tutor's workbook: the watchlist ranked by the tests, the top names sized, stopped and priced, the tickets raised through the judge (`/plan`) | 13 Nov (v1.1.0) | v1.1.0 review · VC-25 |
 
-**What the record holds, by the numbers:** 24 decisions in the syllabus; 11 written reviews and 2 briefs in `docs/reviews/` (one review before every important shipment from week 5 on); 24 numbered live checks in `docs/data-provider-checks.md` (there is no VC-11; two carry letters), every one closed on evidence or still open and saying so; 108 register items in `docs/OPEN-ITEMS.md`, each marked built, verified or done — the three are not the same thing — with the open ones read aloud at demo day; and the mistakes kept on purpose as exhibits (a code printed on a page, a seed shipped stale, a false positive on the first live rejection), because a course that teaches "find the register, find the number" could hardly hide its own.
+**What the record holds, by the numbers:** 24 decisions in the syllabus; 11 written reviews and 2 briefs in `docs/reviews/` (one review before every important shipment from week 5 on); 25 numbered live checks in `docs/data-provider-checks.md` (there is no VC-11; two carry letters), every one closed on evidence or still open and saying so; 110 register items in `docs/OPEN-ITEMS.md`, each marked built, verified or done — the three are not the same thing — with the open ones read aloud at demo day; and the mistakes kept on purpose as exhibits (a code printed on a page, a seed shipped stale, a false positive on the first live rejection), because a course that teaches "find the register, find the number" could hardly hide its own.
 
 ## License
 

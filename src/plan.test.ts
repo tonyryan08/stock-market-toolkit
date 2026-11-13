@@ -240,6 +240,12 @@ describe("raising the tickets goes through the ticket judge (decision 24 e)", ()
     const none = await req(db(), `/plan/${ADA.code}`, undefined, form({ action: "raise" }));
     expect(await none.text()).toContain("Nothing to raise: no row is ticked.");
   });
+  it("OI-110: with no room tonight nothing is tried, and the sentence says why", async () => {
+    const d = db({ positions: [{ id: 1, code: ADA.code, symbol: "GOOD", status: "open", opened_on: "2026-11-10", entry_price: 60, units: 50, exposure: 3000, stop_gap: 6, high_since: 60, stop_level: 54, stop_hit_on: null, instrument_risk: 20, realign_date: null, closed_on: null, exit_price: null, pnl: null, open_ticket_id: 1, close_ticket_id: null }, { id: 2, code: ADA.code, symbol: "FLAT", status: "open", opened_on: "2026-11-10", entry_price: 60, units: 10, exposure: 600, stop_gap: 6, high_since: 60, stop_level: 54, stop_hit_on: null, instrument_risk: 20, realign_date: null, closed_on: null, exit_price: null, pnl: null, open_ticket_id: 2, close_ticket_id: null }] });   // N = 2, two open: no room
+    const r = await req(d, `/plan/${ADA.code}`, undefined, form({ action: "raise", pick_DEAR: "on", units_DEAR: "5", thesis_DEAR: THESIS }));
+    expect(await r.text()).toContain("Nothing raised: the account has no room — 2 instruments, 2 open. 1 ticked row was left as it is (DEAR). Close a position, or set more instruments (npm run enrol -- --set-instruments CODE N).");
+    expect(d.ran("INSERT INTO tickets").length).toBe(0);
+  });
   it("review N2: only the account's room is tried, in rank order, and the rows left are named", async () => {
     const d = db({ signals: [sig("GOOD"), sig("DEAR", { close: 100, forecast: 3.1 }), sig("FLAT", { forecast: 2 })] });   // three longs, N = 2
     const r = await req(d, `/plan/${ADA.code}`, undefined, form({ action: "raise", pick_GOOD: "on", units_GOOD: "5", thesis_GOOD: THESIS, pick_DEAR: "on", units_DEAR: "5", thesis_DEAR: THESIS, pick_FLAT: "on", units_FLAT: "5", thesis_FLAT: THESIS }));

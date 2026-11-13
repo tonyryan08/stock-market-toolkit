@@ -232,7 +232,7 @@ New students from now on: `npm run enrol -- --name "…" --capital 10000 --email
 
 ### E2. The tutor's secret
 
-Your own address (or addresses, comma-separated) — these open every student's page. Stage it outside the project folder as with the other secrets (the Runbook's "Secrets" paragraph):
+Your own address (or addresses, comma-separated) — these open every student's page. **The value is the bare address** — `you@example.com`, not `TUTOR_EMAILS="you@example.com"` (the `.dev.vars` line is for `.dev.vars` only); a value with the key name or quotes matched nobody at the v1.1.0 apply (OI-109), silently: `/api/me` is the check — `"tutor": true`. Stage it outside the project folder as with the other secrets (the Runbook's "Secrets" paragraph):
 ```
 npx wrangler secret put TUTOR_EMAILS
 ```

@@ -176,6 +176,11 @@ export function planRoutes(loadGate: GateLoader): Hono<{ Bindings: Env }> {
         const room = roomOf(l);
         const tried = built.rows.slice(0, room);
         const left = built.rows.slice(room);
+        if (tried.length === 0) {
+          // no room tonight: nothing is tried, and the sentence says why (VC-25, OI-110 — "0 of 0 tickets accepted" was the first wording)
+          flash = { kind: "no", text: `Nothing raised: the account has no room — ${l.account.instruments} instrument${l.account.instruments === 1 ? "" : "s"}, ${l.account.openCount} open. ${left.length} ticked row${left.length === 1 ? " was" : "s were"} left as ${left.length === 1 ? "it is" : "they are"} (${left.map((r) => r.symbol).join(", ")}). Close a position, or set more instruments (npm run enrol -- --set-instruments CODE N).` };
+          return c.html(planPage(l, built, g.gate, flash, []), 200, { "cache-control": "no-store" });
+        }
         for (const r of tried) {
           if (r.blocked) {
             const why: Reason = { code: "planner", message: r.unitsText !== null ? r.problems[0] : r.units === 0 ? "0 shares: nothing to raise — fit a row above, or overwrite." : `Write the thesis — what would prove you wrong, and why this size — in at least ${JOURNAL_MIN} characters. The facts above are the planner's; the decision is yours, and the journal entry is the ticket.` };

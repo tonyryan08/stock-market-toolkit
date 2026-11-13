@@ -33,9 +33,17 @@ export type Door = {
 
 export const DOOR_OFF: Door = { on: false, identity: null, tutor: false };
 
-/** TUTOR_EMAILS: "a@x.ie, b@y.com" → ["a@x.ie", "b@y.com"], lower-cased, blanks dropped. */
+/**
+ * TUTOR_EMAILS: "a@x.ie, b@y.com" → ["a@x.ie", "b@y.com"], lower-cased, blanks dropped. A value typed the way a
+ * `.dev.vars` line reads — `TUTOR_EMAILS="a@x.ie"`, or quoted — matched nobody, silently, at the v1.1.0 apply
+ * (VC-25, OI-109): the key name and surrounding quotes are now stripped from each address before it is compared.
+ */
 export function tutorEmails(env: { TUTOR_EMAILS?: string }): string[] {
-  return (env.TUTOR_EMAILS ?? "").split(/[,\s;]+/).map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@"));
+  return (env.TUTOR_EMAILS ?? "")
+    .replace(/^\s*TUTOR_EMAILS\s*=/i, "")
+    .split(/[,\s;]+/)
+    .map((e) => e.trim().replace(/^["'`]+|["'`]+$/g, "").toLowerCase())
+    .filter((e) => e.includes("@"));
 }
 
 export function isTutor(email: string | null | undefined, env: { TUTOR_EMAILS?: string }): boolean {
