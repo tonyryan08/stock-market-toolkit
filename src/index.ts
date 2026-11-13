@@ -31,6 +31,7 @@ import { tutor } from "./tutor";
 import { review } from "./review";
 import { costs } from "./costs";
 import { me, whoLine, doorSentence } from "./me";
+import { planRoutes } from "./plan";
 import { doorOf, accountsFor } from "./lib/access";
 
 type Env = {
@@ -80,6 +81,8 @@ app.route("/", review);
 app.route("/", costs);
 // Week 12: the student's door (/me), the kit's (/kit).
 app.route("/", me);
+// v1.1 (decision 24): the planner — the watchlist as a starting point, sized and stopped by the ticket's own arithmetic.
+app.route("/", planRoutes((env) => loadGate(env as Env)));
 
 app.get("/", async (c) => {
   // The landing is a constant page but for one line: who Access says is here, and where their page is (week 12).

@@ -41,7 +41,7 @@ async function latestSignal(db: D1Database, symbol: string): Promise<SignalFact 
 async function tickerInfo(db: D1Database, symbol: string): Promise<{ tier: string; status: string; name: string | null } | null> {
   return db.prepare("SELECT tier, status, name FROM tickers WHERE symbol = ?1").bind(symbol).first<{ tier: string; status: string; name: string | null }>();
 }
-async function loadStudent(db: D1Database, code: string): Promise<Student | null> {
+export async function loadStudent(db: D1Database, code: string): Promise<Student | null> {
   const s = await db.prepare("SELECT code, name, capital, instruments FROM students WHERE code = ?1").bind(code).first<Student>();
   return s ? { ...s, instruments: Math.max(1, Math.min(SIZING.maxInstruments, Number(s.instruments) || 1)) } : null;
 }
@@ -63,10 +63,10 @@ function reportNow(student: Student, positions: PositionRow[], tickets: TicketRo
   const prev = rows[0] ?? null;
   return buildReport(student, marked, prev ? Math.max(prev.hwm, prev.account_value) : null, night ?? marked.date ?? prev?.date ?? "—");
 }
-async function loadPositions(db: D1Database, code: string): Promise<PositionRow[]> {
+export async function loadPositions(db: D1Database, code: string): Promise<PositionRow[]> {
   return (await db.prepare("SELECT * FROM positions WHERE code = ?1 ORDER BY id").bind(code).all<PositionRow>()).results;
 }
-async function loadTickets(db: D1Database, code: string): Promise<TicketRow[]> {
+export async function loadTickets(db: D1Database, code: string): Promise<TicketRow[]> {
   return (await db.prepare("SELECT * FROM tickets WHERE code = ?1 ORDER BY id").bind(code).all<TicketRow>()).results;
 }
 
@@ -282,9 +282,10 @@ async function acceptTicket(db: D1Database, req: { code: string; symbol: string;
   return { landed: true, id: typeof id === "number" ? id : null };
 }
 
-type TicketOutcome = { status: 201 | 404 | 409 | 422; body: Record<string, unknown>; reasons?: Reason[] };
+export type TicketOutcome = { status: 201 | 404 | 409 | 422; body: Record<string, unknown>; reasons?: Reason[] };
 
-async function handleTicket(db: D1Database, raw: Record<string, unknown>): Promise<TicketOutcome> {
+/** The ticket judged and, if accepted, written — the API, the form and (v1.1) the planner all come through here. */
+export async function handleTicket(db: D1Database, raw: Record<string, unknown>): Promise<TicketOutcome> {
   const parsed = parseTicket(raw);
   if (!parsed.ok) return { status: 422, body: { error: "The ticket was not accepted.", reasons: parsed.reasons }, reasons: parsed.reasons };
   const req = parsed.req;
@@ -363,7 +364,7 @@ const safeFlags = (f: string): string[] => { try { const v = JSON.parse(f); retu
 // The student's page and its form
 // ---------------------------------------------------------------------------
 type Latest = Record<string, SignalFact>;
-async function latestFor(db: D1Database, symbols: string[]): Promise<Latest> {
+export async function latestFor(db: D1Database, symbols: string[]): Promise<Latest> {
   const out: Latest = {};
   for (const s of [...new Set(symbols)]) { const sig = await latestSignal(db, s); if (sig) out[s] = sig; }
   return out;

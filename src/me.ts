@@ -61,7 +61,8 @@ export function whoLine(gate: Door, accounts: { code: string; name: string }[]):
   if (!gate.on) return "";
   if (!gate.identity) return `<p class="who">Signed in through Cloudflare Access, but with no email on the identity — ask the tutor.</p>`;
   const who = esc(gate.identity.email) + (gate.tutor ? " (the tutor)" : "");
-  const out = ` &middot; <a href="${SIGN_OUT}">sign out</a></p>`;
+  // v1.1 (decision 24 d): the planner is the tutor's; the link shows for the tutor only
+  const out = `${gate.tutor ? ` &middot; <a href="/plan">the planner</a>` : ""} &middot; <a href="${SIGN_OUT}">sign out</a></p>`;
   if (accounts.length === 1) return `<p class="who">Signed in as ${who} &middot; <a href="/tickets/${esc(accounts[0].code)}">your page</a> &middot; <a href="/kit">the kit</a>${out}`;
   if (accounts.length > 1) return `<p class="who">Signed in as ${who} &middot; <a href="/me">your pages (${accounts.length})</a> &middot; <a href="/kit">the kit</a>${out}`;
   return `<p class="who">Signed in as ${who}${gate.tutor ? ` &middot; the enrolment list is <code>npm run enrol -- --list</code>` : " &middot; no account is linked to this email yet — the tutor links it"} &middot; <a href="/kit">the kit</a>${out}`;

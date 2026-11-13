@@ -256,6 +256,34 @@ In a private window: the site answers with Cloudflare's page; your own address �
 
 **Locally**, `wrangler dev` simulates the door with an `access.dev` block in `wrangler.jsonc` — `"access": { "dev": { "aud": "local", "identity": { "email": "you@example.com" } } }` — and `TUTOR_EMAILS` in `.dev.vars`; remove the block to rehearse the door switched off; if `/api/me` does not change after an edit to the block, restart `wrangler dev` (its watcher missed the block being put back, at the build). **If the door must come off** (a policy mistake on the night): the same Access tab, remove the policy — the Worker falls back to the code scheme at once and `/me` says so.
 
+## Part F — The planner (v1.1, decision #24): after the course
+
+The tutor's workbook: `/plan/<code>` ranks tonight's names by the tests, fills the account's instrument count with the top ones, sizes each by the Starter System, prints the stop and the costs, and raises the tickets through the ticket judge. Behind the door it opens for `TUTOR_EMAILS` only.
+
+### F1. Migration 0014
+
+One new table, `plans` — one saved plan per account (the inputs and the picks as typed; never the computed figures):
+
+```
+npx wrangler d1 migrations apply stock-market-db --local
+```
+```
+npx wrangler d1 migrations apply stock-market-db --remote
+```
+Expect `0014_plans.sql ✅` from each. Without it the page still opens; *Save plan* says "the plans table is missing — migration 0014 has not been applied".
+
+### F2. Deploy, then open it
+
+`npm run deploy`, then — signed in as the tutor — `/plan` lists the paper accounts linked to your address and takes a code; the landing's signed-in line links it ("the planner") for the tutor only. Nothing is written until *Save plan* (one row) or *Raise the tickets* (through the judge).
+
+### F3. The euro lines
+
+Type today's US-dollars-per-euro rate from the broker's screen into the "US dollars per euro" cell (a plain number, such as 1.08): the toolkit fetches no FX rate and will not guess one, so the euro columns stay blank until you do. The broker lines are the published schedule in `src/lib/costs.ts` (`BROKER`): €1 + €1 an order, 0.25% conversion each way, the spread as typed, the connectivity fee named once per exchange. The stop shown is the course's — read on the close, acted on next day by a ticket — not a resting stop-loss order at the broker.
+
+### F4. The rehearsal — VC-25
+
+As the tutor: open `/plan/<your code>`; the top names ticked and sized on the account's value and cash as printed; type a rate; *Recompute*; overwrite one row's units to twice the rule's size and *Recompute* again — the row says "Oversized … The ticket will refuse it; fewer is allowed."; *Save plan*; reload — "a saved plan is shown"; download the CSV and open it in Excel; *Raise the tickets* for one row with its thesis left empty — "Not raised: Write the thesis …" and nothing written; type a thesis and raise again — "Ticket accepted … stop $X", and the account's page shows the position with the same stop; the page after lists the name under "Not eligible" as "already held" (it has no checkbox now). As a student (a second private window): `/plan/<a real code>` answers 403, "the planner is the tutor's for now", and the landing shows no planner link. Paste what you saw (statuses and sentences; no codes) and the closure is written as a docs-only fix.
+
 ## Done — the acceptance checklist
 
 These mirror the hand-verification gates in `BUILD-LOG.md`:
