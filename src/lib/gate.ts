@@ -116,7 +116,7 @@ export function describeWatchlist(w: Watchlist): string[] {
   const out: string[] = [];
   const c = w.counts;
   if (c.open === 0) {
-    out.push(`The gate tonight: nothing. ${c.survivors === 0 && c.candidates === 0 ? "No company passes either Graham screen" : `${c.survivors + c.candidates} name${c.survivors + c.candidates === 1 ? " passes" : "s pass"} a Graham screen but ${c.survivors + c.candidates === 1 ? "is" : "are"} not long on the rule`}, so there is no name the course would ticket by both rules — the rule's answer is cash, and a journal line that says "waiting".`);
+    out.push(`The gate tonight: nothing. ${c.survivors === 0 && c.candidates === 0 ? "No company passes either Graham screen" : `${c.survivors + c.candidates} name${c.survivors + c.candidates === 1 ? " passes" : "s pass"} a Graham screen but ${c.survivors + c.candidates === 1 ? "is" : "are"} not long on the rule`}, so there is no name the course would write a ticket for by both rules — the rules' answer is to hold cash, and a journal line that says "waiting".`);
   } else {
     out.push(`The gate tonight: ${c.open} name${c.open === 1 ? "" : "s"} pass${c.open === 1 ? "es" : ""} a Graham screen and ${c.open === 1 ? "is" : "are"} long on the rule — ${w.open.map((r) => r.symbol).join(", ")}. The Starter System sizes it; the stop closes it; the ticket is the student's.`);
   }

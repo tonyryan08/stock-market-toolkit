@@ -109,7 +109,7 @@ describe("describeReport — statements a student can check, never instructions"
     const m = markToMarket(student, [aaplOpen], [aaplTicket], latest);
     const lines = describeReport(buildReport(student, m, null, "2026-11-03"), student.capital);
     expect(lines[0]).toBe("On the 2026-11-03 close the account is worth $9,867.22: $3,893.02 cash and $5,974.20 in 1 open position — −1.3% since enrolment ($0.00 realised, −$115.56 open).");
-    expect(lines[1]).toMatch(/^The high-water mark is \$10,000\.00; the account is 1\.3% below it\. At a 12% target a one-in-twenty year is about −20%/);
+    expect(lines[1]).toMatch(/^The high-water mark \(the account's highest value so far\) is \$10,000\.00; the account is 1\.3% below it\. That is normal\. A 12% target means the account moves about 12% in an ordinary year, so one year in twenty is down about 20%/);   // v1.2.0: the same figures in plainer sentences (the reader review)
     expect(lines[2]).toBe("The open positions carry 11.5% a year of the 12% budget (AAPL 11.5%); the account runs 1 instrument, each sized at 12%.");
     expect(lines[3]).toBe("The nearest stop is AAPL, 7.8% below the latest close.");
     for (const l of lines) expect(l).not.toMatch(/\b(you should|buy|sell now)\b/i);
@@ -137,7 +137,7 @@ describe("describeReport — statements a student can check, never instructions"
     expect(at[2]).toMatch(/^No open positions: the account carries no market risk tonight/);
     const hit = markToMarket(student, [{ ...aaplOpen, stop_hit_on: "2026-11-03" }], [aaplTicket], latest);
     const lines = describeReport(buildReport(student, hit, null, "2026-11-03"), student.capital);
-    expect(lines[3]).toBe("1 stop has been hit (AAPL): the rule says close — the close ticket is yours to write at the next decision, with the journal line.");
+    expect(lines[3]).toBe("1 stop has been hit (AAPL): the rule says close, whatever the price does after — the close ticket is yours to write at the next decision, with the journal line.");
   });
   it("summarizeReport is one line with the numbers that matter", () => {
     const m = markToMarket(student, [aaplOpen], [aaplTicket], latest);

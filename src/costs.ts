@@ -7,7 +7,7 @@
  * the Finance (No. 2) Bill 2026. No D1, no model, no provider.
  */
 import { Hono } from "hono";
-import { PAGE_CSS, FONTS_HTML, esc, SHARED_CSS } from "./page";
+import { PAGE_CSS, FONTS_HTML, esc, SHARED_CSS, nav } from "./page";
 import { parseCostInput, worksheet, CostInputError, DEFAULT_INPUT, TAX_RULES, BROKER, billRules, statusSentence, type Worksheet, type TradeCosts, type Regime, type Basis } from "./lib/costs";
 
 export const costs = new Hono();
@@ -63,10 +63,11 @@ ${SHARED_CSS}
   h2 { font-family:"Libre Caslon Text",serif; font-size:1.2rem; margin:1.6rem 0 .5rem; }
   h3 { font-size:1rem; margin:.2rem 0 .3rem; }
   form.ws { background:rgba(255,255,255,.55); border:1px solid var(--rule); border-radius:6px; padding:1rem; margin:1rem 0; display:grid; gap:.7rem; grid-template-columns: repeat(4, 1fr); }
-  form.ws label { display:flex; flex-direction:column; font-size:.78rem; color:var(--faint); gap:.2rem; }
-  form.ws input, form.ws select { font: inherit; padding:.4rem .5rem; border:1px solid var(--rule); border-radius:4px; background:#fff; }
+  form.ws label { display:flex; flex-direction:column; font-size:.78rem; color:var(--faint); gap:.2rem; min-width:0; }
+  form.ws input, form.ws select { font: inherit; padding:.4rem .5rem; border:1px solid var(--rule); border-radius:4px; background:#fff; width:100%; min-width:0; }
   form.ws button { font: inherit; padding:.5rem 1rem; border:1px solid var(--entry); background:var(--entry); color:#fff; border-radius:4px; cursor:pointer; align-self:end; }
   @media (max-width: 700px) { form.ws { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 420px) { form.ws { grid-template-columns: 1fr; } }
   .reading { background:#fff; border:1px solid var(--rule); border-radius:6px; padding:.8rem 1.1rem; margin:.8rem 0; font-size:.95rem; line-height:1.55; }
   table { width:100%; border-collapse:collapse; font-size:.85rem; }
   th, td { padding:.35rem .5rem; border-bottom:1px solid var(--rule); text-align:left; vertical-align:top; }
@@ -84,22 +85,23 @@ ${SHARED_CSS}
   dl.rules dt { font-weight:600; margin-top:.6rem; } dl.rules dd { margin:.2rem 0 0 0; font-size:.85rem; color:var(--ink); }
   .err { color:var(--stamp); }
   .cols { display:grid; grid-template-columns: 1fr 1fr; gap:1rem; } @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
+  .cols > *, .three > * { min-width:0; }   /* a wide table scrolls inside its box instead of widening the page (phones) */
 </style></head>
 <body><main>
-  <p class="back"><a href="/">← course home</a> · <a href="/size">calculator</a> · <a href="/signals">signals</a> · <a href="/tutor">tutor</a></p>
-  <p class="eyebrow">Week 11 · the real world</p>
+  ${nav("/costs")}
+  <p class="eyebrow">Costs &amp; tax &middot; the real world</p>
   <h1>What a trade really costs — and what the gain is taxed at</h1>
-  <p class="lede">The same paper trade, priced in euro the way an Irish student would pay for it: the trade's costs on a published schedule beside the course's own model, the holding's costs, and the tax on the gain three ways — as shares, as a fund or ETF, and inside the Individual Investment Account the Finance (No. 2) Bill 2026 ${bill ? "would open" : "opens"} on 1 July 2027. Change the numbers; the order of the three changes with them.</p>
+  <p class="lede">This page shows what it really costs to buy and sell shares from Ireland, and what the taxman takes. Type a trade in the boxes below and press <em>Work it out</em>; the worked example starts you off. The worksheet prices the trade in euro on a real broker's published charges (a broker is the firm that holds your account and places your orders; DEGIRO's are used because it publishes them — that is not a recommendation) beside the course's own estimate. It adds what holding costs. Then it taxes the same gain three ways: as shares (capital gains tax, CGT), as a fund or ETF (an exchange-traded fund: a basket of shares you buy and sell like one share; its gains are taxed under a different rule, the exit tax), and inside the Individual Investment Account that the Finance (No. 2) Bill 2026 ${bill ? "would open" : "opens"} on 1 July 2027. Change the numbers and the order of the three can change. Every figure carries its date.</p>
   <p class="status"><b>As checked on ${esc(rules.checkedOn)}.</b> ${esc(statusSentence(rules))}</p>
   ${error ? `<p class="err">${esc(error)} Showing the defaults.</p>` : ""}
   <form class="ws" method="get" action="/costs">
     <label>Invested, euro <input name="invested" inputmode="decimal" value="${i.invested}"></label>
     <label>Gain over the holding, % <input name="gainPct" inputmode="decimal" value="${i.gainPct}"></label>
     <label>Years held (0 = sold in 2026) <input name="years" inputmode="numeric" value="${i.years}"></label>
-    <label>The share's market <select name="market"><option value="US"${sel("US")}>US (no stamp duty)</option><option value="IE"${sel("IE")}>Irish (1% stamp duty)</option><option value="UK"${sel("UK")}>UK (0.5%)</option></select></label>
+    <label>The share's market (stamp duty is the state's tax on the purchase itself) <select name="market"><option value="US"${sel("US")}>US (no stamp duty)</option><option value="IE"${sel("IE")}>Irish (1% stamp duty)</option><option value="UK"${sel("UK")}>UK (0.5%)</option></select></label>
     <label>Dividend yield, % a year <input name="dividendYieldPct" inputmode="decimal" value="${i.dividendYieldPct}"></label>
-    <label>The ETF's annual charge (TER), % <input name="terPct" inputmode="decimal" value="${i.terPct}"></label>
-    <label>The spread, % of the price <input name="spreadPct" inputmode="decimal" value="${i.spreadPct}"></label>
+    <label>The ETF's annual charge (the TER, taken inside the fund's price), % <input name="terPct" inputmode="decimal" value="${i.terPct}"></label>
+    <label>The spread (the gap between the buying and selling price), % of the price <input name="spreadPct" inputmode="decimal" value="${i.spreadPct}"></label>
     <label>The €${rules.cgt.exemption.toLocaleString("en-IE")} CGT exemption unused this year? <select name="exemptionAvailable"><option value="1"${i.exemptionAvailable ? " selected" : ""}>yes</option><option value="0"${i.exemptionAvailable ? "" : " selected"}>no — already used</option></select></label>
     <button type="submit">Work it out</button>
   </form>
@@ -108,7 +110,7 @@ ${SHARED_CSS}
   <h2>The trade's costs</h2>
   <div class="cols">
     <div><h3>As a ${i.market === "US" ? "US" : i.market === "IE" ? "Irish" : "UK"} share, through a euro account</h3>${table(w.trade.share, "To open and close")}</div>
-    <div><h3>As a euro-listed UCITS ETF (core selection)</h3>${table(w.trade.etf, "To open and close")}<h3>The course's model, for comparison</h3>${table(w.trade.course, "Both tickets' cost lines")}</div>
+    <div><h3>As a euro-listed UCITS ETF (an EU-regulated fund; the broker's core selection)</h3>${table(w.trade.etf, "To open and close")}<h3>The course's model, for comparison</h3>${table(w.trade.course, "Both tickets' cost lines")}</div>
   </div>
   <p class="caption">${esc(BROKER.name)}: US shares €${BROKER.usShare.toFixed(2)} an order, Irish shares €${BROKER.irishShare.toFixed(2)}, core-selection ETFs €${BROKER.coreEtf.toFixed(2)} (€${BROKER.otherEtf.toFixed(2)} outside the selection), currency conversion ${BROKER.fxPct}% each way, €${BROKER.connectivityPerExchangePerYear.toFixed(2)} a year per foreign exchange. Any MiFID broker on an EU regulator's register works the same way; the numbers differ.</p>
   <h2>The holding's costs over ${i.years} year${i.years === 1 ? "" : "s"}</h2>

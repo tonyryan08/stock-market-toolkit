@@ -14,7 +14,7 @@
  * judge decides. Education, not advice: a screen and a calculator, never a pick.
  */
 import { Hono } from "hono";
-import { PAGE_CSS, FONTS_HTML, SHARED_CSS, esc } from "./page";
+import { PAGE_CSS, FONTS_HTML, SHARED_CSS, esc, nav } from "./page";
 import { doorOf, accountsFor, type Door } from "./lib/access";
 import { CODE, JOURNAL_MIN, JOURNAL_MAX, type Student, type Reason } from "./lib/tickets";
 import { markToMarket } from "./lib/risk";
@@ -34,8 +34,11 @@ type Env = { DB: D1Database; TUTOR_EMAILS?: string };
 const NOTE = "Education, not advice. The planner is a screen and a calculator: the names are what two rules say tonight, the sizes are what Carver's rule would hold in a paper account, and nothing on this page is a recommendation to buy, hold or sell anything.";
 
 /** Who may open the planner: the door off → anyone with the code (week 8's scheme); the door on → the tutor only (decision 24 d). */
+/** Is the planner open to the person at the door? The tutor's; anyone's when the door is off (the code is the key). The header's link and the landing's card follow this (v1.2.0 review S1, S2). */
+export const plannerOpen = (gate: Door): boolean => !gate.on || gate.tutor;
+
 export function plannerCheck(gate: Door): { ok: true } | { ok: false; status: 403; reason: string } {
-  if (!gate.on || gate.tutor) return { ok: true };
+  if (plannerOpen(gate)) return { ok: true };
   return { ok: false, status: 403, reason: `The planner is the tutor's for now${gate.identity ? ` — you are signed in as ${gate.identity.email}` : ""}. Your own page is /me.` };
 }
 
@@ -246,6 +249,7 @@ const euro = (v: number) => `€${v.toLocaleString("en-IE", { minimumFractionDig
 
 const CSS = `
   main { max-width: 64rem; }
+  @media (min-width: 1100px) { main { max-width: 76rem; } }   /* the eligible table has sixteen columns; on a wide screen it gets the room */
   h2 { font-family:"Libre Caslon Text",serif; font-size:1.2rem; margin:1.6rem 0 .4rem; }
   .flash { border-radius:6px; padding:.7rem 1rem; margin:1rem 0; font-size:.92rem; }
   .flash.ok { background:#E3EFE7; border:1px solid var(--entry); } .flash.no { background:#F6E4E1; border:1px solid var(--stamp); }
@@ -261,7 +265,7 @@ const CSS = `
   table { width:100%; border-collapse:collapse; font-size:.82rem; }
   th, td { padding:.35rem .45rem; border-bottom:1px solid var(--rule); text-align:left; vertical-align:top; }
   thead th { color:var(--faint); font-weight:400; font-size:.72rem; letter-spacing:.04em; text-transform:uppercase; white-space:nowrap; }
-  thead th .sub { display:block; text-transform:none; letter-spacing:0; font-size:.68rem; white-space:normal; }
+  thead th .sub { display:block; text-transform:none; letter-spacing:0; font-size:.68rem; white-space:nowrap; }
   tbody th { font-weight:500; white-space:nowrap; }
   td.n, th.n { text-align:right; font-family:"IBM Plex Mono",monospace; white-space:nowrap; }
   .nm { display:block; color:var(--faint); font-weight:400; font-size:.72rem; white-space:normal; }
@@ -282,12 +286,28 @@ const CSS = `
   .who { font-size:.9rem; color:var(--faint); }
   .doors { list-style:none; padding:0; margin:1.2rem 0; } .doors li { padding:.6rem 0; border-top:1px solid var(--rule); } .doors li:last-child { border-bottom:1px solid var(--rule); }
   details summary { cursor:pointer; color:var(--entry); font-size:.9rem; margin:.6rem 0; }
-  @media (max-width: 760px) { .nm { display:none; } td.hide, th.hide { display:none; } }
+  @media (max-width: 760px) {
+    .nm { display:none; } td.hide, th.hide { display:none; }
+    /* the eligible table becomes a card per company: each cell on its own line with its label (decision 25 d) */
+    table.plan, table.plan tbody, table.plan tr, table.plan td, table.plan th { display:block; }
+    table.plan thead { display:none; }
+    table.plan tr { border:1px solid var(--rule); border-radius:6px; background:rgba(255,255,255,.55); padding:.5rem .7rem; margin:0 0 .7rem; }
+    table.plan tr.journal-row { margin-top:-.75rem; border-top:0; border-radius:0 0 6px 6px; }
+    table.plan td, table.plan th { border:0; padding:.15rem 0; text-align:left; white-space:normal; }
+    table.plan td.n { text-align:left; }
+    table.plan td.hide { display:block; }
+    table.plan tbody th { font-size:1rem; }
+    table.plan tbody th .nm { display:inline; margin-left:.4rem; }
+    table.plan td[data-label]::before { content:attr(data-label) ": "; color:var(--faint); font-family:"IBM Plex Sans",sans-serif; font-size:.75rem; text-transform:uppercase; letter-spacing:.04em; }
+    table.plan td[data-label=""]::before { content:""; }
+    table.plan td:empty { display:none; }
+    .inputs { grid-template-columns:1fr; }
+  }
 `;
 
 function shell(title: string, body: string): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)}</title><meta name="referrer" content="same-origin">${FONTS_HTML}<style>${PAGE_CSS}${SHARED_CSS}${CSS}</style></head>
-<body><main><p class="back"><a href="/">← course home</a> · <a href="/watchlist">the watchlist</a> · <a href="/signals">the signals</a></p><p class="eyebrow">After the course · the planner · v1.1</p>${body}<footer><p class="notice">${NOTE}</p></footer></main></body></html>`;
+<body><main>${nav("/plan")}<p class="eyebrow">The planner &middot; the tutor's workbook</p>${body}<footer><p class="notice">${NOTE}</p></footer></main></body></html>`;
 }
 
 function emptyPage(reason: string): string {
@@ -299,7 +319,7 @@ function chooserPage(gate: Door, accounts: { code: string; name: string }[]): st
     ? `<ul class="doors">${accounts.map((a) => `<li><b><a href="/plan/${esc(a.code)}">${esc(a.name)}</a></b> <span class="who">a paper account linked to your email</span></li>`).join("")}</ul>`
     : "";
   const who = gate.on && gate.identity ? `<p class="who">Signed in as ${esc(gate.identity.email)}${gate.tutor ? " (the tutor)" : ""} · <a href="${SIGN_OUT}">sign out</a></p>` : `<p class="who">The door is off on this deployment: the code is the key, as on every student page.</p>`;
-  return shell("The planner", `<h1>The planner</h1><p class="lede">The watchlist as a starting point: tonight's names ranked by the tests, the top ones sized by the Starter System at 12% ÷ N on a paper account's value, each with its stop and its costs in dollars and — at a rate you type — in euro. Every row is yours to overwrite; the ticket judge still says no.</p>${who}${list}
+  return shell("The planner", `<h1>The planner</h1><p class="lede">The planner is the tutor's workbook. It takes tonight's companies, ranks them by the course's tests (never by what went up), sizes the top ones for a paper account, shows each one's stop (where the rule says sell) and costs — in dollars, and in euro at a rate you type — and can raise the tickets through the judge, which refuses exactly as a student's page would. Pick an account to start.</p>${who}${list}
   <form class="inputs" method="get" onsubmit="event.preventDefault();var c=this.c.value.trim().toUpperCase();if(c)location.href='/plan/'+encodeURIComponent(c)" style="grid-template-columns:1fr auto;align-items:end">
     <div><label for="c">Plan for a paper account by its code</label><input id="c" name="c" placeholder="K7PM-4R2X" autocapitalize="characters" autocomplete="off" spellcheck="false"></div>
     <div><button type="submit" style="font:inherit;padding:.45rem .9rem;border-radius:4px;border:1.5px solid var(--entry);background:var(--entry);color:#fff;cursor:pointer">Open</button></div>
@@ -332,25 +352,25 @@ function planPage(l: Loaded, p: Plan, gate: Door, flash: Flash | null, outcomes:
     const outcomeHtml = outcomeHtmlOf(c);
     const problems = r?.problems ?? [];
     const unitsValue = r ? (r.unitsText ?? (r.typedUnits === null ? "" : String(r.typedUnits))) : "";
-    return `<tr class="${on ? "on" : ""}">
-      <td><input type="checkbox" name="pick_${esc(c.symbol)}" ${on ? "checked" : ""} aria-label="include ${esc(c.symbol)}"></td>
-      <td class="n">${c.rank ?? ""}</td>
-      <th scope="row"><a href="/prices/${esc(c.symbol)}">${esc(c.symbol)}</a><span class="nm">${esc(c.name ?? "")}</span></th>
-      <td><span class="band ${c.band ?? ""}">${esc(c.band === "gate" ? "GATE" : c.band === "near" ? "near" : c.band === "long" ? "long" : "no books")}</span></td>
-      <td class="n hide" title="Graham tests passed: defensive of 7 · enterprising of 6">${scores(c)}</td>
-      <td class="n hide">${c.forecast === null ? "—" : `${c.forecast > 0 ? "+" : ""}${c.forecast.toFixed(1)}`}</td>
-      <td class="n">${c.instrument_risk === null ? "—" : `${c.instrument_risk.toFixed(1)}%`}</td>
-      <td class="n hide">${esc(c.state_since ?? "—")}</td>
-      <td class="n">${c.close.toFixed(2)}</td>
-      <td class="n">${r ? r.ruleUnits : ""}</td>
-      <td class="n"><input class="units${r?.unitsText ? " bad" : ""}" name="units_${esc(c.symbol)}" value="${esc(unitsValue)}" placeholder="${r ? String(r.units) : "rule's"}" inputmode="numeric" aria-label="units of ${esc(c.symbol)} (blank: the rule's size, fitted)"></td>
-      <td class="n">${r ? money(r.exposure) : ""}</td>
-      <td class="n">${r ? `${r.achievedRiskPct.toFixed(1)}%` : ""}</td>
-      <td class="n">${r ? `${money(r.stopLevel)}<br><span class="why">gap ${money(r.stopGap)} · ${money(r.stopDistance)} to the stop</span>` : ""}</td>
-      <td class="n hide">${r ? `${money(r.costs.open)}<br><span class="why">round trip ${r.costs.roundTripPct === null ? "—" : `${r.costs.roundTripPct.toFixed(2)}%`}</span>` : ""}</td>
-      <td class="n">${r && r.eur ? `${euro(r.eur.value)}<br><span class="why">stop ${euro(r.eur.stopLevel)} · ${euro(r.eur.stopDistance)} to the stop · trip ${euro(r.eur.roundTrip)}</span>` : r ? `<span class="why">—</span>` : ""}</td>
+    return `<tr class="${on ? "on" : ""}" role="row">
+      <td role="cell" data-label="Pick"><input type="checkbox" name="pick_${esc(c.symbol)}" ${on ? "checked" : ""} aria-label="include ${esc(c.symbol)}"></td>
+      <td role="cell" class="n" data-label="Rank">${c.rank ?? ""}</td>
+      <th scope="row" role="rowheader"><a href="/prices/${esc(c.symbol)}">${esc(c.symbol)}</a><span class="nm">${esc(c.name ?? "")}</span></th>
+      <td role="cell" data-label="Band"><span class="band ${c.band ?? ""}">${esc(c.band === "gate" ? "GATE" : c.band === "near" ? "near" : c.band === "long" ? "long" : "no books")}</span></td>
+      <td role="cell" class="n hide" data-label="Graham" title="Graham tests passed: defensive of 7 · enterprising of 6">${scores(c)}</td>
+      <td role="cell" class="n hide" data-label="Forecast">${c.forecast === null ? "—" : `${c.forecast > 0 ? "+" : ""}${c.forecast.toFixed(1)}`}</td>
+      <td role="cell" class="n" data-label="Price moves a year">${c.instrument_risk === null ? "—" : `${c.instrument_risk.toFixed(1)}%`}</td>
+      <td role="cell" class="n hide" data-label="Long since">${esc(c.state_since ?? "—")}</td>
+      <td role="cell" class="n" data-label="Close $">${c.close.toFixed(2)}</td>
+      <td role="cell" class="n" data-label="Rule's size">${r ? r.ruleUnits : ""}</td>
+      <td role="cell" class="n" data-label="Units"><input class="units${r?.unitsText ? " bad" : ""}" name="units_${esc(c.symbol)}" value="${esc(unitsValue)}" placeholder="${r ? String(r.units) : "rule's"}" inputmode="numeric" aria-label="units of ${esc(c.symbol)} (blank: the rule's size, fitted)"></td>
+      <td role="cell" class="n" data-label="Exposure">${r ? money(r.exposure) : ""}</td>
+      <td role="cell" class="n" data-label="Adds to the account's risk">${r ? `${r.achievedRiskPct.toFixed(1)}%` : ""}</td>
+      <td role="cell" class="n" data-label="Stop $">${r ? `${money(r.stopLevel)}<br><span class="why">gap ${money(r.stopGap)}<br>${money(r.stopDistance)} to the stop</span>` : ""}</td>
+      <td role="cell" class="n hide" data-label="Cost to open">${r ? `${money(r.costs.open)}<br><span class="why">trip ${r.costs.roundTripPct === null ? "—" : `${r.costs.roundTripPct.toFixed(2)}%`}</span>` : ""}</td>
+      <td role="cell" class="n" data-label="In euro">${r && r.eur ? `${euro(r.eur.value)}<br><span class="why">stop ${euro(r.eur.stopLevel)}<br>${euro(r.eur.stopDistance)} to the stop<br>trip ${euro(r.eur.roundTrip)}</span>` : r ? `<span class="why">—</span>` : ""}</td>
     </tr>
-    ${on ? `<tr class="journal-row"><td colspan="2"></td><td colspan="14"><p class="facts">${esc(r!.facts)}</p><textarea class="thesis" name="thesis_${esc(c.symbol)}" aria-label="thesis for ${esc(c.symbol)}" maxlength="${JOURNAL_MAX}" placeholder="Thesis: why this name, what would prove you wrong, why this size — at least ${JOURNAL_MIN} characters; the facts above are the planner's, the decision is yours">${esc(r!.thesis)}</textarea>${problems.map((x) => `<p class="problem">${esc(x)}</p>`).join("")}${outcomeHtml}</td></tr>` : outcomeHtml ? `<tr><td colspan="2"></td><td colspan="14">${outcomeHtml}</td></tr>` : ""}`;
+    ${on ? `<tr class="journal-row" role="row"><td role="cell" colspan="2"></td><td role="cell" colspan="14"><p class="facts">${esc(r!.facts)}</p><textarea class="thesis" name="thesis_${esc(c.symbol)}" aria-label="thesis for ${esc(c.symbol)}" maxlength="${JOURNAL_MAX}" placeholder="Thesis: why this name, what would prove you wrong, why this size — at least ${JOURNAL_MIN} characters; the facts above are the planner's, the decision is yours">${esc(r!.thesis)}</textarea>${problems.map((x) => `<p class="problem">${esc(x)}</p>`).join("")}${outcomeHtml}</td></tr>` : outcomeHtml ? `<tr><td colspan="2"></td><td colspan="14">${outcomeHtml}</td></tr>` : ""}`;
   };
 
   const restRow = (c: Candidate) => `<tr class="off">
@@ -376,7 +396,7 @@ function planPage(l: Loaded, p: Plan, gate: Door, flash: Flash | null, outcomes:
 
   return shell(`The planner — ${s.name}`, `
   <h1>The planner <span class="sym">· ${esc(s.name)}</span></h1>
-  <p class="lede">The watchlist as a starting point: tonight's names ranked by the tests — the gate first, then the near misses that are long, then the rule's longs that fail both screens — and within a band the defensive tests passed, the enterprising tests passed, the forecast (the rule's trend strength, from the price series), the lower instrument risk. Never a return. The top names fill the account's instrument count; each is sized by the Starter System at ${SIZING.riskTargetPct}% ÷ N on the account's value tonight — the figures the ticket judge reads — with its stop and its costs. ${l.asOf ? `As of the ${esc(l.asOf)} close.` : "No signals computed yet."} Every row is yours to overwrite; the ticket judge still says no.</p>
+  <p class="lede">This is the plan for one paper account: tonight's companies, ranked by the tests, with the top ones sized and stopped for it. Tick, untick or change any row, then save, or raise the tickets. The order: the ones on the watchlist first (Graham's checklist passed and the trend rule LONG), then the near misses (one test short), then the rest the rule says LONG on. Within each group: more of Graham's seven defensive tests passed, then more of his six enterprising tests, then a stronger trend (the forecast, capped at ±20), then a calmer price (the instrument risk — how much it moves in a year). Never by what went up. The top ones are ticked and sized for this account at ${SIZING.riskTargetPct}% ÷ N risk a year (N is how many companies the account runs at once) on its value tonight — the figures the ticket judge reads — with the stop (where the rule says sell) and the costs. ${l.asOf ? `As of the ${esc(l.asOf)} close.` : "No signals computed yet."} Change anything; the judge (the rules, read against the account before a ticket is accepted) still refuses what breaks them.</p>
   <p class="who">${who} · <a href="/tickets/${esc(s.code)}">the account's page</a> · <a href="/plan/${esc(s.code)}/plan.csv">download the plan as CSV</a> · <a href="/api/plan/${esc(s.code)}">JSON</a>${l.saved ? " · <em>a saved plan is shown</em>" : l.savedUnreadable ? " · <em>the saved plan could not be read just now — tonight's top names are shown</em>" : " · <em>tonight's top names (nothing saved yet)</em>"}</p>
   ${flash ? `<div class="flash ${flash.kind}">${esc(flash.text)}</div>` : ""}
   <form method="post" action="/plan/${esc(s.code)}">
@@ -384,7 +404,7 @@ function planPage(l: Loaded, p: Plan, gate: Door, flash: Flash | null, outcomes:
       <div><label>The account tonight</label><div class="fact">${money(a.value)} · ${money(a.cash)} cash</div><small>${t.openCount} open, ${a.riskUsedPct.toFixed(1)}% risk used — the value the sizes are taken on, as the ticket judge takes them.</small></div>
       <div><label>Instruments, N</label><div class="fact">${a.instruments} · ${fmtPct(p.targetPct)}% each</div><small>Set by <code>npm run enrol</code>; each position is sized at ${SIZING.riskTargetPct}% ÷ N.</small></div>
       <div><label for="eurusd">US dollars per euro</label><input id="eurusd" name="eurusd" value="${eur ?? ""}" inputmode="decimal" placeholder="from your broker's screen"><small>Typed, never fetched. Blank leaves the euro columns blank.</small></div>
-      <div><label for="spread">Spread estimate (% of value)</label><input id="spread" name="spread" value="${p.inputs.spreadPct}" inputmode="decimal"><small>Week 2's toll: 0.1% for a large cap; a small cap's can be ten times that.</small></div>
+      <div><label for="spread">Spread estimate (% of value)</label><input id="spread" name="spread" value="${p.inputs.spreadPct}" inputmode="decimal"><small>The toll of buying and selling at once: about 0.1% for a big company; a small company's can be ten times that.</small></div>
     </div>
     <div class="actions">
       <button type="submit" name="action" value="recompute" class="primary">Recompute</button>
@@ -396,9 +416,9 @@ function planPage(l: Loaded, p: Plan, gate: Door, flash: Flash | null, outcomes:
     ${totals}
     ${p.notes.length ? `<ul class="note">${p.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
     <h2>Eligible tonight — ${eligible.length} name${eligible.length === 1 ? "" : "s"}, by the tests</h2>
-    <div class="wrap"><table>
-      <thead><tr><th>Pick</th><th class="n">#</th><th>Instrument</th><th>Band</th><th class="n hide" title="Graham tests passed: defensive of 7 · enterprising of 6">Graham</th><th class="n hide">Forecast</th><th class="n" title="Annualised volatility">Risk</th><th class="n hide">Long since</th><th class="n">Close $</th><th class="n" title="The Starter System's size at the target, on the value tonight less the costs of the rows above">Rule</th><th class="n" title="Blank: the rule's size, fitted to the cash left">Units</th><th class="n">Exposure</th><th class="n" title="weight × instrument risk">Risk/yr</th><th class="n" title="The course's stop: read on the close, acted on the next day by a ticket — not a resting stop-loss order at a broker">Stop $<span class="sub">the course's, not a broker order</span></th><th class="n hide">Cost to open</th><th class="n">In euro</th></tr></thead>
-      <tbody>${eligible.length ? eligible.map(candidateRow).join("") : `<tr><td colspan="16" class="why">Nothing is eligible tonight: no name is long on the rule without a reason the ticket would refuse. The rule's answer is cash — and a journal line that says "waiting".</td></tr>`}</tbody>
+    <div class="wrap"><table class="plan" role="table" aria-label="Eligible tonight">
+      <thead role="rowgroup"><tr role="row"><th role="columnheader">Pick</th><th role="columnheader" class="n">#</th><th role="columnheader">Instrument</th><th role="columnheader">Band</th><th role="columnheader" class="n hide" title="Graham tests passed: defensive of 7 · enterprising of 6">Graham</th><th role="columnheader" class="n hide">Forecast</th><th role="columnheader" class="n" title="Annualised volatility">Risk</th><th role="columnheader" class="n hide">Long since</th><th role="columnheader" class="n">Close $</th><th role="columnheader" class="n" title="The Starter System's size at the target, on the value tonight less the costs of the rows above">Rule</th><th role="columnheader" class="n" title="Blank: the rule's size, fitted to the cash left">Units</th><th role="columnheader" class="n">Exposure</th><th role="columnheader" class="n" title="weight × instrument risk">Risk/yr</th><th role="columnheader" class="n" title="The course's stop: read on the close, acted on the next day by a ticket — not a resting stop-loss order at a broker">Stop $<span class="sub">not a broker order</span></th><th role="columnheader" class="n hide">Cost to open</th><th role="columnheader" class="n">In euro</th></tr></thead>
+      <tbody role="rowgroup">${eligible.length ? eligible.map(candidateRow).join("") : `<tr role="row"><td role="cell" colspan="16" class="why">Nothing is eligible tonight: no name is long on the rule without a reason the ticket would refuse. The rule's answer is cash — and a journal line that says "waiting".</td></tr>`}</tbody>
     </table></div>
     <details><summary>Not eligible tonight — ${rest.length} name${rest.length === 1 ? "" : "s"}, with the reason the ticket would give</summary>
     <div class="wrap"><table>
@@ -406,6 +426,6 @@ function planPage(l: Loaded, p: Plan, gate: Door, flash: Flash | null, outcomes:
       <tbody>${rest.map(restRow).join("")}</tbody>
     </table></div></details>
   </form>
-  <div class="rule"><b>The arithmetic, in full</b> — the same table (<code>src/lib/sizing.ts</code>) the ticket judge and the nightly stop tracker use, on the judge's facts. Target exposure = the account's value tonight (less the opening costs of the rows above) × (${SIZING.riskTargetPct}% ÷ N) ÷ instrument risk, capped at the value (no leverage) · units = the whole shares that fit (fewer allowed, never more), then fitted to the ledger cash left in rank order · stop gap = ½ × instrument risk × entry, fixed at entry · stop = the highest close since entry − gap, read on the close and acted on the next day by a ticket — <strong>not a resting stop-loss order at a broker</strong> (the costs-and-tax walkthrough says why: gaps and intraday noise) · a trade costs $${SIZING.costPerTrade} + ${SIZING.fxPct}% in the course's model; the euro lines are ${esc(BROKER.name)}: €${BROKER.usShare.toFixed(2)} an order, ${BROKER.fxPct}% conversion each way, the spread as typed, and ${esc(p.connectivity.note)} The rule: ${esc(SIGNAL_RULE.fastSpan + "/" + SIGNAL_RULE.slowSpan)}-day EWMAC, long-only; a name warms up for ${SIGNAL_RULE.minMatureDays} closes.</div>
+  <div class="rule"><b>The arithmetic, in full</b> — the same constants the ticket judge and the nightly stop tracker use, on the judge's facts. Target exposure = the account's value tonight (less the opening costs of the rows above) × (${SIZING.riskTargetPct}% ÷ N) ÷ instrument risk, capped at the value (no leverage) · units = the whole shares that fit (fewer allowed, never more), then fitted to the ledger cash left in rank order · stop gap = ½ × instrument risk × entry, fixed at entry · stop = the highest close since entry − gap, read on the close and acted on the next day by a ticket — <strong>not a resting stop-loss order at a broker</strong> (the costs-and-tax walkthrough says why: gaps and intraday noise) · a trade costs $${SIZING.costPerTrade} + ${SIZING.fxPct}% in the course's model; the euro lines are ${esc(BROKER.name)}: €${BROKER.usShare.toFixed(2)} an order, ${BROKER.fxPct}% conversion each way, the spread as typed, and ${esc(p.connectivity.note)} The rule: ${esc(SIGNAL_RULE.fastSpan + "/" + SIGNAL_RULE.slowSpan)}-day EWMAC, long-only; a name warms up for ${SIGNAL_RULE.minMatureDays} closes.</div>
   <p class="note">The journal entry is the ticket: the planner writes the facts (the rule, the screens, the size, the stop) and you write the thesis — at least ${JOURNAL_MIN} characters; a row with none is not raised. What would prove you wrong is not on any sheet.</p>`);
 }

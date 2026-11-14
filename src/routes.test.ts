@@ -64,7 +64,7 @@ describe("R3 /api/signals and /signals with no rows, warming rows, a blocked tic
     expect(j.counts).toEqual({ long: 0, flat: 0, warming: 0, quarantined: 0, gate_open: 0, gate_near: 0 });   // week 10: the gate counts
     expect(j.meta.rule).toMatch(/EWMAC 16\/64/);
     const html = await (await get(db, "/signals")).text();
-    expect(html).toContain("No signals computed yet");
+    expect(html).toContain("No signals yet — the nightly job writes them at 23:00 UTC");
     expect(html).toContain("Nothing yet.");
     expect(html).toContain("Education, not advice");
   });
@@ -237,11 +237,11 @@ describe("R-W10 the Graham column on /signals and the watchlist (OI-68)", () => 
     expect(j.counts).toMatchObject({ long: 2, warming: 1, gate_open: 1, gate_near: 0 });
     expect(j.meta.gate).toMatch(/Graham ∩ Carver, in that order/);
     const html = await (await get(db, "/signals")).text();
-    expect(html).toContain("<th title=\"Graham tests passed: defensive (of 7) · enterprising (of 6), from the cached books — week 10, the two rules side by side\">Graham</th>");
+    expect(html).toContain("<th title=\"Graham tests passed: defensive (of 7) · enterprising (of 6), from the cached books\">Graham</th>");   // v1.2.0 review S6: no "week 10" in a tool page's body
     expect(html).toMatch(/<td class="g open" title="Defensive: 7 of 7 passed\. Enterprising: \d of 6 passed, fails [^"]*">7\/7 · \d\/6 <span class="gt">GATE<\/span><\/td>/);
     expect(html).toMatch(/<td class="g closed" title="Defensive: 5 of 7 passed, fails P\/E, P\/B\./);
     expect(html).toContain('<td class="g warming" title="No accounts cached for this company yet');
-    expect(html).toContain("the two rules side by side");
+    expect(html).toContain("<strong>The two rules side by side:</strong>");
   });
   it("/watchlist and /api/watchlist read the gate out: the open name, the longs failing both, the maturing small cap; the empty case says 'nothing'", async () => {
     const db = books().on("FROM signals s", () => ({ results: [sig("GOOD"), sig("DEAR", { close: 100 }), sig("NOBK", { tier: "small", state: "warming", days: 40, forecast: null, instrument_risk: null, state_since: null })] }));

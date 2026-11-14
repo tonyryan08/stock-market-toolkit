@@ -28,7 +28,7 @@ describe("the trade's and the holding's costs — €10,000 in a US share, +30%,
     expect(t.lines.map((l) => [l.label, l.amount])).toEqual([
       ["Commission and handling, buy", 2], ["Commission and handling, sell", 2],
       ["Currency conversion, buy", 25], ["Currency conversion, sell", 32.5],
-      ["The spread (week 2's toll bridge)", 10], ["Exchange connectivity", 7.5],
+      ["The spread (the toll)", 10], ["Exchange connectivity", 7.5],
     ]);
     expect(t.total).toBe(79);
   });

@@ -322,7 +322,14 @@ describe("the pages", () => {
     const d = db().on("SELECT * FROM risk_reports", () => ({ results: [] })).on("FROM signals WHERE symbol", () => ({ results: [] }));
     const html = await (await get(d, `/tickets/${CODE}`)).text();
     expect(html).toMatch(new RegExp(`/tickets/${CODE}/review`));
-    expect(html).toMatch(/costs &amp; tax/);
+    // v1.2.0 review F1: the sheet carries none of the toolkit's result figures — the student's own words may (lesson 11)
+    const page = await (await get(db(), `/tickets/${CODE}/review`)).text();
+    expect(page).toContain("carries <b>none of the toolkit's profit, loss, account-value or drawdown figures</b>");
+    expect(page).toContain("your own journal words are on the sheet as you wrote them, results included if you wrote them");
+    // v1.2: the links are buttons in the page body (the old grey back line is gone), and the header is on every page
+    expect(html).toMatch(/<a class="btn alt" href="\/costs">Costs &amp; tax<\/a>/);
+    expect(html).toContain('<nav class="top" aria-label="The course site">');
+    expect(html).toContain('<a href="/me" aria-current="page">Your page</a>');
   });
 });
 

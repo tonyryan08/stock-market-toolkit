@@ -12,7 +12,7 @@
  */
 
 import { Hono } from "hono";
-import { PAGE_CSS, FONTS_HTML, esc, SHARED_CSS } from "./page";
+import { PAGE_CSS, FONTS_HTML, esc, SHARED_CSS, nav } from "./page";
 import { intSetting } from "./lib/settings";
 import { DEFAULT_MODEL, claudeJson, extractJson } from "./lib/narrative";
 import {
@@ -283,7 +283,7 @@ function tutorPage(r: TutorResult | null, rows: RecentRow[], notes: { passages: 
   })();
   const passagesHtml = r && r.passages.length ? `<section class="passages">
     <h2>The passages the tutor read</h2>
-    <p class="lede">In the order retrieval ranked them. Every claim in the answer should be here, in these words or close to them; a number should be here exactly. If it isn't, the answer is wrong — that is tonight's exercise.</p>
+    <p class="lede">The passages the tutor used, in the order it ranked them. Every claim in the answer should be here, in these words or close to them; a number should be here exactly. If it isn't, the answer is wrong — and spotting that is the exercise.</p>
     ${r.passages.map((p, i) => `<article id="${esc(p.id)}"><h3><span class="pid">[${esc(p.id)}]</span> <span class="plabel">P${i + 1}</span> ${esc(lessonOf(p))} &rsaquo; ${esc(p.heading)}</h3><pre>${esc(p.body)}</pre></article>`).join("")}
   </section>` : "";
   const metaHtml = r && r.outcome !== "invalid" ? `<p class="caption">${r.outcome === "answered" ? `Answered by ${esc(r.meta.model ?? "")} from ${r.passages.length} passages` : `Outcome: ${esc(r.outcome.replace("_", " "))}`} · retrieval: ${r.retrieval === "fts" ? "full-text index" : r.retrieval === "like" ? "word match (no index)" : "—"}${r.meta.tokens ? ` · ${r.meta.tokens.input}/${r.meta.tokens.output} tokens` : ""}${r.meta.ms !== null ? ` · ${r.meta.ms} ms` : ""} · budget ${r.meta.daily_cap} a day</p>` : "";
@@ -320,10 +320,10 @@ ${SHARED_CSS}
   .how ul { padding-left:1.2rem; margin:.3rem 0; }
 </style></head>
 <body><main>
-  <p class="back"><a href="/">&larr; the twelve-week ledger</a></p>
-  <p class="eyebrow">Phase 4 · week 10 · ask the tutor</p>
+  ${nav("/tutor")}
+  <p class="eyebrow">Ask the tutor &middot; answers from the course notes</p>
   <h1>Ask the tutor</h1>
-  <p class="lede">A tutor that has read the course's notes — the lesson plans and the kit, ${notes.passages} passages${notes.seeded_at ? ` indexed ${esc(notes.seeded_at.slice(0, 10))}` : ""} — and nothing else. It answers from the passages it finds, cites them on every paragraph, and is checked: a number from nowhere or a tip gets flagged or withheld. Your job is to check the citations.</p>
+  <p class="lede">Ask anything the course covers — what a stop is, why the watchlist is empty, how the tax works. The tutor has read the course's notes (the lesson plans and the kit, in ${notes.passages} short passages${notes.seeded_at ? `, last read in on ${esc(notes.seeded_at.slice(0, 10))}` : ""}) and nothing else: it answers from the passages it finds, shows you each one it used, and the toolkit checks its answer — a number that appears in no passage, or anything that sounds like a tip, is flagged or held back. It will not tell you what to buy. Your job is to check its sources against its answer.</p>
   <form class="ask" method="post" action="/tutor">
     <label for="question" class="eyebrow">Your question</label>
     <textarea id="question" name="question" maxlength="${QUESTION_MAX}" placeholder="e.g. How is the stop calculated, and when does it move?" required>${esc(q)}</textarea>
@@ -335,9 +335,9 @@ ${SHARED_CSS}
   <div class="how">
     <strong>How to ask well</strong> (lesson 10):
     <ul>
-      <li><strong>Use the course's words.</strong> "the stop", "instrument risk", "the 12% target", "the defensive screen", "the drawdown", "the journal" — retrieval matches words, not meanings.</li>
+      <li><strong>Use the course's words.</strong> "the stop", "instrument risk", "the 12% target", "the defensive screen", "the drawdown", "the journal" — the tutor finds passages by matching words, not meanings.</li>
       <li><strong>One thing at a time.</strong> "What is the stop gap and when does the stop move?" beats "explain everything about stops and sizing".</li>
-      <li><strong>Check every citation.</strong> Click a tag; find the sentence; find the number. A confident answer with no passage behind it is wrong, however fluent.</li>
+      <li><strong>Check every citation.</strong> Each paragraph of an answer ends in a tag naming the passage it came from; tap the tag, find the sentence, find the number. A confident answer with no passage behind it is wrong, however fluent.</li>
       <li><strong>Don't ask what to buy.</strong> The tutor won't say, by rule; it will tell you how the course decides, and that the decision is yours.</li>
     </ul>
   </div>

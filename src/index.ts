@@ -23,7 +23,7 @@ import {
   ENTERPRISING, E as ET, screenEnterprising, type EnterprisingResult, type CriterionDef, type CriterionResult, type Verdict,
 } from "./lib/graham";
 import { computeSignals, describeSignal, HISTORY_LIMIT, RULE as SIGNAL_RULE, type SignalSeries, type SignalPoint } from "./lib/signals";
-import { PAGE_CSS, FONTS_HTML, SHARED_CSS, esc } from "./page";
+import { PAGE_CSS, FONTS_HTML, SHARED_CSS, esc, nav, PLANNER_MARK, PLANNER_MARK_CURRENT, plannerLinkHtml } from "./page";
 import { intSetting } from "./lib/settings";
 import { gateOf, scoreOf, scoresText, buildWatchlist, describeWatchlist, type GateRow, type ScreenScore } from "./lib/gate";
 import { portfolio } from "./portfolio";
@@ -31,7 +31,7 @@ import { tutor } from "./tutor";
 import { review } from "./review";
 import { costs } from "./costs";
 import { me, whoLine, doorSentence } from "./me";
-import { planRoutes } from "./plan";
+import { planRoutes, plannerOpen } from "./plan";
 import { doorOf, accountsFor } from "./lib/access";
 
 type Env = {
@@ -72,6 +72,22 @@ const QUOTE_DAILY_CAP_DEFAULT = 3;
 
 const app = new Hono<{ Bindings: Env }>();
 
+/**
+ * The header's planner link, per request (v1.2.0 review S1, S2). Every page's header carries `PLANNER_MARK` where the
+ * link would go; this middleware reads the door once for an HTML response and fills the mark — the link for the tutor
+ * (or for anyone when the door is off: `plannerCheck`'s rule), nothing for a student. JSON, CSV and everything else
+ * pass untouched. One body read per HTML page; no page template has to know who is at the door.
+ */
+app.use("*", async (c, next) => {
+  await next();
+  const type = c.res.headers.get("content-type") ?? "";
+  if (!type.includes("text/html")) return;
+  const html = await c.res.text();
+  if (!html.includes("<!--planner")) { c.res = new Response(html, c.res); return; }
+  const open = plannerOpen(await doorOf(c));
+  c.res = new Response(html.replace(PLANNER_MARK_CURRENT, open ? plannerLinkHtml(true) : "").replace(PLANNER_MARK, open ? plannerLinkHtml(false) : ""), c.res);
+});
+
 // Week 8: the calculator, the tickets and the student pages live in their own module.
 app.route("/", portfolio);
 // Week 10: the tutor bot — its page, its API and the class's questions.
@@ -89,7 +105,11 @@ app.get("/", async (c) => {
   const gate = await doorOf(c);
   const accounts = gate.on && gate.identity ? await accountsFor(c.env.DB, gate.identity.email) : [];
   // function replacements (review N2): a string replacement would read `$&`/`$'` in an address as a pattern
-  const page = LANDING_PAGE.replace("<!--who-->", () => whoLine(gate, accounts)).replace("<!--door-->", () => doorSentence(gate));
+  const page = LANDING_PAGE
+    .replace("<!--nav-->", () => nav("/"))
+    .replace("<!--who-->", () => whoLine(gate, accounts))
+    .replace("<!--door-->", () => doorSentence(gate))
+    .replace("<!--tutor-->", () => (plannerOpen(gate) ? `    <a class="door" href="/plan"><h2>The planner</h2><span>The tutor's workbook: tonight's companies ranked by the tests, sized and stopped for an account, the tickets raised through the judge.</span></a>` : ""));
   return c.html(page, 200, gate.on ? { "cache-control": "no-store" } : {});
 });
 
@@ -800,7 +820,7 @@ function signalsPage(rows: (GateRow & SignalRow)[], universe: number, ms: number
   const stateTag = (st: string) => st === "long" ? `<span class="tag long">LONG</span>` : st === "flat" ? `<span class="tag flat">FLAT</span>` : `<span class="tag warming">WARMING UP</span>`;
   const dateOf = (d: string | null) => d ?? "—";
   const body = rows.map((r) => `<tr class="${r.state}">
-      <th scope="row"><a href="/prices/${esc(r.symbol)}">${esc(r.symbol)}</a>${r.tier === "small" ? `<span class="st" title="Small-cap tier: as-traded prices, dividend-adjusted by the toolkit, split-adjusted only for the splits in the toolkit's table (an av_jump receipt names a new one — until it is added, a split reads as a false flip); the rule needs ${SIGNAL_RULE.minMatureDays} closes">s</span>` : ""}${r.quarantined ? `<span class="st q" title="Quarantined (week 9, OI-08): ${esc(r.quarantined)} The row is informational; the ticket route refuses the symbol until a splits row explains the jump.">Q</span>` : ""}<span class="nm">${esc(r.name ?? "")}</span></th>
+      <th scope="row"><a href="/prices/${esc(r.symbol)}">${esc(r.symbol)}</a>${r.tier === "small" ? `<span class="st" title="Small-cap tier: as-traded prices, dividend-adjusted by the toolkit, split-adjusted only for the splits in the toolkit's table (an av_jump receipt names a new one — until it is added, a split reads as a false flip); the rule needs ${SIGNAL_RULE.minMatureDays} closes">s</span>` : ""}${r.quarantined ? `<span class="st q" title="Quarantined: ${esc(r.quarantined)} The row is informational; the ticket route refuses the symbol until a splits row explains the jump.">Q</span>` : ""}<span class="nm">${esc(r.name ?? "")}</span></th>
       <td class="s">${stateTag(r.state)}</td>
       <td class="f">${bar(r.forecast)}<span class="fv">${r.forecast === null ? "—" : `${r.forecast > 0 ? "+" : ""}${r.forecast.toFixed(1)}`}</span></td>
       <td class="r">${r.instrument_risk === null ? "—" : `${r.instrument_risk.toFixed(0)}%`}</td>
@@ -835,35 +855,36 @@ ${SHARED_CSS}
   .gt { font-family:"IBM Plex Mono",monospace; font-size:.62rem; letter-spacing:.08em; border:1.4px solid var(--entry); color:var(--entry); border-radius:3px; padding:0 .3rem; } .gt.near { border-color:var(--faint); color:var(--faint); }
   tr.flat th a, tr.flat td { color:var(--faint); } tr.flat th a { color:var(--entry); }
   .rule { background:rgba(255,255,255,.5); border:1px solid var(--rule); border-radius:6px; padding:.8rem 1rem; font-size:.85rem; margin:1rem 0; }
+  details.rule summary { cursor:pointer; } details.rule p { margin:.6rem 0 0; }
   .rule code { font-family:"IBM Plex Mono",monospace; font-size:.8rem; }
   .argue { margin:1rem 0; font-size:.9rem; }
   @media (max-width: 640px) { .nm { display:none; } .bar { width:70px; } td.c { display:none; } thead th:last-child { display:none; } td.d { white-space:nowrap; } }
 </style></head>
 <body><main>
-  <p class="back"><a href="/">&larr; the twelve-week ledger</a></p>
-  <p class="eyebrow">Phase 3 · week 7 · why systems beat gut feel</p>
+  ${nav("/signals")}
+  <p class="eyebrow">The signals &middot; what the trend rule says tonight</p>
   <h1>Signals</h1>
-  <p class="lede">One rule, run the same way over every company every night: Robert Carver's 16-day / 64-day moving-average crossover, long-only. ${asOf ? `As of the ${esc(asOf)} close` : "No signals computed yet — the nightly job writes them at 23:00 UTC"}, ${rows.length} of ${universe} instruments.</p>
+  <p class="lede">This page is what the trend rule says tonight about every company the course follows. Read the state first, then the forecast. The rule: two moving averages of the price (the average of the last 16 days and of the last 64). When the shorter average is above the longer the rule says <b>LONG</b> — it would be in the share, holding it. Otherwise <b>FLAT</b> — it would be out. The forecast says how strong the trend is (capped at ±20); the instrument risk says how much the price moves in a year. A company is <em>warming up</em> until the rule has ${SIGNAL_RULE.minMatureDays} days of its prices. ${asOf ? `As of the ${esc(asOf)} close, ${rows.length} of the ${universe} companies have a reading.` : `No signals yet — the nightly job writes them at 23:00 UTC; ${universe} companies are followed.`} <a href="/watchlist">The watchlist</a> is where this rule meets Graham's tests.</p>
   <div class="tally">
-    <span><b>${n("long")}</b> long — the fast average is above the slow</span>
-    <span><b>${n("flat")}</b> flat — below (no position; the rule never goes short)</span>
-    <span><b>${n("warming")}</b> warming up — fewer than ${SIGNAL_RULE.minMatureDays} closes</span>${rows.some((r) => r.quarantined) ? `
+    <span><b>${n("long")}</b> long — the shorter average is above the longer: the rule would be in</span>
+    <span><b>${n("flat")}</b> flat — below: the rule would be out (it never bets on a fall)</span>
+    <span><b>${n("warming")}</b> warming up — fewer than ${SIGNAL_RULE.minMatureDays} days of prices yet</span>${rows.some((r) => r.quarantined) ? `
     <span><b>${rows.filter((r) => r.quarantined).length}</b> quarantined <span class="st q">Q</span> — a jump in the series no splits row explains; no tickets until it does</span>` : ""}
   </div>
   <div class="wrap"><table>
-    <thead><tr><th>Instrument</th><th>State</th><th>Forecast (±${SIGNAL_RULE.forecastCap})</th><th title="Annualised volatility: EW σ of daily returns × 16">Instr. risk</th><th>Since</th><th title="Graham tests passed: defensive (of 7) · enterprising (of 6), from the cached books — week 10, the two rules side by side">Graham</th><th>Close</th></tr></thead>
+    <thead><tr><th>Instrument</th><th>State</th><th>Forecast (±${SIGNAL_RULE.forecastCap})</th><th title="Annualised volatility: EW σ of daily returns × 16">Instr. risk</th><th>Since</th><th title="Graham tests passed: defensive (of 7) · enterprising (of 6), from the cached books">Graham</th><th>Close</th></tr></thead>
     <tbody>${body || `<tr><td colspan="7">Nothing yet.</td></tr>`}</tbody>
   </table></div>
-  <p class="argue"><strong>Week 10 — the two rules side by side:</strong> the Graham column is what the screens say about the company (tests passed, defensive · enterprising; hover for the failed ones); the State column is what the rule says about its price. A name the course would ticket by both is marked GATE; one Graham test short and long is <em>near</em>. <a href="/watchlist">The watchlist</a> reads the gate out in sentences — tonight it may well say nothing, which is the lesson.</p>
-  <div class="rule">
-    <strong>The rule, in full</strong> (the same numbers run the nightly job, this page and the chart overlay — <a href="/api/signals">raw JSON</a>):<br>
+  <p class="argue"><strong>The two rules side by side:</strong> the Graham column is what his checklists say about the company's accounts (tests passed: defensive of 7 · enterprising of 6; on a computer, hover for the failed ones — <a href="/screen">the screen</a> lists them); the State column is what the rule says about its price. A name that passes both is marked GATE; one Graham test short and LONG is <em>near</em>. <a href="/watchlist">The watchlist</a> reads the gate out in sentences — tonight it may well say nothing, which is the lesson.</p>
+  <details class="rule"><summary><strong>The maths, if you want it</strong> — the rule in full (the same numbers run the nightly job, this page and the chart overlay; <a href="/api/signals">raw JSON</a>)</summary>
+    <p>
     <code>fast = EWMA(close, ${SIGNAL_RULE.fastSpan})</code> · <code>slow = EWMA(close, ${SIGNAL_RULE.slowSpan})</code> · <code>σ = EW standard deviation of daily price changes, span ${SIGNAL_RULE.volSpan}</code><br>
     <code>forecast = ${SIGNAL_RULE.forecastScalar} × (fast − slow) ÷ σ</code>, capped at ±${SIGNAL_RULE.forecastCap} · <code>state = forecast &gt; 0 ? LONG : FLAT</code> · <code>instrument risk = σ% × 16</code> (a year).<br>
-    EWMA weight λ = 2 ÷ (span + 1). The forecast scalar is Carver's (average |forecast| ≈ 10 over his data); the spans, the volatility lookback and the cap are his open-source defaults. Long-only is the course's adaptation: a negative forecast means no position, never a short. The rule reads the adjusted close — dividends are inside the price.
-  </div>
-  <p class="argue"><strong>Tonight's exercise:</strong> before you looked at this page you wrote three names you believed were "going up". How many are long here? The rule has no opinion about the company, the news or you — it has read 64 days of closes and divided by the noise. Where you and the rule disagree, write down why. Next week: how much a rule like this would let you hold, and where it would make you stop.</p>
+    EWMA (an exponentially weighted moving average: recent days count for more) weight λ = 2 ÷ (span + 1). The forecast scalar is Carver's (average |forecast| ≈ 10 over his data); the spans, the volatility lookback and the cap are his open-source defaults. Long-only is the course's adaptation: a negative forecast means no position, never a short (a bet on a fall). The rule reads the adjusted close — dividends are inside the price.</p>
+  </details>
+  <p class="argue"><strong>Tonight's exercise:</strong> before you looked at this page you wrote three names you believed were "going up". How many are long here? The rule has no opinion about the company, the news or you — it has read 64 days of closing prices and allowed for how jumpy they are. Where you and the rule disagree, write down why. <a href="/size">The calculator</a> shows how much a rule like this would let you hold, and where it would make you stop.</p>
   <p class="caption">Served in ${ms} ms · <a href="/watchlist">the watchlist</a> · <a href="/screen">the Graham screen</a> · <a href="/screen/enterprising">enterprising</a> · <a href="/card">the cards</a></p>
-  <footer><p class="notice">Education, not advice. A signal is what a rule says about a price series — a long is not a recommendation to buy, a flat is not a recommendation to sell. Sizing and stops: <a href="/size">the calculator</a> (week 8); tickets are written on a student's own page.</p></footer>
+  <footer><p class="notice">Education, not advice. A signal is what a rule says about a price series — a long is not a recommendation to buy, a flat is not a recommendation to sell. Sizing and stops: <a href="/size">the calculator</a>; tickets are written on a student's own page.</p></footer>
 </main></body></html>`;
 }
 
@@ -911,17 +932,17 @@ ${SHARED_CSS}
   @media (max-width: 640px) { .nm { display:none; } td.f { display:none; } thead th:nth-child(4) { display:none; } }
 </style></head>
 <body><main>
-  <p class="back"><a href="/">&larr; the twelve-week ledger</a> · <a href="/signals">signals</a> · <a href="/screen">the screen</a></p>
-  <p class="eyebrow">Phase 4 · week 10 · Graham ∩ Carver</p>
+  ${nav("/watchlist")}
+  <p class="eyebrow">The watchlist &middot; Graham and Carver, read together</p>
   <h1>The watchlist</h1>
-  <p class="lede">Graham says <em>what</em> (the screens, from the accounts, slowly); Carver says <em>when</em> and <em>how much</em> (the rule, from prices, nightly). Read together, in that order, as a gate: a name must pass a Graham screen <em>and</em> be long on the rule before the course would ticket it. ${w.asOf ? `As of the ${esc(w.asOf)} close.` : "No signals computed yet."} No new rule — the two that exist, side by side.</p>
+  <p class="lede">This is the watchlist: the companies that pass two tests at once tonight. Read its three lists in order — the gate, the near misses, then the rest — and write what you see in your journal; there is nothing to buy here. A company is on the gate only when it passes one of Benjamin Graham's checklists (is it a sound business at a fair price?) <em>and</em> the trend rule says LONG (the price trend is up). Most nights that is nobody — and that is the lesson: the course never buys because a name is famous or a tip was hot. The watchlist is short on purpose. ${w.asOf ? `As of the ${esc(w.asOf)} close.` : "No signals computed yet."} Below the gate: the near misses (one Graham test short), then the companies the rule says LONG on that pass neither checklist. Graham's tests are on <a href="/screen">the screen</a>; the rule is on <a href="/signals">the signals</a>.</p>
   <div class="reading">${reading.map((l) => `<p>${esc(l)}</p>`).join("")}</div>
   <h2>The gate: passes a screen and long</h2>
-  ${table(w.open, "Nothing tonight. No company passes a Graham screen and is long on the rule — the rule's answer is cash.")}
+  ${table(w.open, "Nothing tonight. No company passes a Graham screen and is long on the rule — the rules' answer is to hold cash.")}
   <h2>Near misses that are long</h2>
   ${table(w.near, "No near miss is long tonight.")}
   <h2>The rule's longs that fail both screens</h2>
-  <p class="how">Sorted by defensive tests passed. These are what a "relaxed" gate would read first — labelled as such in lesson 10, never as picks: the failed tests are mostly the two price tests, P/E ≤ 15 and P/B ≤ 1.5, set in the 1970s.</p>
+  <p class="how">Sorted by defensive tests passed. These are what a "relaxed" gate would read first — labelled as such in lesson 10, never as picks: the failed tests are mostly the two price tests — P/E (the price divided by a year's earnings) no more than 15, and P/B (the price divided by the book value) no more than 1.5 — set in the 1970s.</p>
   ${table(w.longs, "No long fails both screens tonight.")}
   <h2>Small caps on their way to ${SIGNAL_RULE.minMatureDays} closes</h2>
   ${table(w.maturing, `Every small cap in the tier has its ${SIGNAL_RULE.minMatureDays} closes.`, false)}
@@ -952,8 +973,8 @@ type ScreenPageConfig = {
 const DEFENSIVE_PAGE: ScreenPageConfig = {
   criteria: CRITERIA, anchor: "c", allPass: "survivor",
   title: "The Graham screen",
-  eyebrow: "Phase 2 · The Intelligent Investor, ch. 14 · defensive investor",
-  lede: (n) => `Graham's seven tests (1972 revision), run tonight over ${n} companies' books. A screen doesn't pick shares — it decides which ones are worth reading.`,
+  eyebrow: "Graham's screen · the defensive investor's seven tests",
+  lede: (n) => `This page runs Benjamin Graham's seven tests for the cautious investor (The Intelligent Investor, 1949; the 1972 figures) over ${n} companies' accounts tonight. Read the survivors and the near misses, then open a company's books to see which test it failed and why. The seven: big enough, financially strong, steady earnings, ten years of dividends (Graham asked for twenty; the course's record holds about fifteen, so it asks for ten), growing, not dear by P/E (the price divided by a year's earnings), not dear by P/B (the price divided by the book value). A screen doesn't pick shares — it decides which ones are worth reading about.`,
   allPassLabel: "survivors · all tests passed",
   key: "✓ pass · ✗ fail · – not applied (financial companies skip test 2 — Graham's rule; their score is out of 6) · ? data missing.",
   argue: "<strong>Tonight's argument:</strong> pick one company that failed and one that passed. Is the screen right about both? Graham wrote these tests to <em>reject</em> — what kind of company can't pass them, and does that make it a bad investment or just not a defensive one?",
@@ -965,8 +986,8 @@ const DEFENSIVE_PAGE: ScreenPageConfig = {
 const ENTERPRISING_PAGE: ScreenPageConfig = {
   criteria: ENTERPRISING, anchor: "e", allPass: "candidate",
   title: "The enterprising screen",
-  eyebrow: "Phase 2 · The Intelligent Investor, ch. 15 · enterprising investor",
-  lede: (n) => `Graham's winnowing for the investor willing to do the work (pp. 385–386): a multiple of nine or less first, then five tests "not so severe" — and no size test. Run tonight over ${n} companies' books.`,
+  eyebrow: "Graham's screen · the enterprising investor's six tests",
+  lede: (n) => `This page runs Graham's six looser tests, for the investor willing to do more work (pp. 385–386), over ${n} companies' accounts tonight. Read the survivors and the near misses as a reading list, then open a company's books. The six: a price of nine times earnings or less first, then five tests "not so severe" — and no size test, so small companies can pass.`,
   allPassLabel: "candidates · for your judgment",
   key: "✓ pass · ✗ fail · – not applied (financial companies skip test 2 — Graham wrote it \"for industrial companies\"; their score is out of 5) · ? data missing (tangible book fills as the accounts refresh).",
   argue: "<strong>Tonight's argument:</strong> Graham's candidates are not picks — from his list he expected the enterprising investor to make \"a third selection of, say, one out of five\" by judgment (p. 386). Take one candidate or near miss: what would you need to read before you'd put it in the class's paper portfolio? And why is it cheap — is the market wrong, or right?",
@@ -1056,12 +1077,13 @@ ${SHARED_CSS}
   .other { margin-top:.9rem; font-size:.88rem; }
   .tag.near_miss { color:var(--ink); border-color:var(--faint); }
   .tag.insufficient { color:var(--faint); border-color:var(--rule); }
-  .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+  .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+  .wrap { position:relative; }   /* v1.2.0 review N5: the .sr spans are positioned inside the scrolling box, not the page */
   .key, .caption { font-size:.8rem; color:var(--faint); margin-top:.7rem; line-height:1.5; }
   .argue { margin-top:1.4rem; border-left:3px solid var(--stamp); padding:.2rem 0 .2rem .9rem; font-size:.92rem; }
 </style></head>
 <body><main>
-  <p class="back"><a href="/">&larr; the twelve-week ledger</a></p>
+  ${nav("/screen")}
   <p class="eyebrow">${esc(cfg.eyebrow)}</p>
   <h1>${esc(cfg.title)}</h1>
   <p class="lede">${esc(cfg.lede(screened))}</p>
@@ -1116,18 +1138,18 @@ ${PAGE_CSS}
   .foot { font-size:.72rem; color:var(--faint); border-top:2px solid var(--ink); margin-top:.6rem; padding-top:.6rem; line-height:1.5; }
   .print { margin-top:1rem; font-size:.85rem; }
   @media print {
-    body { background:#fff; padding:0; } .back, .print, footer { display:none; }
+    body { background:#fff; padding:0; } nav.top, .print, footer { display:none; }
     .card { border-width:1px; } a { color:inherit; text-decoration:none; }
     .page2 { break-before:page; }
   }
 </style></head>
 <body><main>
-  <p class="back"><a href="/screen">&larr; the Graham screen</a></p>
+  ${nav("/card")}
   <div class="card">
     <h1>The Graham Checklist</h1>
     <p class="sub">The defensive investor's seven tests · Benjamin Graham, <em>The Intelligent Investor</em>, ch. 14 (course copy p. 347)</p>
     <ol>${rows}</ol>
-    <p class="foot">All seven must pass. A company that passes is worth <em>reading about</em> — the screen narrows the list; it never makes the decision. Rules marked <strong>adapted</strong> follow Graham's intent where free data is shorter than his windows. Printed from the same rules the course toolkit runs (src/lib/graham.ts), so the card and the screen cannot disagree. Education, not advice.</p>
+    <p class="foot">All seven must pass. A company that passes is worth <em>reading about</em> — the screen narrows the list; it never makes the decision. Rules marked <strong>adapted</strong> follow Graham's intent where free data is shorter than his windows. Printed from the same rules the course toolkit runs, so the card and the screen cannot disagree. Education, not advice.</p>
   </div>
   <div class="card page2" id="enterprising">
     <h1>The Enterprising Checklist</h1>
@@ -1324,8 +1346,8 @@ app.get("/explain/:ticker", async (c) => {
 function explainEmptyPage(ticker: string, reason: string): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(ticker)} — explain this stock</title>${FONTS_HTML}<style>${PAGE_CSS}${SHARED_CSS}</style></head>
-<body><main><p class="back"><a href="/screen">&larr; the Graham screen</a></p>
-<p class="eyebrow">Phase 2 · week 6 · numbers into narrative</p><h1>${esc(ticker)}</h1>
+<body><main>${nav("/explain")}
+<p class="eyebrow">Explain this company</p><h1>${esc(ticker)}</h1>
 <p class="gap">${esc(reason)}</p>
 <footer><p class="notice">Education, not advice.</p></footer></main></body></html>`;
 }
@@ -1400,8 +1422,8 @@ ${PAGE_CSS}
   .argue { margin-top:1.4rem; border-left:3px solid var(--entry); padding:.2rem 0 .2rem .9rem; font-size:.92rem; }
 </style></head>
 <body><main>
-  <p class="back"><a href="/screen">&larr; the Graham screen</a></p>
-  <p class="eyebrow">Phase 2 · week 6 · numbers into narrative</p>
+  ${nav("/explain")}
+  <p class="eyebrow">Explain this company &middot; a story with its receipts</p>
   <h1>${esc(name)}<span class="sym">${T}</span></h1>
   <p class="asof">${s.asOf.close !== null ? `Last close <b>${s.asOf.close >= 100 ? s.asOf.close.toFixed(0) : s.asOf.close.toFixed(2)}</b> (${esc(s.asOf.priceDate ?? "—")})` : "No cached price"} · accounts to FY ${esc(s.asOf.fiscalYear ?? "—")} · <a href="/fundamentals/${T}">the books</a></p>
   <div class="chips">${chip("Defensive", s.defensive.verdict, s.defensive.passes, s.defensive.applicable)}${chip("Enterprising", s.enterprising.verdict, s.enterprising.passes, s.enterprising.applicable)}</div>
@@ -1554,7 +1576,7 @@ function fundamentalsPage(
     </tbody>
   </table>
   <p class="smallprint">Earnings positive in ${r.epsPositiveYears} of ${r.epsYearsAvailable} available years · EPS growth across the window: ${fmt(r.epsGrowthPct, "%")} · dividends paid in ${divs.yearsPaid} calendar years of the record.
-  Free data serves 5 fiscal years; Graham asked for 10 — week 5's checklist adapts openly.</p>
+  Free data serves 5 fiscal years; Graham asked for 10 — the course's checklist adapts openly and says where.</p>
   <p class="ranges"><a href="/explain/${T}">explain this stock</a> · <a href="/prices/${T}">price history</a> · <a href="/api/fundamentals/${T}">raw JSON</a> · <a href="/screen">the Graham screen</a></p>`;
   }
 
@@ -1594,8 +1616,8 @@ ${SHARED_CSS}
 </head>
 <body>
 <main>
-  <p class="back"><a href="/">&larr; the twelve-week ledger</a></p>
-  <p class="eyebrow">The books &middot; from the course cache &middot; 5 fiscal years</p>
+  ${nav("/fundamentals")}
+  <p class="eyebrow">The books &middot; five years of accounts</p>
   <h1>${name ? esc(name) : T} <span class="sym">(${T})</span></h1>
   ${body}
   <footer><p class="notice">Education, not advice. Graham bars are teaching thresholds from The Intelligent Investor ch. 14 — not a recommendation to buy or sell anything.</p></footer>
@@ -1760,8 +1782,8 @@ ${SHARED_CSS}
 </head>
 <body>
 <main>
-  <p class="back"><a href="/">&larr; the twelve-week ledger</a></p>
-  <p class="eyebrow">Nightly close · from the course cache</p>
+  ${nav("/prices")}
+  <p class="eyebrow">The price chart &middot; every night's close</p>
   <h1>${name ? esc(name) : T} <span class="sym">(${T})</span></h1>
   ${body}
   <footer><p class="notice">Education, not advice. Nothing here is a recommendation to buy or sell anything.</p></footer>

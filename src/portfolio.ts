@@ -18,7 +18,7 @@
  * account would do; the toolkit never says whether to do it.
  */
 import { Hono } from "hono";
-import { PAGE_CSS, FONTS_HTML, SHARED_CSS, esc } from "./page";
+import { PAGE_CSS, FONTS_HTML, SHARED_CSS, esc, nav } from "./page";
 import { ownerGate, type Door, DOOR_OFF } from "./lib/access";
 import { SIZING, sizePosition, describeSizing, SizeInputError, type Sizing } from "./lib/sizing";
 import { RULE as SIGNAL_RULE } from "./lib/signals";
@@ -222,10 +222,10 @@ ${SHARED_CSS}
   .rule { background:rgba(255,255,255,.5); border:1px solid var(--rule); border-radius:6px; padding:.8rem 1rem; font-size:.85rem; margin:1.2rem 0; }
 </style></head>
 <body><main>
-  <p class="back"><a href="/">← course home</a> · <a href="/signals">signals</a></p>
-  <p class="eyebrow">Weeks 8–9 · how much to bet</p>
+  ${nav("/size")}
+  <p class="eyebrow">The calculator &middot; how many shares, and where the stop goes</p>
   <h1>The position-size calculator</h1>
-  <p class="lede">Carver's Starter System, unleveraged: a ${SIZING.riskTargetPct}% risk target shared equally between the instruments an account runs (${SIZING.riskTargetPct}% ÷ N each, N = 1 unless the tutor set more), the stop at half the annual instrument risk below the high since entry, whole shares, $${SIZING.costPerTrade} + ${SIZING.fxPct}% a trade. Type an account value and a ticker — any core-tier name, or a small cap once its rule has ${SIGNAL_RULE.minMatureDays} closes (the list offers the ones that do); the arithmetic is shown line by line so you can check every number on a calculator. The ticket sizes on the account's <em>current</em> value — type that, not the capital enrolled.</p>
+  <p class="lede">How many shares, and where the stop goes. Type your account's value tonight and pick a company; the calculator shows the arithmetic line by line so you can check every number yourself. Any of the big names works; a smaller company works once the rule has ${SIGNAL_RULE.minMatureDays} days of its prices. The rules are Robert Carver's: a risk target of ${SIZING.riskTargetPct}% a year (the account moves about that much in a typical year), shared equally when an account runs more than one company (${SIZING.riskTargetPct}% ÷ N each); the stop (the price at which the rule says sell) half the instrument risk (how much the price moves in a year) below the highest close since you bought; whole shares only; $${SIZING.costPerTrade} + ${SIZING.fxPct}% a trade. Use the account's value <em>tonight</em>, not the money you started with — the ticket judge sizes on tonight's value.</p>
   <form class="calc" method="get" action="/size">
     <label>Ticker <input name="ticker" list="universe" value="${esc(ticker)}" placeholder="AAPL" required maxlength="12"><datalist id="universe">${list}</datalist></label>
     <label>Account value, $ <input name="capital" inputmode="decimal" value="${esc(capital)}" placeholder="10000" required maxlength="14"></label>
@@ -233,7 +233,7 @@ ${SHARED_CSS}
     <button type="submit">Size it</button>
   </form>
   ${body}
-  <div class="rule"><b>The rule, in full.</b> Target exposure = account value × (${SIZING.riskTargetPct}% ÷ N instruments) ÷ instrument risk, capped at the account (no leverage) · units = whole shares that fit · stop gap = ½ × instrument risk × entry price, fixed at entry · stop = highest close since entry − gap · a trade costs $${SIZING.costPerTrade} + ${SIZING.fxPct}% · a position whose round trip costs more than ${SIZING.maxRoundTripCostPct}% is too small to trade. The constants live in one table, <code>src/lib/sizing.ts</code>, which the ticket route and the nightly stop tracker share.</div>
+  <div class="rule"><b>The rule, in full.</b> Target exposure = account value × (${SIZING.riskTargetPct}% ÷ N instruments) ÷ instrument risk, capped at the account (no leverage) · units = whole shares that fit · stop gap = ½ × instrument risk × entry price, fixed at entry · stop = highest close since entry − gap · a trade costs $${SIZING.costPerTrade} + ${SIZING.fxPct}% · a position whose round trip costs more than ${SIZING.maxRoundTripCostPct}% is too small to trade. The ticket judge and the nightly stop tracker use these same constants.</div>
   <footer><p class="notice">${NOTE}</p></footer>
 </main></body></html>`;
 }
@@ -403,7 +403,7 @@ portfolio.post("/tickets/:code", async (c) => {
 
 function ticketsEmptyPage(reason: string): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Tickets</title><meta name="referrer" content="same-origin">${FONTS_HTML}<style>${PAGE_CSS} .empty{color:var(--stamp)}</style></head>
-<body><main><p class="back"><a href="/">← course home</a></p><p class="eyebrow">Week 8 · tickets</p><h1>Paper tickets</h1><p class="empty">${esc(reason)}</p><footer><p class="notice">${NOTE}</p></footer></main></body></html>`;
+<body><main>${nav("/tickets")}<p class="eyebrow">Your paper account</p><h1>Paper tickets</h1><p class="empty">${esc(reason)}</p><footer><p class="notice">${NOTE}</p></footer></main></body></html>`;
 }
 
 function ticketsPage(student: Student, positions: PositionRow[], tickets: TicketRow[], latest: Latest, flash: { kind: "ok" | "no"; text: string; reasons?: Reason[] } | null, keep: Record<string, string>, riskRows: RiskRow[] = [], night: string | null = null, gate: Door = DOOR_OFF): string {
@@ -481,10 +481,12 @@ ${SHARED_CSS}
   .empty { color:var(--faint); font-style:italic; }
 </style></head>
 <body><main>
-  <p class="back"><a href="/">← course home</a> · <a href="/signals">signals</a> · <a href="/size">calculator</a> · <a href="/tickets/${esc(student.code)}/review">review my process</a> · <a href="/costs">costs &amp; tax</a></p>
-  <p class="eyebrow">Weeks 8–9 · paper portfolio</p>
+  ${nav("/me")}
+  <p class="eyebrow">Your paper account</p>
   <h1>${esc(student.name)}</h1>
-  <p class="lede">A paper account enrolled at ${money(student.capital)}, run by Carver's rule: open when the rule is long, size by instrument risk on the account's current value, close at the stop, write every decision down. This account runs ${student.instruments} instrument${student.instruments === 1 ? "" : "s"} — each position sized at ${fmtPct(targetFor(student.instruments))}% a year${student.instruments > 1 ? ` (${SIZING.riskTargetPct}% ÷ ${student.instruments})` : ""}. ${gate.on ? `Signed in as ${esc(gate.identity?.email ?? "")}${gate.tutor ? " (the tutor)" : ""}: this page opens only for its own student and the tutor (week 12).` : "The page's address is its key: share a screenshot, not the link."}</p>
+  <p class="lede">This is your paper account — pretend dollars, real prices, a real record — started at ${money(student.capital)}. Read the stop line first (the stop is the price at which the rules say sell; it is printed on every open position), then the rule's state (LONG or FLAT), then tonight's report; then write the Monday line in your journal (one line a week: what the rules said, what you did, why).</p>
+  <p class="lede">The rules are Robert Carver's: buy only when the rule says LONG, size by how much the price moves (on the account's value tonight), sell at the stop, write every decision down before you make it. A ticket is the form at the foot of this page: it opens or closes a paper position, and the judge (the rules) refuses it with a reason if it breaks them. This account runs ${student.instruments} compan${student.instruments === 1 ? "y" : "ies"} at a time — each position sized at ${fmtPct(targetFor(student.instruments))}% risk a year${student.instruments > 1 ? ` (${SIZING.riskTargetPct}% ÷ ${student.instruments})` : ""}. ${gate.on ? `Signed in as ${esc(gate.identity?.email ?? "")}${gate.tutor ? " (the tutor)" : ""}: this page opens only for you and the tutor.` : "The page's address is its key: share a screenshot, not the link."}</p>
+  <p class="actions"><a class="btn" href="/tickets/${esc(student.code)}/review">Did I follow my rules? &mdash; the review</a><a class="btn alt" href="/size">The calculator</a><a class="btn alt" href="/costs">Costs &amp; tax</a><a class="btn alt" href="/kit">The kit</a></p>
   <div class="acct">
     <span>Account value<b>${money(report.accountValue)}</b><i>${since >= 0 ? "+" : "−"}${Math.abs(since).toFixed(1)}% since enrolment</i></span>
     <span>Cash<b>${money(account.cash)}</b></span>
@@ -512,6 +514,6 @@ ${SHARED_CSS}
   ${tickets.length ? `<div class="wrap"><table><thead><tr><th>#</th><th>Written</th><th>Side</th><th>Symbol</th><th>Units</th><th>Fill</th><th>Cost</th><th>Journal</th></tr></thead><tbody>${ticketRows}</tbody></table></div>` : `<p class="empty">None yet. The first one is the hardest.</p>`}
   <h2>Nightly reports <span class="when">${riskRows.length ? `the last ${riskRows.length} written by the 23:00 UTC job` : "none yet — the first is written by the 23:00 UTC job tonight"}</span></h2>
   ${riskRows.length ? `<div class="wrap"><table><thead><tr><th>Close</th><th>Value</th><th>Open P&amp;L</th><th>Drawdown</th><th>Risk used</th><th>Open</th><th>Nearest stop</th><th>Flags</th></tr></thead><tbody>${historyRows}</tbody></table></div>` : `<p class="empty">None yet — the first is written after the next 23:00 UTC run. The report above is computed now from the same arithmetic.</p>`}
-  <footer><p class="notice">${NOTE}</p><p>Fills are the latest nightly close the toolkit holds when the ticket is written (the decision close), in the adjusted series; the stop tracker and the risk report run after the signal pass at 23:00 UTC; the tutor reviews process, never outcomes. Drawdowns are normal: the report says how far below the high the account is and leaves the feeling to the journal.</p></footer>
+  <footer><p class="notice">${NOTE}</p><p>A ticket is filled at the latest nightly close the toolkit holds when it is written (the price of the evening you decided), in the adjusted series (dividends and splits folded into the price); the stop tracker and the risk report run after the signal pass at 23:00 UTC; the tutor reviews process, never outcomes. Drawdowns (how far the account is below its highest value) are normal: the report says how far below the high the account is and leaves the feeling to the journal.</p></footer>
 </main></body></html>`;
 }

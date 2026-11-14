@@ -81,7 +81,7 @@ describe("buildWatchlist / describeWatchlist — statements, never picks", () =>
     expect(w.maturing.map((r) => r.symbol)).toEqual(["MLI", "CALM", "NEWC"]);  // NEWC has no books yet; its rule is warming all the same
     expect(w.counts).toEqual({ rows: 7, long: 3, open: 0, near: 0, survivors: 0, candidates: 0, warming: 3, quarantined: 0 });
     const lines = describeWatchlist(w);
-    expect(lines[0]).toBe('The gate tonight: nothing. No company passes either Graham screen, so there is no name the course would ticket by both rules — the rule\'s answer is cash, and a journal line that says "waiting".');
+    expect(lines[0]).toBe('The gate tonight: nothing. No company passes either Graham screen, so there is no name the course would write a ticket for by both rules — the rules\' answer is to hold cash, and a journal line that says "waiting".');
     expect(lines[1]).toBe("No near miss is long tonight. A near miss is a reading list, not a pick.");   // the caution prints every night (review H5)
     expect(lines[2]).toMatch(/^3 names are long on the rule; 3 of them fail both screens\. By defensive tests passed, the nearest: JNJ 5\/7 · 3\/6, KO 5\/7 · 3\/6, DAL 4\/7 · 3\/6\. Lesson 10's point/);
     expect(lines[3]).toBe("3 small caps still warming up (fewer than 128 closes); the nearest, MLI, has 100 — ticketable once it has 128 and no quarantine.");

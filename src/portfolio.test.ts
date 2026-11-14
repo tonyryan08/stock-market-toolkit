@@ -106,7 +106,9 @@ describe("GET /size — the calculator page", () => {
     const db = base();
     await get(db, "/size");
     expect(db.ran("FROM tickers t LEFT JOIN signals s")[0].sql).toMatch(/t\.tier = 'core' OR \(s\.state IS NOT NULL AND s\.state <> 'warming' AND s\.quarantined IS NULL\)/);
-    expect(html).toContain("or a small cap once its rule has 128 closes");
+    expect(html).toContain("How many shares, and where the stop goes. Type your account's value tonight and pick a company");
+    expect(html).toContain("a smaller company works once the rule has 128 days of its prices");   // v1.2.0 review S5: the fact kept on the page
+    expect(html).toContain('<nav class="top" aria-label="The course site">');
   });
   it("an empty form renders without an error; a bad ticker says so and escapes it", async () => {
     expect((await (await get(base(), "/size")).text())).not.toContain("class=\"empty\"");
@@ -221,7 +223,8 @@ describe("GET /api/tickets/:code and the page", () => {
     expect(html).toContain("<td class=\"d\">2026-10-28</td><td class=\"n\">$10,200.00</td>");   // the nightly row
     expect(html).toContain("drawdown ≥ 10%");                                                       // the flag in words
     expect(html).not.toContain(`Code ${STUDENT.code}`);                                              // OI-56: the code is the URL, not page text
-    expect(html).toContain("runs 1 instrument — each position sized at 12% a year");
+    expect(html).toContain("This account runs 1 company at a time — each position sized at 12% risk a year");
+    expect(html).toContain("Read the stop line first (the stop is the price at which the rules say sell; it is printed on every open position), then the rule's state (LONG or FLAT), then tonight's report");
     expect(html).toContain("+3.2% since enrolment");                                                // (10,323.53 − 10,000) ÷ 10,000
     expect(html).toContain('<textarea name="journal" maxlength="1000">');                            // the server's JOURNAL_MAX, not a literal (Phase 3 review N7)
     // a loss prints a true minus (U+2212), the sign the money() formatter already uses, never a hyphen

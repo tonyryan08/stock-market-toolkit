@@ -217,7 +217,7 @@ describe("the page", () => {
     expect(html).toContain("How to ask well");
     expect(html).toContain("What the class asked");
     expect(html).toContain("What is a drawdown?");
-    expect(html).toContain("175 passages indexed 2026-11-11");
+    expect(html).toContain("in 175 short passages, last read in on 2026-11-11");
     expect(html).toContain("Education, not advice");
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(d.ran("INSERT INTO questions").length).toBe(0);

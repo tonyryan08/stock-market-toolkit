@@ -91,7 +91,7 @@ export function describeReport(r: RiskReport, enrolledCapital: number): string[]
   const stale = r.marked.contributions.filter((c) => c.date !== null && c.date < r.date);
   if (stale.length) lines.push(`${stale.map((c) => `${c.symbol} is valued at its ${c.date} close`).join("; ")} — the latest stored; the nightly pass has not reached ${stale.length === 1 ? "it" : "them"} since.`);
   if (r.drawdownPct > 0) {
-    lines.push(`The high-water mark is ${money(r.hwm)}; the account is ${pct1(r.drawdownPct)} below it. At a ${r.riskTargetPct}% target a one-in-twenty year is about −20%; a run of years typically sees a drawdown of 20–30% from a high, one run in twenty 40% or more, and deeper over a decade: this is what the target was chosen to survive. Nothing in the rules changes because of it.`);
+    lines.push(`The high-water mark (the account's highest value so far) is ${money(r.hwm)}; the account is ${pct1(r.drawdownPct)} below it. That is normal. A ${r.riskTargetPct}% target means the account moves about ${r.riskTargetPct}% in an ordinary year, so one year in twenty is down about 20%; over a run of years a fall of 20–30% from a high is usual, one run in twenty sees 40% or more, and a decade sees deeper. The target was chosen to survive that. Nothing in the rules changes because of a fall.`);
   } else {
     lines.push(`The account is at its high-water mark (${money(r.hwm)}). It will not stay there — a ${r.riskTargetPct}% target means ordinary years move it by about that much either way.`);
   }
@@ -103,9 +103,9 @@ export function describeReport(r: RiskReport, enrolledCapital: number): string[]
     if (r.nearestStopPct !== null) {
       const nearest = r.marked.contributions.filter((c) => c.stopDistancePct === r.nearestStopPct)[0];
       lines.push(r.stopHits > 0
-        ? `${r.stopHits} stop${r.stopHits === 1 ? " has" : "s have"} been hit (${r.marked.contributions.filter((c) => c.stopHit).map((c) => c.symbol).join(", ")}): the rule says close — the close ticket is yours to write at the next decision, with the journal line.`
+        ? `${r.stopHits} stop${r.stopHits === 1 ? " has" : "s have"} been hit (${r.marked.contributions.filter((c) => c.stopHit).map((c) => c.symbol).join(", ")}): the rule says close, whatever the price does after — the close ticket is yours to write at the next decision, with the journal line.`
         : r.nearestStopPct < 0
-          ? `${nearest ? nearest.symbol + " closed" : "A position closed"} ${pct1(-r.nearestStopPct)} below its stop with no stamp: the tracker left it untouched tonight — a \`split_unknown\` receipt means its series moved by a factor the tracker cannot explain and a splits row is wanted before it is trusted (Phase 3 review F2).`
+          ? `${nearest ? nearest.symbol + " closed" : "A position closed"} ${pct1(-r.nearestStopPct)} below its stop with no stamp: the tracker left it untouched tonight — a \`split_unknown\` receipt means its series moved by a factor the tracker cannot explain and a splits row is wanted before it is trusted.`
           : `The nearest stop is ${nearest ? nearest.symbol + ", " : ""}${pct1(r.nearestStopPct)} below ${nearest && r.marked.missing.includes(nearest.symbol) ? "the price it is valued at (its entry — no close is stored)" : "the latest close"}.`);
     }
     if (r.flags.includes("too_many_positions")) lines.push(`${r.openPositions} positions are open for an account set to ${r.instruments} instrument${r.instruments === 1 ? "" : "s"}: no new opening ticket until the open count is back within the setting.`);

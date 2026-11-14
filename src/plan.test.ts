@@ -108,7 +108,7 @@ describe("the page: tonight's top names on the judge's facts, every row overwrit
     // GOOD at $60, 20% risk, 10000 × 6% ÷ 20% = $3,000 → 50 shares; stop gap ½ × 20% × 60 = $6.00, stop $54.00
     expect(html).toMatch(/name="units_GOOD" value="" placeholder="50"/);
     expect(html).toMatch(/name="units_DEAR" value="" placeholder="29"/);   // on $9,990.50 after GOOD's cost: 29 of DEAR at $100 (F3)
-    expect(html).toContain("$54.00<br><span class=\"why\">gap $6.00 · $300.00 to the stop</span>");
+    expect(html).toContain("$54.00<br><span class=\"why\">gap $6.00<br>$300.00 to the stop</span>");
     expect(html).toMatch(/<textarea class="thesis" name="thesis_GOOD"[^>]*><\/textarea>/);
     expect(html).toContain("<p class=\"facts\">GOOD: rule LONG since 2026-09-01 (forecast +8.2); Graham 7/7 ·");
     expect(html).toContain("$10,000.00 · $10,000.00 cash");
@@ -118,8 +118,15 @@ describe("the page: tonight's top names on the judge's facts, every row overwrit
     expect(html).toContain("Eligible tonight — 2 names, by the tests");
     expect(html).toContain("Not eligible tonight — 1 name, with the reason the ticket would give");
     expect(html).toContain("No exchange rate typed, so the euro columns are blank");
-    expect(html).toContain("the course's, not a broker order");
-    expect(html).toContain("the forecast (the rule's trend strength, from the price series)");
+    expect(html).toContain('<span class="sub">not a broker order</span>');
+    expect(html).toContain("Within each group: more of Graham's seven defensive tests passed, then more of his six enterprising tests, then a stronger trend (the forecast, capped at ±20), then a calmer price (the instrument risk — how much it moves in a year). Never by what went up.");   // v1.2.0 review S4: the order as rankCandidates sorts it
+    expect(html).toContain('data-label="Price moves a year"');   // v1.2.0 review S3: two different numbers, two labels on a phone
+    expect(html).toContain('data-label="Adds to the account\'s risk"');
+    expect(html).not.toContain('data-label="Risk a year"');
+    expect(html).toContain('<nav class="top" aria-label="The course site">');
+    expect(html).toContain('<a href="/plan" aria-current="page">Planner</a>');
+    expect(html).toContain('<table class="plan" role="table" aria-label="Eligible tonight">');   // v1.2.0 review N3: the roles keep the table a table when it stacks on a phone
+    expect(html).toContain('data-label="Stop $"');
     expect(html).toContain("Education, not advice. The planner is a screen and a calculator");
     expect(html).not.toContain("${");
   });
@@ -131,7 +138,7 @@ describe("the page: tonight's top names on the judge's facts, every row overwrit
     expect(html).toContain("Oversized: the rule's size is 50 shares; 80 would carry 9.6% a year against the 6% target. The ticket will refuse it; fewer is allowed.");
     expect(html).toMatch(/class="units bad" name="units_DEAR" value="2O"/);
     expect(html).toContain("Units must be a whole number of shares, at least 1 — &quot;2O&quot; could not be read.");
-    expect(html).toContain("€4,444.44<br><span class=\"why\">stop €50.00 · €444.44 to the stop · trip €30.67</span>");   // 80 × $60 ÷ 1.08; the stop $54 ÷ 1.08; 80 × $6 ÷ 1.08
+    expect(html).toContain("€4,444.44<br><span class=\"why\">stop €50.00<br>€444.44 to the stop<br>trip €30.67</span>");   // 80 × $60 ÷ 1.08; the stop $54 ÷ 1.08; 80 × $6 ÷ 1.08
     expect(html).toContain("at 1.08 USD/EUR");
     expect(html).toContain("commission + conversion to open");
     expect(html).toContain("to the stops, before costs");

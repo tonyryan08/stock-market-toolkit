@@ -52,7 +52,7 @@ describe("the student's page, four ways (decision 23 b)", () => {
     const r = await req(db(), `/tickets/${ADA.code}`, ADA.email);
     expect(r.status).toBe(200);
     const html = await r.text();
-    expect(html).toMatch(/Signed in as ada@example\.com: this page opens only for its own student and the tutor/);
+    expect(html).toMatch(/Signed in as ada@example\.com: this page opens only for you and the tutor\./);
     expect(html).not.toMatch(/share a screenshot/);
   });
   it("another student: 403, the reason names their own door; the tutor: opens, named as the tutor", async () => {
@@ -164,7 +164,7 @@ describe("/me — the student's door", () => {
   it("door off: says the code is the way; nobody named: 403", async () => {
     const off = await req(db(), "/me");
     expect(off.status).toBe(200);
-    expect(await off.text()).toMatch(/Sign-in is not switched on for this deployment/);
+    expect(await off.text()).toMatch(/Sign-in is switched off on this copy of the site/);
     const nobody = worker.fetch(new Request("http://localhost/me"), env(db()), { waitUntil() {}, passThroughOnException() {}, access: { aud: "a", getIdentity: async () => undefined } } as any);
     expect((await nobody).status).toBe(403);
   });
@@ -186,7 +186,7 @@ describe("/me — the student's door", () => {
     const r = await req(two, "/me", TUTOR);
     expect(r.status).toBe(200);
     const html = await r.text();
-    expect(html).toMatch(/2 paper accounts are linked/);
+    expect(html).toMatch(/2 paper accounts \(pretend dollars, real prices, a real record\) are linked/);
     expect(html).toMatch(new RegExp(`href="/tickets/${ADA.code}"`));
     expect(html).toMatch(new RegExp(`href="/tickets/${BOB.code}"`));
   });
@@ -205,11 +205,11 @@ describe("the landing and the kit", () => {
     expect(off).not.toMatch(/Signed in/);
     expect(off).not.toMatch(/<!--who-->|<!--door-->/);
     // review S1: the "New this week" sentence follows the door — off: the address is still the key
-    expect(off).toMatch(/the door is <strong>off<\/strong> tonight: your page is still its address, so share a screenshot, not the link/);
-    expect(off).not.toMatch(/no address to keep secret/);
+    expect(off).toMatch(/On this copy of the site the sign-in is <strong>off<\/strong>, so <a href="\/me">your page<\/a> is found by your code, not your email\. Share a screenshot of it, not the link\./);   // v1.2.0: the reader review's longest sentence, split
+    expect(off).not.toMatch(/for nobody else/);
     const ada = await (await req(db(), "/", ADA.email)).text();
     expect(ada).toMatch(new RegExp(`Signed in as ada@example\\.com &middot; <a href="/tickets/${ADA.code}">your page</a>`));
-    expect(ada).toMatch(/The site now stands behind Cloudflare Access .* no address to keep secret/);
+    expect(ada).toMatch(/You signed in with a code sent to your email\. <a href="\/me">Your page<\/a> opens for you and the tutor, and for nobody else\./);
     expect(ada).not.toMatch(/the door is <strong>off/);
     expect(ada).toMatch(/<a href="\/cdn-cgi\/access\/logout">sign out<\/a>/);   // review N4: how to sign out, on the page
     expect(off).not.toMatch(/sign out/);
@@ -217,6 +217,80 @@ describe("the landing and the kit", () => {
     expect(tutor).toMatch(/Signed in as tutor@example\.ie \(the tutor\) &middot; the enrolment list is/);
     const bob = await (await req(db(), "/", "bob@example.com")).text();
     expect(bob).toMatch(/no account is linked to this email yet/);
+  });
+  it("v1.2 (decision 25): the landing leads with the cards, the header is on every page with the current page marked, and the planner's card and link follow the door (the tutor; anyone when the door is off; never a student)", async () => {
+    // door off: the code is the key, so the planner is open to anyone — its card and its link show (plannerOpen)
+    const off = await (await req(db(), "/")).text();
+    expect(off).toContain('<nav class="doors" aria-label="What you do here">');
+    for (const href of ["/me", "/watchlist", "/signals", "/tutor", "/costs", "/kit"]) expect(off).toContain(`<a class="door${href === "/me" ? " first" : ""}" href="${href}"><h2>`);
+    expect(off).toContain('<a class="home" href="/" aria-current="page">Intro to the Stock Market</a>');
+    expect(off).toContain('<a class="door" href="/plan"><h2>The planner</h2>');
+    expect(off).toContain('<a href="/plan">Planner</a>');
+    expect(off).not.toContain("<!--planner");   // the mark is always filled by the middleware
+    expect(off).not.toContain('class="back"');   // the grey crumb line is gone from every page
+    expect(off).toContain('<p class="start"><strong>New here?</strong>');   // the reader review: which card first
+    expect(off).toContain('<ul class="key" aria-label="The course\'s words">');   // the six-line key
+    expect(off).toContain('<details class="ledger">');   // the builder's log, folded
+    // fix1: the look-up box sits directly under the cards, before the promises, with the reference shelf as buttons
+    expect(off.indexOf('<h2>Look up a company</h2>')).toBeGreaterThan(off.indexOf('</nav>', off.indexOf('<nav class="doors"')));
+    expect(off.indexOf('<h2>Look up a company</h2>')).toBeLessThan(off.indexOf('<div class="promises">'));
+    for (const [href, label] of [["/screen", "The Graham screen &mdash; seven tests, run tonight"], ["/card", "The checklist cards"], ["/explain/NVDA", "A company explained, with its receipts"], ["/size", "The calculator &mdash; how many shares, where the stop goes"]]) expect(off).toContain(`<a class="btn alt" href="${href}">${label}</a>`);
+    expect(off).not.toContain("Also here:");
+    expect(off).not.toContain("all 86 companies");   // the count is the signals page's to compute (review N8)
+    // the header, with the page's own link marked, on the pages a student meets
+    for (const [path, label] of [["/signals", "Signals"], ["/watchlist", "Watchlist"], ["/costs", "Costs &amp; tax"], ["/kit", "The kit"], ["/tutor", "Ask the tutor"]] as const) {
+      const html = await (await req(db(), path)).text();
+      expect(html).toContain('<nav class="top" aria-label="The course site">');
+      expect(html).toContain(`<a href="${path}" aria-current="page">${label}</a>`);
+      expect(html).not.toContain('class="back"');
+      expect(html).not.toContain("<!--planner");
+    }
+    const size = await (await req(db(), "/size")).text();
+    expect(size).toContain('<nav class="top" aria-label="The course site">');
+    expect(size).not.toMatch(/<a href="[^"]*" aria-current="page">/);   // the calculator is not in the header; no link is marked
+    // the door on, the tutor: the planner's card on the landing and its link in EVERY header (review S2), marked current on the planner
+    const tutor = await (await req(db(), "/", TUTOR)).text();
+    expect(tutor).toContain('<a class="door" href="/plan"><h2>The planner</h2>');
+    expect(tutor).toContain('<a href="/plan">Planner</a>');
+    const tutorSignals = await (await req(db(), "/signals", TUTOR)).text();
+    expect(tutorSignals).toContain('<a href="/plan">Planner</a>');
+    const tutorPlan = await (await req(db(), "/plan", TUTOR)).text();
+    expect(tutorPlan).toContain('<a href="/plan" aria-current="page">Planner</a>');
+    // the door on, a student: no card, no link anywhere — the planner's own 403 page included (review S1)
+    const ada = await (await req(db(), "/", ADA.email)).text();
+    expect(ada).not.toContain('href="/plan"');
+    expect(ada).not.toContain(">Planner<");
+    const adaSignals = await (await req(db(), "/signals", ADA.email)).text();
+    expect(adaSignals).not.toContain(">Planner<");
+    const adaPlan = await req(db(), "/plan", ADA.email);
+    expect(adaPlan.status).toBe(403);
+    const adaPlanHtml = await adaPlan.text();
+    expect(adaPlanHtml).not.toContain(">Planner<");
+    expect(adaPlanHtml).not.toContain("<!--planner");
+    // JSON passes the middleware untouched
+    const api = await req(db(), "/api/me", TUTOR);
+    expect(api.headers.get("content-type")).toMatch(/json/);
+    expect((await api.json() as { tutor: boolean }).tutor).toBe(true);
+  });
+  it("v1.2.0: /me with the door off takes a code in a box — the right shape redirects to the page, the wrong shape says so (the reader review's dead end)", async () => {
+    const page = await req(db(), "/me");
+    expect(page.status).toBe(200);
+    const html = await page.text();
+    expect(html).toContain('<form class="code" method="get" action="/me">');
+    expect(html).toContain("Your page is your paper account: tonight's report, the stop line (the price at which the rules say sell)");
+    const go = await req(db(), "/me?code=k7pm-4r2x");
+    expect(go.status).toBe(302);
+    expect(go.headers.get("location")).toBe("/tickets/K7PM-4R2X");
+    const bad = await req(db(), "/me?code=hello");
+    expect(bad.status).toBe(400);
+    expect(await bad.text()).toContain("That doesn't look like a student code — eight characters like K7PM-4R2X.");
+    // the door on: the tutor with no linked account gets the box too; a student with no account does not (the tutor links it)
+    const tutor = await (await req(db(), "/me", TUTOR)).text();
+    expect(tutor).toContain('<form class="code" method="get" action="/me">');
+    const bob = await (await req(db(), "/me", "bob@example.com")).text();
+    expect(bob).not.toContain('<form class="code"');
+    // a typed code redirects whoever is at the door; the page itself decides whether it opens (ownerGate)
+    expect((await req(db(), "/me?code=K7PM-4R2X", "bob@example.com")).status).toBe(302);
   });
   it("/kit lists every kit document with its repository path, in the order a student meets it", async () => {
     const r = await req(db(), "/kit");

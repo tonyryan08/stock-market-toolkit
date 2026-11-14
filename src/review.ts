@@ -23,7 +23,7 @@
  * exists, decision #22); the audit never needs the model.
  */
 import { Hono } from "hono";
-import { PAGE_CSS, FONTS_HTML, esc, SHARED_CSS } from "./page";
+import { PAGE_CSS, FONTS_HTML, esc, SHARED_CSS, nav } from "./page";
 import { intSetting } from "./lib/settings";
 import { DEFAULT_MODEL, claudeJson, extractJson } from "./lib/narrative";
 import { ownerGate } from "./lib/access";
@@ -287,7 +287,7 @@ review.post("/tickets/:code/review", async (c) => {
 // ---------------------------------------------------------------------------
 function emptyPage(reason: string): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Process review</title><meta name="referrer" content="same-origin">${FONTS_HTML}<style>${PAGE_CSS} .empty{color:var(--stamp)}</style></head>
-<body><main><p class="back"><a href="/">← course home</a></p><p class="eyebrow">Week 11 · the process review</p><h1>Did you follow your rules?</h1><p class="empty">${esc(reason)}</p><footer><p class="notice">${NOTE}</p></footer></main></body></html>`;
+<body><main>${nav("/me")}<p class="eyebrow">Your process, reviewed</p><h1>Did you follow your rules?</h1><p class="empty">${esc(reason)}</p><footer><p class="notice">${NOTE}</p></footer></main></body></html>`;
 }
 
 const SEV: Record<string, { label: string; cls: string }> = { breach: { label: "NOT FOLLOWED", cls: "breach" }, kept: { label: "FOLLOWED", cls: "kept" }, note: { label: "JOURNAL", cls: "note" }, fact: { label: "THE REPORT", cls: "fact" } };
@@ -373,10 +373,10 @@ ${SHARED_CSS}
   .empty { color:var(--faint); font-style:italic; }
 </style></head>
 <body><main>
-  <p class="back"><a href="/">← course home</a> · <a href="/tickets/${esc(r.code)}">my page</a> · <a href="/signals">signals</a> · <a href="/costs">costs &amp; tax</a></p>
-  <p class="eyebrow">Week 11 · the process review</p>
+  ${nav("/me")}
+  <p class="eyebrow">Your process, reviewed</p>
   <h1>${esc(r.name ?? "")} — did you follow your rules?</h1>
-  <p class="lede">Your tickets, positions and nightly reports read against the rules you chose, as of the ${esc(a.asOf ?? "—")} close. Two parts: the audit (the rules applied to the rows — no AI) and, if you ask for it, a reading written by the course's AI from a sheet that carries <b>none of the toolkit's profit, loss, account-value or drawdown figures</b> — it can only talk about process, because that is all it was shown (your own journal words are on it, as you wrote them). Your job, as with the tutor: check every fact tag against the sheet.</p>
+  <p class="lede">Did you do what you wrote? This page reads your tickets, positions and nightly reports against the rules, as of the ${esc(a.asOf ?? "—")} close. Read the audit first: the rules applied to your rows, line by line, by code and not by AI. Then, if you ask for it, a reading written by the course's AI from a fact sheet (the list of facts it is shown, printed below the reading) that carries <b>none of the toolkit's profit, loss, account-value or drawdown figures</b>. It can only talk about your process, because that is all it was shown — though your own journal words are on the sheet as you wrote them, results included if you wrote them. Your job, as with the tutor: every tag in the reading names a fact on the sheet; check that the fact is really there.</p>
   <h2>The audit</h2>
   <div class="summary">${lines.map((l) => `<p>${esc(l)}</p>`).join("")}</div>
   ${itemsHtml}
