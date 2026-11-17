@@ -28,6 +28,9 @@ export type FundamentalsYear = {
   /** The toolkit's readings of a provider's "None" on this year's balance sheet
    *  ("no debt line reported → long-term debt 0"), shown wherever a test rests on them (review S8). */
   readings?: string | null;
+  /** Alpha Vantage's net income for the year when it differs from EDGAR's by more than 1%
+   *  (the stored netIncome is then EDGAR's — OI-116). Null or absent when they agree. */
+  netIncomeAv?: number | null;
 };
 
 export type Ratios = {

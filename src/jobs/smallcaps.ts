@@ -198,8 +198,8 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
   if (env.EDGAR_USER_AGENT) {
     for (const t of tickers.filter((x) => x.fundamentals_status === "eps_missing" && x.cik).slice(0, EDGAR_RETRY_PER_NIGHT)) {
       if (budget.fetches + 6 > budget.max) break;
-      const periods = (await env.DB.prepare("SELECT fiscal_year, period_end FROM fundamentals_annual WHERE symbol = ?1 AND source = 'av' AND period_end IS NOT NULL ORDER BY fiscal_year DESC")
-        .bind(t.symbol).all<{ fiscal_year: string; period_end: string }>()).results;
+      const periods = (await env.DB.prepare("SELECT fiscal_year, period_end, net_income FROM fundamentals_annual WHERE symbol = ?1 AND source = 'av' AND period_end IS NOT NULL ORDER BY fiscal_year DESC")
+        .bind(t.symbol).all<{ fiscal_year: string; period_end: string; net_income?: number | null }>()).results;
       if (periods.length === 0) { await env.DB.prepare("UPDATE tickers SET fundamentals_status = 'ok' WHERE symbol = ?1").bind(t.symbol).run(); continue; }
       const e = await edgarEpsForPeriods(t.cik!, periods.map((p) => p.period_end), env.EDGAR_USER_AGENT, edgarOpts);
       edgarCalls += e.calls;
@@ -214,7 +214,15 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
       let got = 0;
       for (const p of periods) {
         const y = e.years.find((x) => x.end === p.period_end);
-        if (!y || y.eps === null) continue;
+        if (!y) continue;
+        // OI-116 review S3: the stored net income is Alpha Vantage's (EDGAR failed when the row was
+        // written); the retry applies the same rule as the visit, so the books page's sentence follows.
+        if (y.netIncome !== null) {
+          const ni = pickNetIncome(p.net_income ?? null, y.netIncome, y.netIncomeTag);
+          await env.DB.prepare("UPDATE fundamentals_annual SET net_income = ?3, net_income_av = ?4 WHERE symbol = ?1 AND fiscal_year = ?2")
+            .bind(t.symbol, p.fiscal_year, ni.netIncome, ni.netIncomeAv).run();
+        }
+        if (y.eps === null) continue;
         got++;
         await env.DB.prepare("UPDATE fundamentals_annual SET eps_diluted = ?3, eps_source = ?4, shares_diluted = COALESCE(?5, shares_diluted) WHERE symbol = ?1 AND fiscal_year = ?2")
           .bind(t.symbol, p.fiscal_year, y.eps, y.epsSource, y.sharesDiluted).run();
@@ -358,7 +366,7 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
         // EDGAR: EPS with provenance, net income for the cross-check, diluted shares.
         let edgarNote = "edgar skipped: no CIK on the ticker row";
         let epsMissing = false;
-        const eps = new Map<string, { eps: number | null; epsSource: string | null; shares: number | null; ni: number | null }>();
+        const eps = new Map<string, { eps: number | null; epsSource: string | null; shares: number | null; ni: number | null; niTag: string | null }>();
         if (t.cik && env.EDGAR_USER_AGENT) {
           const e = await edgarEpsForPeriods(t.cik, years.map((y) => y.fiscalDateEnding), env.EDGAR_USER_AGENT, edgarOpts);
           edgarCalls += e.calls;
@@ -372,18 +380,18 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
             edgarNote = `edgar failed: ${e.fatal.slice(0, 100)} — EPS left empty${epsMissing ? ", EDGAR retried later" : ""}`;
             await log(sym, "edgar_failed", 0, e.fatal.slice(0, 200));
           } else {
-            for (const y of e.years) eps.set(y.end, { eps: y.eps, epsSource: y.epsSource, shares: y.sharesDiluted, ni: y.netIncome });
+            for (const y of e.years) eps.set(y.end, { eps: y.eps, epsSource: y.epsSource, shares: y.sharesDiluted, ni: y.netIncome, niTag: y.netIncomeTag });
             const got = e.years.filter((y) => y.eps !== null).length;
             const agree: string[] = [];
             const differ: string[] = [];
             for (const y of years) {
               const ed = eps.get(y.fiscalDateEnding);
               if (!ed || ed.ni === null || y.netIncome === null) continue;
-              const rel = Math.abs(ed.ni - y.netIncome) / Math.max(1, Math.abs(ed.ni));
-              (rel <= 0.01 ? agree : differ).push(`${y.fiscalYear}${rel > 0.01 ? ` av ${y.netIncome} vs edgar ${ed.ni}` : ""}`);
+              const rel = netIncomeGap(y.netIncome, ed.ni);
+              (rel <= NET_INCOME_TOLERANCE ? agree : differ).push(`${y.fiscalYear}${rel > NET_INCOME_TOLERANCE ? ` av ${y.netIncome} vs edgar ${ed.ni} (${ed.niTag ?? "?"})` : ""}`);
             }
             edgarNote = `edgar: eps ${got}/${years.length}${got ? ` (${(e.years.find((y) => y.epsSource)?.epsSource ?? "").split(" ")[0].replace("edgar:", "")})` : ""} · net income agrees ${agree.length}/${agree.length + differ.length}${differ.length ? ` — differs: ${differ.join("; ")}` : ""}`;
-            if (differ.length) await log(sym, "edgar_mismatch", 0, `net income differs by more than 1%: ${differ.join("; ")}`);
+            if (differ.length) await log(sym, "edgar_mismatch", 0, `net income differs by more than ${NET_INCOME_TOLERANCE * 100}%: ${differ.join("; ")}`);
           }
         } else if (!env.EDGAR_USER_AGENT) {
           edgarNote = "edgar skipped: EDGAR_USER_AGENT not set — EPS stays empty";
@@ -392,8 +400,8 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
           `INSERT INTO fundamentals_annual
              (symbol, fiscal_year, period_end, revenue, net_income, eps_diluted,
               current_assets, current_liabilities, total_assets, total_liabilities,
-              long_term_debt, shareholders_equity, shares_diluted, goodwill_and_intangibles, source, eps_source, readings)
-           VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)
+              long_term_debt, shareholders_equity, shares_diluted, goodwill_and_intangibles, source, eps_source, readings, net_income_av)
+           VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)
            ON CONFLICT (symbol, fiscal_year) DO UPDATE SET
              period_end=excluded.period_end, revenue=excluded.revenue, net_income=excluded.net_income,
              eps_diluted=excluded.eps_diluted, current_assets=excluded.current_assets,
@@ -401,7 +409,7 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
              total_liabilities=excluded.total_liabilities, long_term_debt=excluded.long_term_debt,
              shareholders_equity=excluded.shareholders_equity, shares_diluted=excluded.shares_diluted,
              goodwill_and_intangibles=excluded.goodwill_and_intangibles, source=excluded.source, eps_source=excluded.eps_source,
-             readings=excluded.readings`,
+             readings=excluded.readings, net_income_av=excluded.net_income_av`,
         );
         try {
           await env.DB.batch(years.map((y) => {
@@ -409,11 +417,14 @@ export async function runSmallCaps(env: SmallEnv, runAt: string, budget: Budget,
             const ed = eps.get(y.fiscalDateEnding);
             const shares = ed?.shares ?? b?.sharesOutstanding ?? null;
             const epsSource = ed?.epsSource ? ed.epsSource + (ed.shares === null && b?.sharesOutstanding !== null ? "; shares: av outstanding" : "") : null;
+            // OI-116: the company's own filing wins for net income; Alpha Vantage's figure is kept
+            // beside it only when the two differ by more than 1% (the cross-check's own rule above).
+            const { netIncome, netIncomeAv } = pickNetIncome(y.netIncome, ed?.ni ?? null, ed?.niTag ?? null);
             return stmt.bind(
-              sym, y.fiscalYear, y.fiscalDateEnding, y.revenue, y.netIncome, ed?.eps ?? null,
+              sym, y.fiscalYear, y.fiscalDateEnding, y.revenue, netIncome, ed?.eps ?? null,
               b?.currentAssets ?? null, b?.currentLiabilities ?? null, b?.totalAssets ?? null, b?.totalLiabilities ?? null,
               b?.longTermDebt ?? null, b?.equity ?? null, shares, b?.goodwillAndIntangibles ?? null, "av", epsSource,
-              b?.notes.length ? b.notes.join("; ") : null,
+              b?.notes.length ? b.notes.join("; ") : null, netIncomeAv,
             );
           }));
           rows += years.length;
@@ -535,4 +546,23 @@ export async function realignSymbol(db: D1Database, symbol: string): Promise<num
     await db.batch(changed.slice(i, i + CHUNK).map((r) => stmt.bind(symbol, r.date, factors.get(r.date) ?? 1)));
   }
   return changed.length;
+}
+
+/** The cross-check's tolerance: net income from the two sources agrees within 1% of EDGAR's figure. */
+export const NET_INCOME_TOLERANCE = 0.01;
+/** The relative gap between Alpha Vantage's and EDGAR's net income, measured against EDGAR's. */
+export const netIncomeGap = (av: number, edgar: number) => Math.abs(edgar - av) / Math.max(1, Math.abs(edgar));
+/** The one EDGAR line that is "net income" as the books page means it (review S1): `ProfitLoss` includes
+ *  minority interests and `NetIncomeLossAvailableToCommonStockholdersBasic` is after preferred dividends. */
+export const EDGAR_NET_INCOME_TAG = "NetIncomeLoss";
+/**
+ * OI-116 (decided 17 Nov 2026, "as recommended"): which net income the small-cap tier stores.
+ * EDGAR's — the company's own SEC filing — whenever it reports the plain net-income line for the year;
+ * Alpha Vantage's otherwise (no EDGAR figure, or EDGAR's came from a different measure).
+ * Alpha Vantage's figure is kept beside it only when the two differ by more than the tolerance.
+ */
+export function pickNetIncome(av: number | null, edgar: number | null, edgarTag: string | null): { netIncome: number | null; netIncomeAv: number | null } {
+  if (edgar === null || edgarTag !== EDGAR_NET_INCOME_TAG) return { netIncome: av, netIncomeAv: null };
+  if (av === null) return { netIncome: edgar, netIncomeAv: null };
+  return { netIncome: edgar, netIncomeAv: netIncomeGap(av, edgar) > NET_INCOME_TOLERANCE ? av : null };
 }

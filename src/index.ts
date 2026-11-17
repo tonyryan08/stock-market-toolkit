@@ -372,7 +372,7 @@ async function loadFundamentals(env: Env, ticker: string) {
       `SELECT fiscal_year, period_end, revenue, net_income, eps_diluted,
               current_assets, current_liabilities, total_assets, total_liabilities,
               long_term_debt, shareholders_equity, shares_diluted, goodwill_and_intangibles,
-              source, eps_source, readings
+              source, eps_source, readings, net_income_av
        FROM fundamentals_annual WHERE symbol = ?1
        ORDER BY fiscal_year DESC LIMIT 10`,
     ).bind(ticker).all<{
@@ -383,6 +383,7 @@ async function loadFundamentals(env: Env, ticker: string) {
       long_term_debt: number | null; shareholders_equity: number | null;
       shares_diluted: number | null; goodwill_and_intangibles: number | null;
       source: string | null; eps_source: string | null; readings: string | null;
+      net_income_av: number | null;
     }>()
   ).results;
 
@@ -421,6 +422,7 @@ async function loadFundamentals(env: Env, ticker: string) {
     sharesDiluted: y.shares_diluted,
     goodwillAndIntangibles: y.goodwill_and_intangibles,
     readings: y.readings,
+    netIncomeAv: y.net_income_av ?? null,
   }));
 
   return {
@@ -432,6 +434,28 @@ async function loadFundamentals(env: Env, ticker: string) {
     ticker_meta: meta ?? null,
     sources,
   };
+}
+
+/**
+ * OI-116: one plain sentence under the books table when, for any year shown, Alpha Vantage's net income
+ * differed from the company's SEC filing by more than 1% — the table then shows the filing's figure.
+ * Empty when the sources agree (or the year's accounts were stored before the cross-check kept both).
+ */
+export function netIncomeNote(years: FundamentalsYear[]): string {
+  const differ = years.filter((y) => y.netIncomeAv != null && y.netIncome != null);
+  if (!differ.length) return "";
+  const m = (v: number) => `${v < 0 ? "−" : ""}${(Math.abs(v) / 1e6).toFixed(1)} million`;
+  const parts = differ.map((y) => {
+    const fy = `FY ${esc(y.fiscalYear)}`;
+    const ed = y.netIncome!, av = y.netIncomeAv!;
+    // A zero in the filing, or a profit in one source and a loss in the other: a percentage says nothing — both figures.
+    if (ed === 0 || Math.sign(ed) !== Math.sign(av)) return `${fy} (the filing ${m(ed)}, Alpha Vantage ${m(av)})`;
+    const pct = ((av - ed) / Math.abs(ed)) * 100;
+    // Rounded up to one decimal, so a gap just over the 1% rule never prints as "1.0%".
+    return `${fy} (${(Math.ceil(Math.abs(pct) * 10) / 10).toFixed(1)}% ${pct > 0 ? "higher" : "lower"})`;
+  });
+  const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+  return `<p class="smallprint note-ni">Net income is the company's own figure, from its filing with the SEC (EDGAR). Alpha Vantage, the free data service, reports a different figure for ${list}. The earnings per share in the tests come from EDGAR either way.</p>`;
 }
 
 /** One honest line per data stream. The small tier names the filing its EPS came from. */
@@ -449,7 +473,7 @@ function describeSources(tier: string, years: { fiscalYear: string; source: stri
   return {
     tier: "small",
     prices: "Alpha Vantage, as traded; dividend-adjusted by the toolkit from the dividend record (the as-traded close is stored beside it)",
-    accounts: "Alpha Vantage income statement and balance sheet; dividend record from Alpha Vantage",
+    accounts: "Alpha Vantage income statement and balance sheet; net income from the company's SEC filing (EDGAR) where the filing reports the plain net-income line, otherwise Alpha Vantage's; dividend record from Alpha Vantage",
     eps: newest
       ? `SEC EDGAR — ${newest.epsSource!.replace(/^edgar:/, "")}${missing.length ? ` (no EDGAR figure for FY ${missing.join(", ")})` : ""}`
       : "not available — EDGAR's company-concept API returned no EPS and no diluted-share count for these periods. The usual reason is a filer with more than one class of shares (Bel Fuse, Ford): those facts are reported per class and the API omits per-class facts, so the toolkit shows \"?\" on the earnings tests rather than guess (decision 14). A missing EDGAR_USER_AGENT secret looks the same; the fetch_log receipt says which.",
@@ -1575,6 +1599,7 @@ function fundamentalsPage(
       ${divRow}
     </tbody>
   </table>
+  ${sources?.tier === "small" ? netIncomeNote(years) : ""}
   <p class="smallprint">Earnings positive in ${r.epsPositiveYears} of ${r.epsYearsAvailable} available years · EPS growth across the window: ${fmt(r.epsGrowthPct, "%")} · dividends paid in ${divs.yearsPaid} calendar years of the record.
   Free data serves 5 fiscal years; Graham asked for 10 — the course's checklist adapts openly and says where.</p>
   <p class="ranges"><a href="/explain/${T}">explain this stock</a> · <a href="/prices/${T}">price history</a> · <a href="/api/fundamentals/${T}">raw JSON</a> · <a href="/screen">the Graham screen</a></p>`;

@@ -59,6 +59,25 @@ describe("smoke — every page renders (OI-70)", () => {
     const none = books().on("FROM tickers WHERE symbol = ?1", () => ({ results: [] })).on("FROM fundamentals_annual WHERE symbol = ?1", () => ({ results: [] }));
     expect((await get(none, "/api/fundamentals/NOPE")).status).toBe(404);
   });
+  it("OI-116: the books page says so in one sentence when Alpha Vantage's net income differed from the SEC filing; no sentence when they agree, nor on the core tier", async () => {
+    const small = (rows: (y: any, i: number) => any) => books()
+      .on("FROM tickers WHERE symbol = ?1", () => ({ results: [{ ...tickers[0], tier: "small", cik: "12345" }] }))
+      .on("FROM fundamentals_annual WHERE symbol = ?1", () => ({ results: years("GOOD").map((y, i) => ({ ...y, source: "av", eps_source: "edgar:EarningsPerShareDiluted 10-K filed 2026-02-20", net_income_av: null, ...rows(y, i) })) }));
+    expect(await (await get(small(() => ({})), "/fundamentals/GOOD")).text()).not.toContain("note-ni");
+    // 2025 and 2024: the table holds EDGAR's 250e6; Alpha Vantage had 259.25e6 (3.7% higher) and 240e6 (4.0% lower)
+    const differ = small((_, i) => ({ net_income_av: i === 0 ? 259.25e6 : i === 1 ? 240e6 : null }));
+    const html = await (await get(differ, "/fundamentals/GOOD")).text();
+    expect(html).toContain("Net income is the company's own figure, from its filing with the SEC (EDGAR). Alpha Vantage, the free data service, reports a different figure for FY 2025 (3.7% higher) and FY 2024 (4.0% lower). The earnings per share in the tests come from EDGAR either way.");
+    const j = (await (await get(differ, "/api/fundamentals/GOOD")).json()) as any;
+    expect(JSON.stringify(j)).toContain('"netIncomeAv":259250000');
+    // review N2, N3: a zero in the filing, and a profit against a loss, print both figures; a gap just over 1% never reads "1.0%"; the year is escaped
+    const edges = small((_, i) => i === 0 ? { net_income: 0, net_income_av: 5e6 } : i === 1 ? { net_income: -50e6, net_income_av: 100e6 } : i === 2 ? { fiscal_year: "<b>", net_income: 250e6, net_income_av: 252.51e6 } : {});
+    const e = await (await get(edges, "/fundamentals/GOOD")).text();
+    expect(e).toContain("FY 2025 (the filing 0.0 million, Alpha Vantage 5.0 million), FY 2024 (the filing −50.0 million, Alpha Vantage 100.0 million) and FY &lt;b&gt; (1.1% higher)");
+    // the core tier (FMP) never shows it, whatever the column holds
+    const core = books().on("FROM fundamentals_annual WHERE symbol = ?1", () => ({ results: years("GOOD").map((y, i) => ({ ...y, net_income_av: i === 0 ? 1 : null })) }));
+    expect(await (await get(core, "/fundamentals/GOOD")).text()).not.toContain("note-ni");
+  });
   it("/api/screen/graham and /api/screen/enterprising score the universe; /screen and /screen/enterprising render the tables", async () => {
     const g = (await (await get(books(), "/api/screen/graham")).json()) as any;
     expect(g.summary.screened).toBe(1);

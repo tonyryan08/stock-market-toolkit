@@ -422,7 +422,7 @@ export async function runFundamentals(
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,'fmp','fmp')
          ON CONFLICT (symbol, fiscal_year) DO UPDATE SET
            period_end=excluded.period_end, revenue=excluded.revenue,
-           net_income=excluded.net_income, eps_diluted=excluded.eps_diluted,
+           net_income=excluded.net_income, net_income_av=NULL, eps_diluted=excluded.eps_diluted,
            current_assets=excluded.current_assets, current_liabilities=excluded.current_liabilities,
            total_assets=excluded.total_assets, total_liabilities=excluded.total_liabilities,
            long_term_debt=excluded.long_term_debt, shareholders_equity=excluded.shareholders_equity,

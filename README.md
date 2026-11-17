@@ -22,7 +22,7 @@ Prerequisites: Node 20+. Five secrets (see `.dev.vars.example` and `docs/api-key
 
 ```sh
 npm ci             # a fresh clone: installs exactly the lockfile (npm install under another npm rewrites it — Phase 3 review N16); `npm install` after a shipment that changes a pin
-npm test           # 631 tests
+npm test           # 637 tests
 npm run check      # wrangler types + tsc
 npm run dev        # http://127.0.0.1:8787 (wrangler binds the IPv4 loopback; `localhost` can resolve to ::1 on Windows and not answer)
 ```
@@ -32,7 +32,7 @@ First-time data setup, in this order (the detail is in `docs/setup-guide.md`):
 ```sh
 npm run verify-universe                                   # probe the candidates (~2 FMP calls each) → scripts/seed-universe.sql
 npx wrangler d1 create stock-market-db                    # paste the database_id it prints into wrangler.jsonc
-npx wrangler d1 migrations apply stock-market-db --local  # 0001 … 0014
+npx wrangler d1 migrations apply stock-market-db --local  # 0001 … 0015
 npx wrangler d1 execute stock-market-db --local --file=scripts/seed-universe.sql
 npm run seed-small-caps                                   # EDGAR lookups only → scripts/seed-small-caps.sql
 npx wrangler d1 execute stock-market-db --local --file=scripts/seed-small-caps.sql
@@ -79,7 +79,7 @@ Outcomes — prices: `ok` / `error` / `blocked` (the plan does not serve the sym
 
 **Resets.** Make a company due again: `UPDATE tickers SET fundamentals_as_of=NULL, last_price_fetch=NULL WHERE symbol='ETD'`. Retry a company marked `fundamentals_status='blocked'` (it is skipped until you do): `UPDATE tickers SET fundamentals_status=NULL WHERE symbol='X'`. Refetch five years for the core tier: `last_full_fetch=NULL` (the realign rotation does four a night anyway). Local D1 is `.wrangler/state` — delete it to start clean, then migrations and seeds again.
 
-**Migrations** are the curriculum: `0001` init · `0002` the write budget · `0003` fundamentals · `0004` the value pool (tangible book) · `0005` explanations · `0006` the small-cap tier · `0007` dividends cadence + readings · `0008` signals · `0009` students, tickets, positions, splits (week 8) · `0010` `students.instruments`, `risk_reports`, `signals.quarantined` (week 9) · `0011` `notes`, `questions` (week 10; the FTS5 index is the seed's, not the migration's) · `0012` `reviews` (week 11) · `0013` the student's email (week 12) · `0014` `plans` (v1.1, the planner). Apply with `wrangler d1 migrations apply`, local then remote, never by hand.
+**Migrations** are the curriculum: `0001` init · `0002` the write budget · `0003` fundamentals · `0004` the value pool (tangible book) · `0005` explanations · `0006` the small-cap tier · `0007` dividends cadence + readings · `0008` signals · `0009` students, tickets, positions, splits (week 8) · `0010` `students.instruments`, `risk_reports`, `signals.quarantined` (week 9) · `0011` `notes`, `questions` (week 10; the FTS5 index is the seed's, not the migration's) · `0012` `reviews` (week 11) · `0013` the student's email (week 12) · `0014` `plans` (v1.1, the planner) · `0015` `fundamentals_annual.net_income_av` (v1.2.1: the filing's net income wins, the provider's kept where they differ). Apply with `wrangler d1 migrations apply`, local then remote, never by hand.
 
 **The door (week 12, decision #23).** The whole site stands behind **Cloudflare Access**, switched on from the Worker's own Access tab (Workers & Pages → the Worker → Access → *Protect this Worker behind Access* → *All traffic* → a policy whose Include rule lists the enrolled emails and the tutor's → *Apply Access*; the email one-time code is a login method added in Zero Trust — since June 2026 a new organisation's default is Cloudflare's own identity provider). Access does the login and hands the Worker the identity on `ctx.access` — the Worker validates no token itself (`src/lib/access.ts` reads `getIdentity()`); the rule is that a student's page opens for the email on their row or for `TUTOR_EMAILS`, `/me` finds the account by the signed-in email, and with Access off (`ctx.access` absent — local dev without the `access.dev` block in `wrangler.jsonc`, or the Worker made public from the same tab) the code scheme of week 8 stands unchanged, so one build serves both states. Order of operations on the night: every row linked, every address on the policy, the secret set, *then* the switch. Nightly jobs are unaffected (Access gates requests, not the schedule). The steps with the screens named are `docs/setup-guide.md`, Part E; the live check is VC-24.
 
@@ -140,7 +140,7 @@ src/lib/narrative.ts      the Claude call (JSON schema, thinking off; claudeJson
 src/lib/access.ts         week 12: who is at the door — ctx.access read, TUTOR_EMAILS, the owner rule (own email or the tutor;
                           the code scheme when Access is off)
 src/landing.ts            the twelve-week ledger page
-migrations/               0001–0014, one per capability
+migrations/               0001–0015, one per capability
 scripts/                  verify-universe.mjs, seed-small-caps.mjs, visit-small-caps.mjs, enrol.mjs (+ --retire),
                           notes-chunker.mjs + seed-notes.mjs → seed-notes.sql (the tutor's corpus and its index),
                           universe-candidates.txt (+ the generated seeds and evidence JSON)

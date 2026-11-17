@@ -15,7 +15,7 @@
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { fakeD1, asD1, type FakeD1 } from "./fake-d1";
-import { runSmallCaps } from "./smallcaps";
+import { runSmallCaps, pickNetIncome } from "./smallcaps";
 import { quarantineReason } from "./signals";
 import { jumpReceipt } from "../lib/adjust";
 
@@ -144,6 +144,37 @@ describe("the visit — prices and dividends", () => {
 
 describe("the visit — accounts", () => {
   const FIVE = [2025, 2024, 2023, 2022, 2021];
+  /** EDGAR's net income per fiscal year (USD), as 10-K duration facts; every other tag not used by this filer. */
+  const facts = (byYear: Record<number, number>) => json({ entityName: "AAA Corp", units: { USD: Object.entries(byYear).map(([y, val]) => ({ start: `${y}-01-01`, end: `${y}-12-31`, val, form: "10-K", filed: `${Number(y) + 1}-02-20`, accn: `0001-${y}` })) } });
+  /** EDGAR answers net income under one tag only (`NetIncomeLoss` unless named); every other tag is not used by this filer. */
+  const edgarNetIncome = (byYear: Record<number, number>, onlyTag = "NetIncomeLoss") => (tag: string) => tag === onlyTag ? facts(byYear) : json({}, 404);
+  it("OI-116: net income is stored from the company's filing (EDGAR); Alpha Vantage's figure is kept beside it only when the two differ by more than 1%", async () => {
+    // Alpha Vantage's net income is year × 10 (2025 → 20250). EDGAR: 2025 is 3.7% lower, 2024 agrees within 1%, 2023 has no EDGAR fact.
+    network({ TIME_SERIES_DAILY: DAILY, DIVIDENDS: DIVIDENDS, INCOME_STATEMENT: income(FIVE), BALANCE_SHEET: balance(FIVE) },
+      edgarNetIncome({ 2025: 19530, 2024: 20250, 2022: 20220, 2021: 20210 }));
+    const db = base([ticker({ cik: "12345" })]);
+    await runSmallCaps(env(db, "stock-market-toolkit test"), NOW, budget());
+    const rows = db.ran("INSERT INTO fundamentals_annual");
+    expect(rows[0].sql).toContain("net_income_av=excluded.net_income_av");
+    // [fiscal year, net_income, net_income_av]
+    expect(rows.map((r) => [r.binds[1], r.binds[4], r.binds[17]])).toEqual([
+      ["2025", 19530, 20250],   // differs by 3.7% → EDGAR's stored, Alpha Vantage's kept
+      ["2024", 20250, null],    // 20240 vs 20250: within 1% → EDGAR's stored, nothing kept
+      ["2023", 20230, null],    // no EDGAR figure → Alpha Vantage's, as before
+      ["2022", 20220, null],    // equal
+      ["2021", 20210, null],
+    ]);
+    expect(receipt(db, "edgar_mismatch")).toEqual(["net income differs by more than 1%: 2025 av 20250 vs edgar 19530 (NetIncomeLoss)"]);
+  });
+  it("OI-116 review S1: EDGAR's figure from another measure (ProfitLoss — minority interests included) does not replace Alpha Vantage's; the receipt names the measure", async () => {
+    network({ TIME_SERIES_DAILY: DAILY, DIVIDENDS: DIVIDENDS, INCOME_STATEMENT: income(FIVE), BALANCE_SHEET: balance(FIVE) },
+      edgarNetIncome({ 2025: 30000 }, "ProfitLoss"));
+    const db = base([ticker({ cik: "12345" })]);
+    await runSmallCaps(env(db, "stock-market-toolkit test"), NOW, budget());
+    const rows = db.ran("INSERT INTO fundamentals_annual");
+    expect([rows[0].binds[1], rows[0].binds[4], rows[0].binds[17]]).toEqual(["2025", 20250, null]);
+    expect(receipt(db, "edgar_mismatch")).toEqual(["net income differs by more than 1%: 2025 av 20250 vs edgar 30000 (ProfitLoss)"]);
+  });
   it("income not served → the company is `blocked` for the screen (no statements), stamped tonight, and the plan skips it from the next night", async () => {
     network({ TIME_SERIES_DAILY: DAILY, DIVIDENDS: DIVIDENDS, INCOME_STATEMENT: {}, BALANCE_SHEET: {} });
     const db = base([ticker()]);
@@ -194,7 +225,7 @@ describe("the visit — accounts", () => {
   it("step 0: an eps_missing company is asked of EDGAR again at no Alpha Vantage cost — EPS written, status ok, edgar_ok receipt; it is not visited tonight (fresh)", async () => {
     const calls = network({ TIME_SERIES_DAILY: DAILY, DIVIDENDS: DIVIDENDS }, (tag) => tag === "EarningsPerShareDiluted" ? json(EDGAR_OK(2.5)) : json({}, 404));
     const db = base([ticker({ cik: "12345", fundamentals_status: "eps_missing", fundamentals_as_of: RECENT, last_price_fetch: "2026-11-05T12:00:00.000Z", dividends_as_of: RECENT })])
-      .on("SELECT fiscal_year, period_end FROM fundamentals_annual", () => ({ results: [{ fiscal_year: "2025", period_end: "2025-12-31" }] }));
+      .on("SELECT fiscal_year, period_end, net_income FROM fundamentals_annual", () => ({ results: [{ fiscal_year: "2025", period_end: "2025-12-31", net_income: 20250 }] }));
     await runSmallCaps(env(db, "stock-market-toolkit test"), NOW, budget());
     expect(calls.filter((c) => c.startsWith("av:"))).toEqual([]);
     expect(calls[0]).toBe("edgar:EarningsPerShareDiluted");
@@ -209,7 +240,7 @@ describe("the visit — accounts", () => {
   it("step 0 on a 403: the status goes back to ok and the company is not asked again (configuration, not EDGAR's weather)", async () => {
     network({}, () => json({}, 403));
     const db = base([ticker({ cik: "12345", fundamentals_status: "eps_missing", fundamentals_as_of: RECENT, last_price_fetch: "2026-11-05T12:00:00.000Z", dividends_as_of: RECENT })])
-      .on("SELECT fiscal_year, period_end FROM fundamentals_annual", () => ({ results: [{ fiscal_year: "2025", period_end: "2025-12-31" }] }));
+      .on("SELECT fiscal_year, period_end, net_income FROM fundamentals_annual", () => ({ results: [{ fiscal_year: "2025", period_end: "2025-12-31", net_income: 20250 }] }));
     await runSmallCaps(env(db, "stock-market-toolkit test"), NOW, budget());
     expect(db.ran("UPDATE tickers SET fundamentals_status = 'ok'")).toHaveLength(1);
     expect(receipt(db, "edgar_failed")[0]).toMatch(/HTTP 403 .* — not retried \(configuration\)$/);
@@ -217,6 +248,15 @@ describe("the visit — accounts", () => {
 });
 
 describe("the visit — halts and the budget", () => {
+  it("OI-116 review S3: the step-0 retry applies the net-income rule too — the stored figure (Alpha Vantage's) gives way to the filing's, Alpha Vantage's kept when they differ", async () => {
+    network({ TIME_SERIES_DAILY: DAILY, DIVIDENDS: DIVIDENDS }, (tag) => tag === "NetIncomeLoss"
+      ? json({ entityName: "AAA Corp", units: { USD: [{ start: "2025-01-01", end: "2025-12-31", val: 19530, form: "10-K", filed: "2026-02-20", accn: "0001-2025" }] } })
+      : json({}, 404));
+    const db = base([ticker({ cik: "12345", fundamentals_as_of: RECENT, fundamentals_status: "eps_missing", last_price_fetch: NOW })])
+      .on("SELECT fiscal_year, period_end, net_income FROM fundamentals_annual", () => ({ results: [{ fiscal_year: "2025", period_end: "2025-12-31", net_income: 20250 }] }));
+    await runSmallCaps(env(db, "stock-market-toolkit test"), NOW, budget());
+    expect(db.ran("UPDATE fundamentals_annual SET net_income = ?3, net_income_av = ?4").map((r) => r.binds)).toEqual([["AAA", "2025", 19530, 20250]]);
+  });
   it("the ration met mid-visit (income call refused): the prices stay written, last_price_fetch is cleared so the company is first tomorrow (OI-34), two receipts", async () => {
     network({ TIME_SERIES_DAILY: DAILY, DIVIDENDS: DIVIDENDS, INCOME_STATEMENT: { Information: "We have detected your API key as TESTKEY0000000000 and our standard API rate limit is 25 requests per day." } });
     const db = base([ticker(), ticker({ symbol: "BBB" })]);
@@ -239,5 +279,25 @@ describe("the visit — halts and the budget", () => {
     expect(calls.filter((c) => c.startsWith("av:"))).toHaveLength(2);
     expect(receipt(db, "fetch_budget")).toEqual(["Fetch budget 45 per invocation would be exceeded at BBB — resumes tomorrow."]);
     expect(summary(db)).toMatchObject({ planned: 2, avCalls: 2, fetches: 44 });
+  });
+});
+
+describe("pickNetIncome (OI-116)", () => {
+  const N = "NetIncomeLoss";
+  it("EDGAR's plain net-income line wins whenever it exists; Alpha Vantage's is kept only beyond the 1% tolerance, measured against EDGAR's", () => {
+    expect(pickNetIncome(109941000, 106024000, N)).toEqual({ netIncome: 106024000, netIncomeAv: 109941000 });   // WMK 2024, 3.7%
+    expect(pickNetIncome(100990, 100000, N)).toEqual({ netIncome: 100000, netIncomeAv: null });                 // 0.99%: agrees
+    expect(pickNetIncome(101000, 100000, N)).toEqual({ netIncome: 100000, netIncomeAv: null });                 // exactly 1%: agrees
+    expect(pickNetIncome(101010, 100000, N)).toEqual({ netIncome: 100000, netIncomeAv: 101010 });               // 1.01%: differs
+    expect(pickNetIncome(5000, null, null)).toEqual({ netIncome: 5000, netIncomeAv: null });                    // no EDGAR figure
+    expect(pickNetIncome(null, 7000, N)).toEqual({ netIncome: 7000, netIncomeAv: null });                       // no Alpha Vantage figure
+    expect(pickNetIncome(null, null, null)).toEqual({ netIncome: null, netIncomeAv: null });
+    expect(pickNetIncome(-500, -400, N)).toEqual({ netIncome: -400, netIncomeAv: -500 });                       // losses: 25% apart
+    expect(pickNetIncome(250, 0, N)).toEqual({ netIncome: 0, netIncomeAv: 250 });                               // the filing shows 0
+  });
+  it("review S1: a figure from another EDGAR measure never replaces Alpha Vantage's", () => {
+    expect(pickNetIncome(20250, 30000, "ProfitLoss")).toEqual({ netIncome: 20250, netIncomeAv: null });
+    expect(pickNetIncome(20250, 19000, "NetIncomeLossAvailableToCommonStockholdersBasic")).toEqual({ netIncome: 20250, netIncomeAv: null });
+    expect(pickNetIncome(null, 19000, "ProfitLoss")).toEqual({ netIncome: null, netIncomeAv: null });
   });
 });
